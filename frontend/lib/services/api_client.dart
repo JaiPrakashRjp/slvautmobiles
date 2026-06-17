@@ -1,0 +1,137 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
+
+import '../config/app_config.dart';
+
+/// Thrown when the backend returns a non-2xx response. [message] is the
+/// backend's `detail` field (FastAPI error) when present, so the UI can show
+/// exactly what went wrong (e.g. a 422 validation message).
+class ApiException implements Exception {
+  ApiException(this.statusCode, this.message);
+  final int statusCode;
+  final String message;
+
+  @override
+  String toString() => 'ApiException($statusCode): $message';
+}
+
+/// Thin wrapper over `http` that prefixes [AppConfig.apiBaseUrl], encodes JSON,
+/// and turns error responses into [ApiException]. All methods return the decoded
+/// JSON body (Map or List), or null for empty (204) responses.
+class ApiClient {
+  ApiClient({http.Client? client}) : _client = client ?? http.Client();
+
+  final http.Client _client;
+  static const _jsonHeaders = {'Content-Type': 'application/json'};
+
+  Uri _uri(String path, [Map<String, dynamic>? query]) {
+    final base = Uri.parse(AppConfig.apiBaseUrl);
+    return base.replace(
+      path: '${base.path}$path',
+      queryParameters: query?.map((k, v) => MapEntry(k, '$v')),
+    );
+  }
+
+  /// Absolute URL for a backend resource (e.g. a document download endpoint),
+  /// suitable for opening in a browser / external viewer via url_launcher.
+  String absoluteUrl(String path) => _uri(path).toString();
+
+  Future<dynamic> get(String path, {Map<String, dynamic>? query}) async {
+    final res = await _client.get(_uri(path, query));
+    return _decode(res);
+  }
+
+  Future<dynamic> post(
+    String path, {
+    Object? body,
+    Map<String, dynamic>? query,
+  }) async {
+    final res = await _client.post(
+      _uri(path, query),
+      headers: _jsonHeaders,
+      body: jsonEncode(body ?? {}),
+    );
+    return _decode(res);
+  }
+
+  Future<dynamic> patch(
+    String path, {
+    Object? body,
+    Map<String, dynamic>? query,
+  }) async {
+    final res = await _client.patch(
+      _uri(path, query),
+      headers: _jsonHeaders,
+      body: jsonEncode(body ?? {}),
+    );
+    return _decode(res);
+  }
+
+  Future<dynamic> put(
+    String path, {
+    Object? body,
+    Map<String, dynamic>? query,
+  }) async {
+    final res = await _client.put(
+      _uri(path, query),
+      headers: _jsonHeaders,
+      body: jsonEncode(body ?? {}),
+    );
+    return _decode(res);
+  }
+
+  Future<void> delete(String path) async {
+    final res = await _client.delete(_uri(path));
+    _decode(res);
+  }
+
+  /// Fetches raw bytes (e.g. a document) for in-app preview.
+  Future<Uint8List> getBytes(String path) async {
+    final res = await _client.get(_uri(path));
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw ApiException(res.statusCode, 'Failed to load document');
+    }
+    return res.bodyBytes;
+  }
+
+  /// Multipart POST for file uploads: [fields] are form text fields and a single
+  /// file is attached under [fileField]. Returns the decoded JSON body.
+  Future<dynamic> postMultipart(
+    String path, {
+    required Map<String, String> fields,
+    required String fileField,
+    required String filename,
+    required Uint8List bytes,
+    String? mimeType,
+  }) async {
+    final req = http.MultipartRequest('POST', _uri(path))
+      ..fields.addAll(fields)
+      ..files.add(http.MultipartFile.fromBytes(
+        fileField,
+        bytes,
+        filename: filename,
+        contentType: mimeType != null ? MediaType.parse(mimeType) : null,
+      ));
+    final res = await http.Response.fromStream(await _client.send(req));
+    return _decode(res);
+  }
+
+  dynamic _decode(http.Response res) {
+    final ok = res.statusCode >= 200 && res.statusCode < 300;
+    if (!ok) {
+      String detail = res.body;
+      try {
+        final parsed = jsonDecode(res.body);
+        if (parsed is Map && parsed['detail'] != null) {
+          detail = parsed['detail'].toString();
+        }
+      } catch (_) {/* keep raw body */}
+      throw ApiException(res.statusCode, detail);
+    }
+    if (res.body.isEmpty) return null;
+    return jsonDecode(res.body);
+  }
+}

@@ -1,0 +1,14 @@
+# ── Database / migrations ────────────────────────────────────────────────
+SQLAlchemy>=2.0,<3.0
+alembic>=1.13
+psycopg2-binary>=2.9        # PostgreSQL driver
+python-dotenv>=1.0          # load .env
+
+# ── API (vehicles backend) ───────────────────────────────────────────────
+fastapi>=0.110
+uvicorn[standard]>=0.29
+pydantic>=2.6
+python-multipart>=0.0.9     # file uploads (documents)
+
+# ── Auth ───────────────────────────────────────────────────────────────────
+bcrypt>=4.0                  # password hashing for user login

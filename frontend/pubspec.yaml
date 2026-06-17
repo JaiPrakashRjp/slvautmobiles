@@ -1,0 +1,40 @@
+name: slv_auto_consultant
+description: "SLV Auto Consultant — internal business app for three-wheeler auto-rickshaw operations."
+publish_to: "none"
+version: 0.1.0+1
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+  flutter: ">=3.19.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  provider: ^6.1.2
+  http: ^1.2.0               # REST calls to the FastAPI backend
+  http_parser: ^4.0.2        # MediaType for multipart document uploads
+  shared_preferences: ^2.3.0
+  google_fonts: ^6.2.1
+  intl: ^0.19.0              # Indian number/date formatting (₹1,80,000, dd MMM yyyy)
+  image_picker: ^1.1.2       # KYC document upload (Aadhaar/DL/PAN/photo)
+  file_picker: ^8.0.0        # Document upload (pdf/png/heic/jpg/jpeg)
+  url_launcher: ^6.3.0       # WhatsApp / SMS / phone deep links
+  pdf: ^3.11.0               # Invoice + NOC generation
+  printing: ^5.13.0          # PDF preview + share
+  flutter_local_notifications: ^17.2.4  # System tray push notifications
+  # Firebase (add in Phase 7, not now):
+  # firebase_core: ^3.6.0
+  # cloud_firestore: ^5.4.0
+  # firebase_auth: ^5.3.0
+  # firebase_storage: ^12.3.0
+
+dev_dependencies:
+  flutter_lints: ^4.0.0
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/
