@@ -31,6 +31,7 @@ abstract class VehicleService extends ChangeNotifier {
     FuelType? fuelType,
     num? buyingExpenses,
     Showroom? showroom,
+    bool rcPermit = false,
     DateTime? insuranceDate,
     DateTime? fcDate,
     DateTime? permitDate,
@@ -67,6 +68,7 @@ abstract class VehicleService extends ChangeNotifier {
     FuelType? fuelType,
     num? buyingExpenses,
     Showroom? showroom,
+    bool? rcPermit,
     DateTime? insuranceDate,
     DateTime? fcDate,
     DateTime? permitDate,
@@ -169,6 +171,7 @@ class MockVehicleService extends VehicleService {
     FuelType? fuelType,
     num? buyingExpenses,
     Showroom? showroom,
+    bool rcPermit = false,
     DateTime? insuranceDate,
     DateTime? fcDate,
     DateTime? permitDate,
@@ -189,6 +192,7 @@ class MockVehicleService extends VehicleService {
       fuelType: fuelType,
       buyingExpenses: buyingExpenses,
       showroom: showroom,
+      rcPermit: rcPermit,
       insuranceDate: insuranceDate,
       fcDate: fcDate,
       permitDate: permitDate,
@@ -248,6 +252,7 @@ class MockVehicleService extends VehicleService {
     FuelType? fuelType,
     num? buyingExpenses,
     Showroom? showroom,
+    bool? rcPermit,
     DateTime? insuranceDate,
     DateTime? fcDate,
     DateTime? permitDate,
@@ -266,6 +271,7 @@ class MockVehicleService extends VehicleService {
     if (fuelType != null) v.fuelType = fuelType;
     if (buyingExpenses != null) v.buyingExpenses = buyingExpenses;
     if (showroom != null) v.showroom = showroom;
+    if (rcPermit != null) v.rcPermit = rcPermit;
     if (insuranceDate != null) v.insuranceDate = insuranceDate;
     if (fcDate != null) v.fcDate = fcDate;
     if (permitDate != null) v.permitDate = permitDate;

@@ -72,8 +72,13 @@ class SlvApp extends StatelessWidget {
         ChangeNotifierProvider<UserService>(
           create: (ctx) => ApiUserService(auth: ctx.read<AuthController>())..refresh(),
         ),
-        ChangeNotifierProvider<NotificationFeed>(
+        ChangeNotifierProxyProvider<AuthController, NotificationFeed>(
           create: (ctx) => NotificationFeed(auth: ctx.read<AuthController>()),
+          update: (ctx, auth, prev) {
+            final feed = prev ?? NotificationFeed(auth: auth);
+            if (auth.currentUserId != 0) feed.refresh();
+            return feed;
+          },
         ),
         // Stateless infrastructure services.
         Provider<NotificationService>(

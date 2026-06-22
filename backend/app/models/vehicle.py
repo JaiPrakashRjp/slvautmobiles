@@ -62,6 +62,7 @@ class Vehicle(Base):
 
     # first-hand only
     showroom: Mapped[Showroom | None] = mapped_column(pg_enum(Showroom, "showroom"))
+    rc_permit: Mapped[bool] = mapped_column(nullable=False, server_default="false")
 
     # second-hand only
     reg_no: Mapped[str | None] = mapped_column(Text)

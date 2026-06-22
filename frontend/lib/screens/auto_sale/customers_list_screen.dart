@@ -145,25 +145,29 @@ class _CustomerCard extends StatelessWidget {
     return AppCard(
       onTap: () => _open(context),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           // ── Content ───────────────────────────────────────────────
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(customer.fullName,
-                    style: AppTextStyles.h2.copyWith(color: c.textMain)),
+                Row(
+                  children: [
+                    Text(customer.fullName,
+                        style: AppTextStyles.h2.copyWith(color: c.textMain)),
+                    const SizedBox(width: AppSpacing.sm),
+                    StatusPill.forEntity(customer.status),
+                  ],
+                ),
                 const SizedBox(height: AppSpacing.xs),
                 Text(Formatters.phone(customer.phone),
                     style: AppTextStyles.caption.copyWith(color: c.textSub)),
-                const SizedBox(height: AppSpacing.sm),
-                StatusPill.forEntity(customer.status),
               ],
             ),
           ),
-          // ── Icons (top-right) ─────────────────────────────────────
-          Column(
+          // ── Icons (top-right, horizontal with spacing) ─────────────
+          Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               IconButtonSoft(
@@ -172,6 +176,7 @@ class _CustomerCard extends StatelessWidget {
                 onPressed: () => _open(context),
               ),
               if (canModify) ...[
+                const SizedBox(width: AppSpacing.xs),
                 IconButtonSoft(
                   icon: Icons.edit_outlined,
                   tooltip: 'Edit',
@@ -181,6 +186,7 @@ class _CustomerCard extends StatelessWidget {
                     ),
                   ),
                 ),
+                const SizedBox(width: AppSpacing.xs),
                 IconButtonSoft(
                   icon: Icons.delete_outline,
                   tooltip: 'Delete',

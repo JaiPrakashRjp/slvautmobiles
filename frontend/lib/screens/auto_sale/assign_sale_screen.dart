@@ -20,7 +20,7 @@ import '../../widgets/picker_field.dart';
 import '../../widgets/primary_button.dart';
 
 /// Assign vehicle + payment to a customer.
-class AssignSaleScreen extends StatelessWidget {
+class AssignSaleScreen extends StatefulWidget {
   const AssignSaleScreen({
     super.key,
     required this.customerId,
@@ -31,15 +31,25 @@ class AssignSaleScreen extends StatelessWidget {
   final String? initialVehicleId;
 
   @override
+  State<AssignSaleScreen> createState() => _AssignSaleScreenState();
+}
+
+class _AssignSaleScreenState extends State<AssignSaleScreen> {
+  // Stable key stored in state — survives rebuilds (keyboard, MediaQuery, etc.)
+  // but is unique per route push, so stale data never carries over.
+  final _providerKey = UniqueKey();
+
+  @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
+      key: _providerKey,
       create: (_) => AssignSaleViewModel(
-        customerId: customerId,
+        customerId: widget.customerId,
         customers: context.read<CustomerService>(),
         vehicles: context.read<VehicleService>(),
         sales: context.read<SaleService>(),
         auth: context.read<AuthController>(),
-        initialVehicleId: initialVehicleId,
+        initialVehicleId: widget.initialVehicleId,
       ),
       child: const _AssignSaleView(),
     );
@@ -59,7 +69,7 @@ class _AssignSaleView extends StatelessWidget {
       options: vm.availableVehicles
           .map((v) => SheetOption(
                 value: v.id,
-                label: v.regNo,
+                label: v.displayLabel,
                 subtitle: v.type.label,
               ))
           .toList(),
@@ -169,7 +179,7 @@ class _AssignSaleView extends StatelessWidget {
                       const SizedBox(height: AppSpacing.xs),
                       _InfoRow(
                         label: 'Vehicle',
-                        value: vm.selectedVehicle!.regNo,
+                        value: vm.selectedVehicle!.displayLabel,
                         c: c,
                       ),
                     ],
@@ -182,7 +192,7 @@ class _AssignSaleView extends StatelessWidget {
               PickerField(
                 label: 'Assign vehicle',
                 placeholder: 'Search vehicle',
-                value: vm.selectedVehicle?.regNo,
+                value: vm.selectedVehicle?.displayLabel,
                 enabled: !vm.vehicleLocked,
                 onTap: () => _pickVehicle(context, vm),
               ),

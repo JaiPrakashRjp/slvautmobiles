@@ -73,6 +73,7 @@ class ApiVehicleService extends VehicleService {
     FuelType? fuelType,
     num? buyingExpenses,
     Showroom? showroom,
+    bool rcPermit = false,
     DateTime? insuranceDate,
     DateTime? fcDate,
     DateTime? permitDate,
@@ -94,6 +95,7 @@ class ApiVehicleService extends VehicleService {
       'buying_expenses': buyingExpenses,
       // first-hand only
       'showroom': isSecondHand ? null : showroom?.wire,
+      'rc_permit': isSecondHand ? null : rcPermit,
       // second-hand only
       'reg_no': isSecondHand && regNo.isNotEmpty ? regNo : null,
       'insurance_date': isSecondHand ? _date(insuranceDate) : null,
@@ -102,7 +104,8 @@ class ApiVehicleService extends VehicleService {
       'prev_owner_name': isSecondHand ? prevOwnerName : null,
       'prev_owner_mobile': isSecondHand ? prevOwnerMobile : null,
       'prev_owner_address': isSecondHand ? prevOwnerAddress : null,
-      if (status != null) 'status': status.wire,
+      // Do NOT send status on create — backend derives it from actor_role.
+      // Status is only sent on PATCH (edit) calls.
     }..removeWhere((_, v) => v == null);
 
     final json = await _api.post(
@@ -199,6 +202,7 @@ class ApiVehicleService extends VehicleService {
     FuelType? fuelType,
     num? buyingExpenses,
     Showroom? showroom,
+    bool? rcPermit,
     DateTime? insuranceDate,
     DateTime? fcDate,
     DateTime? permitDate,
@@ -217,6 +221,7 @@ class ApiVehicleService extends VehicleService {
       'fuel_type': fuelType?.wire,
       'buying_expenses': buyingExpenses,
       'showroom': showroom?.wire,
+      'rc_permit': rcPermit,
       'insurance_date': _date(insuranceDate),
       'fc_date': _date(fcDate),
       'permit_date': _date(permitDate),
@@ -286,6 +291,7 @@ class ApiVehicleService extends VehicleService {
           ? null
           : num.tryParse(j['buying_expenses'].toString()),
       showroom: Showroom.fromWire(j['showroom'] as String?),
+      rcPermit: (j['rc_permit'] as bool?) ?? false,
       insuranceDate: _parseDate(j['insurance_date']),
       fcDate: _parseDate(j['fc_date']),
       permitDate: _parseDate(j['permit_date']),

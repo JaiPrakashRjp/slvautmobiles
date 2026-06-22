@@ -189,25 +189,29 @@ class _VehicleCard extends StatelessWidget {
     return AppCard(
       onTap: () => _openDetail(context),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           // ── Content ───────────────────────────────────────────────
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(vehicle.regNo,
-                    style: AppTextStyles.h2.copyWith(color: c.textMain)),
+                Row(
+                  children: [
+                    Text(vehicle.displayLabel,
+                        style: AppTextStyles.h2.copyWith(color: c.textMain)),
+                    const SizedBox(width: AppSpacing.sm),
+                    StatusPill.forEntity(vehicle.status),
+                  ],
+                ),
                 const SizedBox(height: AppSpacing.xs),
                 Text(vehicle.type.label,
                     style: AppTextStyles.body.copyWith(color: c.textSub)),
-                const SizedBox(height: AppSpacing.sm),
-                StatusPill.forEntity(vehicle.status),
               ],
             ),
           ),
-          // ── Icons (top-right) ─────────────────────────────────────
-          Column(
+          // ── Icons (top-right, horizontal with spacing) ─────────────
+          Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               IconButtonSoft(
@@ -215,12 +219,15 @@ class _VehicleCard extends StatelessWidget {
                 tooltip: 'View',
                 onPressed: () => _openDetail(context),
               ),
-              if (canSell)
+              const SizedBox(width: AppSpacing.xs),
+              if (canSell) ...[
                 IconButtonSoft(
                   icon: Icons.sell_outlined,
                   tooltip: 'Sell',
                   onPressed: () => _sell(context),
                 ),
+                const SizedBox(width: AppSpacing.xs),
+              ],
               if (canModify)
                 IconButtonSoft(
                   icon: Icons.delete_outline,

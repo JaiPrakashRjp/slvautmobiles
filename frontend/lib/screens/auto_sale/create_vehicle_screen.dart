@@ -270,14 +270,18 @@ class _CreateVehicleViewState extends State<_CreateVehicleView> {
                   ..._commonFields(context, vm),
                   if (vm.isFirstHand) ..._firstHandFields(context, vm),
                   if (vm.isSecondHand) ..._secondHandFields(context, vm),
-                  const SizedBox(height: AppSpacing.lg),
-                  PickerField(
-                    label: 'Status',
-                    value: vm.status == EntityStatus.active
-                        ? 'Verified'
-                        : 'Not verified',
-                    onTap: () => _pickStatus(vm),
-                  ),
+                  // Only super admin can manually set status; admins always
+                  // create pending — backend enforces this too.
+                  if (context.read<AuthController>().isSuperAdmin || vm.isEditing) ...[
+                    const SizedBox(height: AppSpacing.lg),
+                    PickerField(
+                      label: 'Status',
+                      value: vm.status == EntityStatus.active
+                          ? 'Verified'
+                          : 'Not verified',
+                      onTap: () => _pickStatus(vm),
+                    ),
+                  ],
                   if (vm.isEditing) ...[
                     const SizedBox(height: AppSpacing.lg),
                     PickerField(
@@ -359,6 +363,7 @@ class _CreateVehicleViewState extends State<_CreateVehicleView> {
   // ── First hand only ────────────────────────────────────────────────────────
   List<Widget> _firstHandFields(
       BuildContext context, CreateVehicleViewModel vm) {
+    final c = context.colors;
     return [
       const SizedBox(height: AppSpacing.lg),
       const _SectionLabel('First hand details'),
@@ -368,6 +373,24 @@ class _CreateVehicleViewState extends State<_CreateVehicleView> {
         placeholder: 'Amba / Aestece / Khivraj',
         value: vm.showroom?.label,
         onTap: () => _pickShowroom(vm),
+      ),
+      const SizedBox(height: AppSpacing.lg),
+      // RC Permit checkbox
+      InkWell(
+        onTap: () => vm.rcPermit = !vm.rcPermit,
+        borderRadius: BorderRadius.circular(8),
+        child: Row(
+          children: [
+            Checkbox(
+              value: vm.rcPermit,
+              activeColor: c.primary,
+              onChanged: (v) => vm.rcPermit = v ?? false,
+            ),
+            const SizedBox(width: AppSpacing.xs),
+            Text('RC Permit',
+                style: AppTextStyles.body.copyWith(color: c.textMain)),
+          ],
+        ),
       ),
     ];
   }

@@ -16,6 +16,7 @@ class Vehicle with GatedEntity {
     this.fuelType,
     this.buyingExpenses,
     this.showroom,
+    this.rcPermit = false,
     this.insuranceDate,
     this.fcDate,
     this.permitDate,
@@ -55,8 +56,9 @@ class Vehicle with GatedEntity {
   FuelType? fuelType;
   num? buyingExpenses;
 
-  // First-hand only: source showroom.
+  // First-hand only: source showroom + RC permit flag.
   Showroom? showroom;
+  bool rcPermit;
 
   // Second-hand only: existing paperwork dates + uploaded documents.
   DateTime? insuranceDate;
@@ -106,4 +108,9 @@ class Vehicle with GatedEntity {
     final digits = RegExp(r'\d+').firstMatch(id)?.group(0);
     return digits != null ? 'VEH-${digits.padLeft(3, '0')}' : id.toUpperCase();
   }
+
+  /// Human-readable vehicle label. Uses reg number when available (second-hand);
+  /// falls back to model or type+ID for first-hand (unregistered) vehicles.
+  String get displayLabel =>
+      regNo.isNotEmpty ? regNo : (model ?? '${type.label} #$displayId');
 }

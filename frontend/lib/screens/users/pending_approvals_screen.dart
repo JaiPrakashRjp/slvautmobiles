@@ -196,6 +196,11 @@ class _PendingCard extends StatelessWidget {
                     );
                     if (reason is String && reason.isNotEmpty) {
                       item.onReject(reason);
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('${item.type} rejected.')),
+                        );
+                      }
                     }
                   },
                 ),
@@ -204,7 +209,12 @@ class _PendingCard extends StatelessWidget {
               Expanded(
                 child: PrimaryButton(
                   label: 'Approve',
-                  onPressed: item.onApprove,
+                  onPressed: () {
+                    item.onApprove();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('${item.type} approved.')),
+                    );
+                  },
                 ),
               ),
             ],

@@ -41,6 +41,7 @@ class CreateVehicleViewModel extends ChangeNotifier {
 
   // ── First-hand only ──────────────────────────────────────────────────────
   Showroom? _showroom;
+  bool _rcPermit = false;
 
   // ── Second-hand only ─────────────────────────────────────────────────────
   final regNoController = TextEditingController();
@@ -64,6 +65,7 @@ class CreateVehicleViewModel extends ChangeNotifier {
   EntityStatus get status => _status;
   SaleStatus get saleStatus => _saleStatus;
   Showroom? get showroom => _showroom;
+  bool get rcPermit => _rcPermit;
   Map<VehicleDocType, PickedDoc> get documents => _documents;
   DateTime? get insuranceDate => _insuranceDate;
   DateTime? get fcDate => _fcDate;
@@ -107,6 +109,11 @@ class CreateVehicleViewModel extends ChangeNotifier {
 
   set showroom(Showroom? v) {
     _showroom = v;
+    notifyListeners();
+  }
+
+  set rcPermit(bool v) {
+    _rcPermit = v;
     notifyListeners();
   }
 
@@ -159,6 +166,7 @@ class CreateVehicleViewModel extends ChangeNotifier {
     _fuelType = v.fuelType;
     _purchaseDate = v.purchaseDate;
     _showroom = v.showroom;
+    _rcPermit = v.rcPermit;
     _status = v.status;
     _saleStatus = v.saleStatus;
     regNoController.text = v.regNo;
@@ -187,6 +195,7 @@ class CreateVehicleViewModel extends ChangeNotifier {
         fuelType: _fuelType,
         buyingExpenses: _parseAmount(buyingExpensesController.text),
         showroom: isFirstHand ? _showroom : null,
+        rcPermit: isFirstHand ? _rcPermit : false,
         insuranceDate: isSecondHand ? _insuranceDate : null,
         fcDate: isSecondHand ? _fcDate : null,
         permitDate: isSecondHand ? _permitDate : null,
@@ -213,6 +222,7 @@ class CreateVehicleViewModel extends ChangeNotifier {
         purchaseDate: _purchaseDate,
         buyingExpenses: _parseAmount(buyingExpensesController.text),
         showroom: isFirstHand ? _showroom : null,
+        rcPermit: isFirstHand ? _rcPermit : false,
         insuranceDate: isSecondHand ? _insuranceDate : null,
         fcDate: isSecondHand ? _fcDate : null,
         permitDate: isSecondHand ? _permitDate : null,

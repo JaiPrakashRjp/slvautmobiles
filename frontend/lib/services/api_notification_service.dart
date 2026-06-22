@@ -52,9 +52,11 @@ class NotificationFeed extends ChangeNotifier {
   final List<NotificationItem> _items = [];
   // Track which notification IDs have already triggered a local push.
   final Set<int> _pushedIds = {};
+  bool _loading = false;
 
   List<NotificationItem> all() => List.unmodifiable(_items);
   int get unreadCount => _items.where((n) => !n.isRead).length;
+  bool get isLoading => _loading;
 
   Future<void> refresh() async {
     final id = _auth.currentUserId;
@@ -63,27 +65,32 @@ class NotificationFeed extends ChangeNotifier {
       notifyListeners();
       return;
     }
-    final data = await _api.get('/notifications', query: {'user_id': id});
-    _items
-      ..clear()
-      ..addAll((data as List)
-          .map((j) => NotificationItem.fromJson(j as Map<String, dynamic>)));
-
-    // Fire a system-tray push for each new unread verification request.
-    for (final n in _items) {
-      if (!n.isRead &&
-          n.type == 'verification_request' &&
-          !_pushedIds.contains(n.id)) {
-        _pushedIds.add(n.id);
-        unawaited(LocalPushService.show(
-          id: n.id,
-          title: n.title,
-          body: n.message.isNotEmpty ? n.message : 'Tap to review',
-        ));
-      }
-    }
-
+    _loading = true;
     notifyListeners();
+    try {
+      final data = await _api.get('/notifications', query: {'user_id': id});
+      _items
+        ..clear()
+        ..addAll((data as List)
+            .map((j) => NotificationItem.fromJson(j as Map<String, dynamic>)));
+
+      // Fire a system-tray push for each new unread verification request.
+      for (final n in _items) {
+        if (!n.isRead &&
+            n.type == 'verification_request' &&
+            !_pushedIds.contains(n.id)) {
+          _pushedIds.add(n.id);
+          unawaited(LocalPushService.show(
+            id: n.id,
+            title: n.title,
+            body: n.message.isNotEmpty ? n.message : 'Tap to review',
+          ));
+        }
+      }
+    } finally {
+      _loading = false;
+      notifyListeners();
+    }
   }
 
   void markRead(int id) {
