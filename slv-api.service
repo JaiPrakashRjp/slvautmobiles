@@ -1,0 +1,19 @@
+[Unit]
+Description=SLV Auto Consultant FastAPI
+After=network.target postgresql.service
+
+[Service]
+User=root
+WorkingDirectory=/opt/slv/backend
+EnvironmentFile=/opt/slv/backend/.env
+ExecStart=/opt/slv/venv/bin/gunicorn app.main:app \
+    -k uvicorn.workers.UvicornWorker \
+    --workers 2 \
+    --bind 127.0.0.1:8000 \
+    --access-logfile /var/log/slv-api/access.log \
+    --error-logfile /var/log/slv-api/error.log
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
