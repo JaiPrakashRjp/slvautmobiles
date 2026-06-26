@@ -7,6 +7,7 @@ import '../../controllers/auth_controller.dart';
 import '../../models/enums.dart';
 import '../../models/picked_doc.dart';
 import '../../models/vehicle.dart';
+import '../../services/financer_service.dart';
 import '../../services/vehicle_service.dart';
 import '../../theme/app_colors.dart';
 import '../../utils/app_spacing.dart';
@@ -138,6 +139,78 @@ class _CreateVehicleViewState extends State<_CreateVehicleView> {
           .toList(),
     );
     if (picked != null) vm.saleStatus = picked;
+  }
+
+  Future<void> _pickFinancer(CreateVehicleViewModel vm) async {
+    final financerService = context.read<FinancerService>();
+    final messenger = ScaffoldMessenger.of(context); // capture before any await
+    final financers = financerService.all();
+    // -1 = add new, 0 = none, >0 = real financer id
+    final options = [
+      const SheetOption<int>(value: 0, label: '— None —'),
+      const SheetOption<int>(value: -1, label: '＋ Add new financer'),
+      ...financers.map((f) => SheetOption<int>(value: f.id, label: f.name)),
+    ];
+    final picked = await OptionSheet.show<int>(
+      context,
+      title: 'Financer',
+      selected: vm.financerId ?? 0,
+      options: options,
+      searchable: financers.length > 5,
+      searchHint: 'Search financers',
+    );
+    if (picked == null) return;
+    if (picked == 0) {
+      vm.financerId = null;
+      return;
+    }
+    if (picked == -1) {
+      // Inline add — show a quick dialog
+      final nameCtrl = TextEditingController();
+      if (!mounted) return;
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Add financer'),
+          content: TextField(
+            controller: nameCtrl,
+            autofocus: true,
+            textCapitalization: TextCapitalization.words,
+            decoration: const InputDecoration(
+              labelText: 'Finance company name',
+              hintText: 'e.g. HDFC Bank',
+            ),
+            onSubmitted: (_) => Navigator.of(ctx).pop(true),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Add'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed == true && nameCtrl.text.trim().isNotEmpty) {
+        try {
+          final newFinancer =
+              await financerService.create(nameCtrl.text.trim());
+          vm.financerId = newFinancer.id;
+        } catch (e) {
+          if (mounted) {
+            messenger.showSnackBar(
+              SnackBar(content: Text('Failed to add financer: $e')),
+            );
+          }
+        }
+      }
+      nameCtrl.dispose();
+      return;
+    }
+    vm.financerId = picked;
   }
 
   /// Captures a photo from the camera, then reports the picked file (bytes).
@@ -356,6 +429,29 @@ class _CreateVehicleViewState extends State<_CreateVehicleView> {
         controller: vm.buyingExpensesController,
         keyboardType: TextInputType.number,
         textInputAction: TextInputAction.next,
+      ),
+      const SizedBox(height: AppSpacing.lg),
+      PickerField(
+        label: 'Financer',
+        placeholder: 'Select financer (optional)',
+        value: context.read<FinancerService>().byId(vm.financerId ?? 0)?.name,
+        onTap: () => _pickFinancer(vm),
+      ),
+      if (vm.financerId != null)
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton(
+            onPressed: () => vm.financerId = null,
+            child: const Text('Clear'),
+          ),
+        ),
+      const SizedBox(height: AppSpacing.lg),
+      AppTextField(
+        label: 'Remarks',
+        hint: 'Any notes about this vehicle',
+        controller: vm.remarksController,
+        textInputAction: TextInputAction.next,
+        maxLines: 3,
       ),
     ];
   }

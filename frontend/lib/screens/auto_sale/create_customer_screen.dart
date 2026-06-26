@@ -282,6 +282,13 @@ class _CreateCustomerViewState extends State<_CreateCustomerView> {
                 _RequiredLabel('ID proof', !vm.isEditing),
                 const SizedBox(height: AppSpacing.sm),
                 _assurityDocTile(context, vm),
+                const SizedBox(height: AppSpacing.xl),
+                AppTextField(
+                  label: 'Remarks',
+                  hint: 'Any notes about this customer',
+                  controller: vm.remarksController,
+                  maxLines: 3,
+                ),
                 const SizedBox(height: AppSpacing.xxl),
                 PrimaryButton(
                     label: vm.isEditing ? 'Save' : 'Create',

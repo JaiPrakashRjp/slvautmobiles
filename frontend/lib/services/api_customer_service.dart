@@ -47,6 +47,7 @@ class ApiCustomerService extends CustomerService {
     DateTime? dob,
     String? assurityName,
     String? assurityMobile,
+    String? remarks,
   }) async {
     final body = <String, dynamic>{
       'module_code': 'auto_sale',
@@ -59,6 +60,7 @@ class ApiCustomerService extends CustomerService {
       'dob': _date(dob),
       'assurity_name': assurityName,
       'assurity_mobile': assurityMobile,
+      'remarks': remarks,
     }..removeWhere((_, v) => v == null);
 
     final json = await _api.post(
@@ -88,6 +90,7 @@ class ApiCustomerService extends CustomerService {
     String? assurityName,
     String? assurityMobile,
     EntityStatus? status,
+    String? remarks,
   }) async {
     final body = <String, dynamic>{
       'first_name': firstName,
@@ -100,6 +103,7 @@ class ApiCustomerService extends CustomerService {
       'assurity_name': assurityName,
       'assurity_mobile': assurityMobile,
       'status': status?.wire,
+      'remarks': remarks,
     }..removeWhere((_, v) => v == null);
 
     final json = await _api.patch('/customers/$id', body: body);
@@ -208,6 +212,7 @@ class ApiCustomerService extends CustomerService {
       confirmedBy: j['confirmed_by']?.toString(),
       confirmedAt: _parseDate(j['confirmed_at']),
       rejectionReason: j['rejection_reason'] as String?,
+      remarks: j['remarks'] as String?,
       uploadedDocs: docs,
     );
   }

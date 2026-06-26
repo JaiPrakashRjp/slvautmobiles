@@ -28,6 +28,7 @@ abstract class CustomerService extends ChangeNotifier {
     DateTime? dob,
     String? assurityName,
     String? assurityMobile,
+    String? remarks,
   });
 
   /// Edits an existing customer (PATCH). Only non-null fields are changed.
@@ -43,6 +44,7 @@ abstract class CustomerService extends ChangeNotifier {
     String? assurityName,
     String? assurityMobile,
     EntityStatus? status,
+    String? remarks,
   });
 
   /// Uploads one KYC file (upsert by doc type). [docTypeWire] is the backend
@@ -119,6 +121,7 @@ class MockCustomerService extends CustomerService {
     DateTime? dob,
     String? assurityName,
     String? assurityMobile,
+    String? remarks,
   }) async {
     final customer = Customer(
       id: IdGen.nextId('c'),
@@ -131,6 +134,7 @@ class MockCustomerService extends CustomerService {
       dob: dob,
       assurityName: assurityName,
       assurityMobile: assurityMobile,
+      remarks: remarks,
       createdBy: actorId,
       createdAt: DateTime.now(),
       status: Gate.initialStatus(actorRole),
@@ -153,6 +157,7 @@ class MockCustomerService extends CustomerService {
     String? assurityName,
     String? assurityMobile,
     EntityStatus? status,
+    String? remarks,
   }) async {
     final c = byId(id)!;
     if (firstName != null) c.firstName = firstName;
@@ -165,6 +170,7 @@ class MockCustomerService extends CustomerService {
     if (assurityName != null) c.assurityName = assurityName;
     if (assurityMobile != null) c.assurityMobile = assurityMobile;
     if (status != null) c.status = status;
+    if (remarks != null) c.remarks = remarks;
     notifyListeners();
     return c;
   }

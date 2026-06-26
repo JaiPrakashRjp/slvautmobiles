@@ -38,6 +38,8 @@ class VehicleBase(BaseModel):
     prev_owner_name: str | None = None
     prev_owner_mobile: str | None = None
     prev_owner_address: str | None = None
+    remarks: str | None = None
+    financer_id: int | None = None
 
 
 class VehicleCreate(VehicleBase):
@@ -67,6 +69,8 @@ class VehicleUpdate(BaseModel):
     prev_owner_address: str | None = None
     sale_status: SaleStatus | None = None
     status: EntityStatus | None = None
+    remarks: str | None = None
+    financer_id: int | None = None
 
 
 class DocumentOut(BaseModel):

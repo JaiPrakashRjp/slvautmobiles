@@ -40,6 +40,8 @@ abstract class VehicleService extends ChangeNotifier {
     String? prevOwnerAddress,
     EntityStatus? status,
     String? assignToCustomerId,
+    String? remarks,
+    int? financerId,
   });
 
   /// Uploads one picked file for a vehicle (upsert by doc type — replaces an
@@ -77,6 +79,8 @@ abstract class VehicleService extends ChangeNotifier {
     String? prevOwnerAddress,
     SaleStatus? saleStatus,
     EntityStatus? status,
+    String? remarks,
+    int? financerId,
   });
 
   void delete(String id);
@@ -180,6 +184,8 @@ class MockVehicleService extends VehicleService {
     String? prevOwnerAddress,
     EntityStatus? status,
     String? assignToCustomerId,
+    String? remarks,
+    int? financerId,
   }) async {
     final vehicle = Vehicle(
       id: IdGen.nextId('v'),
@@ -203,6 +209,8 @@ class MockVehicleService extends VehicleService {
       inventoryStatus: assignToCustomerId != null
           ? InventoryStatus.reserved
           : InventoryStatus.available,
+      remarks: remarks,
+      financerId: financerId,
       createdBy: actorId,
       createdAt: DateTime.now(),
       status: status ?? Gate.initialStatus(actorRole),
@@ -261,6 +269,8 @@ class MockVehicleService extends VehicleService {
     String? prevOwnerAddress,
     SaleStatus? saleStatus,
     EntityStatus? status,
+    String? remarks,
+    int? financerId,
   }) async {
     final v = byId(id)!;
     if (branch != null) v.branch = branch;
@@ -280,6 +290,8 @@ class MockVehicleService extends VehicleService {
     if (prevOwnerAddress != null) v.prevOwnerAddress = prevOwnerAddress;
     if (saleStatus != null) v.saleStatus = saleStatus;
     if (status != null) v.status = status;
+    if (remarks != null) v.remarks = remarks;
+    if (financerId != null) v.financerId = financerId;
     notifyListeners();
     return v;
   }

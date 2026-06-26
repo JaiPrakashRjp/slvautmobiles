@@ -39,6 +39,7 @@ class AssignSaleViewModel extends ChangeNotifier {
   final monthlyController = TextEditingController();
   final monthsController = TextEditingController(text: '12');
   final whatsappController = TextEditingController();
+  final remarksController = TextEditingController();
 
   DepositType _depositType = DepositType.fullCash;
   String? _vehicleId;
@@ -134,6 +135,7 @@ class AssignSaleViewModel extends ChangeNotifier {
             ? (int.tryParse(monthsController.text.trim()) ?? 0)
             : 0,
         firstDueDate: isDown ? _firstDueDate : null,
+        remarks: remarksController.text.trim().isEmpty ? null : remarksController.text.trim(),
       );
       // Keep local vehicle cache in sync
       await _vehicles.update(_vehicleId!, saleStatus: SaleStatus.sold);
@@ -151,6 +153,7 @@ class AssignSaleViewModel extends ChangeNotifier {
     monthlyController.dispose();
     monthsController.dispose();
     whatsappController.dispose();
+    remarksController.dispose();
     super.dispose();
   }
 }

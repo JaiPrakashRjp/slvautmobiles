@@ -7,6 +7,7 @@ import '../../models/enums.dart';
 import '../../models/picked_doc.dart';
 import '../../models/vehicle.dart';
 import '../../services/customer_service.dart';
+import '../../services/financer_service.dart';
 import '../../services/sale_service.dart';
 import '../../services/vehicle_service.dart';
 import '../../theme/app_colors.dart';
@@ -157,9 +158,11 @@ class VehicleDetailScreen extends StatelessWidget {
     final c = context.colors;
     context.watch<VehicleService>();
     context.watch<SaleService>();
+    context.watch<FinancerService>();
     final vehicles = context.read<VehicleService>();
     final customers = context.read<CustomerService>();
     final sales = context.read<SaleService>();
+    final financers = context.read<FinancerService>();
     final auth = context.read<AuthController>();
 
     final vehicle = vehicles.byId(vehicleId);
@@ -173,6 +176,9 @@ class VehicleDetailScreen extends StatelessWidget {
     final assignedName = vehicle.assignedToCustomerId == null
         ? 'Not assigned'
         : customers.byId(vehicle.assignedToCustomerId!)?.fullName ?? 'Unknown';
+    final financerName = vehicle.financerId == null
+        ? null
+        : financers.byId(vehicle.financerId!)?.name;
     final sale = sales.forVehicle(vehicle.id);
     // Admins can modify only what they created; super admin can modify anything.
     final canModify =
@@ -208,7 +214,7 @@ class VehicleDetailScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: AppSpacing.lg),
               ],
-              ..._detailRows(context, vehicle, assignedName),
+              ..._detailRows(context, vehicle, assignedName, financerName),
               if (vehicle.type == VehicleType.secondHand) ...[
                 ..._prevOwnerRows(context, vehicle),
                 const SizedBox(height: AppSpacing.lg),
@@ -286,7 +292,7 @@ class VehicleDetailScreen extends StatelessWidget {
 
   /// All read-only fields for the vehicle (common + hand-specific).
   List<Widget> _detailRows(
-      BuildContext context, Vehicle v, String assignedName) {
+      BuildContext context, Vehicle v, String assignedName, String? financerName) {
     final rows = <Widget>[];
     void card(String label, {String? value, Widget? widget}) {
       if (widget == null && (value == null || value.isEmpty)) return;
@@ -322,9 +328,11 @@ class VehicleDetailScreen extends StatelessWidget {
     if (v.permitDate != null) {
       card('Permit date', value: Formatters.date(v.permitDate!));
     }
+    card('Financer', value: financerName);
     card('Status', widget: StatusPill.forEntity(v.status));
     card('Sale status', value: v.saleStatus.label);
     card('Assigned to', value: assignedName);
+    card('Remarks', value: v.remarks);
     return rows;
   }
 

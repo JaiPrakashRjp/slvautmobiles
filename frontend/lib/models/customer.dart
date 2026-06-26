@@ -19,6 +19,7 @@ class Customer with GatedEntity {
     this.assurityName,
     this.assurityMobile,
     this.assurityIdProof,
+    this.remarks,
     required this.createdBy,
     required this.createdAt,
     this.status = EntityStatus.active,
@@ -45,6 +46,7 @@ class Customer with GatedEntity {
   String? assurityName;
   String? assurityMobile;
   String? assurityIdProof;
+  String? remarks;
 
   /// KYC documents already stored on the backend (for download / replace / delete).
   List<DocRef> uploadedDocs;

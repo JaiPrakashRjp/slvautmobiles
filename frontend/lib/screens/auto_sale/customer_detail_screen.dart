@@ -113,6 +113,9 @@ class CustomerDetailScreen extends StatelessWidget {
                       _Row(label: 'Branch', value: customer.branch!.label, c: c),
                     if (customer.age != null)
                       _Row(label: 'Age', value: '${customer.age}', c: c),
+                    if (customer.remarks != null &&
+                        customer.remarks!.isNotEmpty)
+                      _Row(label: 'Remarks', value: customer.remarks!, c: c),
                   ],
                 ),
               ),

@@ -82,6 +82,8 @@ class ApiVehicleService extends VehicleService {
     String? prevOwnerAddress,
     EntityStatus? status,
     String? assignToCustomerId,
+    String? remarks,
+    int? financerId,
   }) async {
     final isSecondHand = type == VehicleType.secondHand;
     final body = <String, dynamic>{
@@ -104,6 +106,8 @@ class ApiVehicleService extends VehicleService {
       'prev_owner_name': isSecondHand ? prevOwnerName : null,
       'prev_owner_mobile': isSecondHand ? prevOwnerMobile : null,
       'prev_owner_address': isSecondHand ? prevOwnerAddress : null,
+      'remarks': remarks,
+      'financer_id': financerId,
       // Do NOT send status on create — backend derives it from actor_role.
       // Status is only sent on PATCH (edit) calls.
     }..removeWhere((_, v) => v == null);
@@ -211,6 +215,8 @@ class ApiVehicleService extends VehicleService {
     String? prevOwnerAddress,
     SaleStatus? saleStatus,
     EntityStatus? status,
+    String? remarks,
+    int? financerId,
   }) async {
     final body = <String, dynamic>{
       'branch': branch?.wire,
@@ -230,6 +236,8 @@ class ApiVehicleService extends VehicleService {
       'prev_owner_address': prevOwnerAddress,
       'sale_status': saleStatus?.wire,
       'status': status?.wire,
+      'remarks': remarks,
+      'financer_id': financerId,
     }..removeWhere((_, v) => v == null);
 
     final json = await _api.patch('/vehicles/$id', body: body);
@@ -299,6 +307,7 @@ class ApiVehicleService extends VehicleService {
       prevOwnerMobile: j['prev_owner_mobile'] as String?,
       prevOwnerAddress: j['prev_owner_address'] as String?,
       assignedToCustomerId: j['assigned_to_customer_id']?.toString(),
+      financerId: j['financer_id'] as int?,
       inventoryStatus: InventoryStatus.fromWire(
           (j['inventory_status'] as String?) ?? 'available'),
       saleStatus: SaleStatus.fromWire(j['sale_status'] as String?),
@@ -309,6 +318,7 @@ class ApiVehicleService extends VehicleService {
       confirmedBy: j['confirmed_by']?.toString(),
       confirmedAt: _parseDate(j['confirmed_at']),
       rejectionReason: j['rejection_reason'] as String?,
+      remarks: j['remarks'] as String?,
       uploadedDocs: docs,
     );
   }

@@ -37,6 +37,8 @@ class Customer(Base):
     assurity_name: Mapped[str | None] = mapped_column(Text)
     assurity_mobile: Mapped[str | None] = mapped_column(String(10))
 
+    remarks: Mapped[str | None] = mapped_column(Text)
+
     # role-gate / audit
     status: Mapped[EntityStatus] = mapped_column(
         pg_enum(EntityStatus, "entity_status"),

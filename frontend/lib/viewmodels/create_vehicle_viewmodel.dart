@@ -31,6 +31,7 @@ class CreateVehicleViewModel extends ChangeNotifier {
   final chassisController = TextEditingController();
   final modelController = TextEditingController();
   final buyingExpensesController = TextEditingController();
+  final remarksController = TextEditingController();
 
   VehicleType? _hand; // null until the user picks Owned hand
   Branch? _branch;
@@ -38,6 +39,9 @@ class CreateVehicleViewModel extends ChangeNotifier {
   FuelType? _fuelType;
   late EntityStatus _status; // Verified (active) / Not verified (pending)
   SaleStatus _saleStatus = SaleStatus.notSold; // editable in edit mode
+
+  // ── Financer (optional, both hand types) ─────────────────────────────────
+  int? _financerId;
 
   // ── First-hand only ──────────────────────────────────────────────────────
   Showroom? _showroom;
@@ -58,6 +62,8 @@ class CreateVehicleViewModel extends ChangeNotifier {
   PickedDoc? _prevOwnerPhoto;
 
   // ── Getters ──────────────────────────────────────────────────────────────
+  int? get financerId => _financerId;
+
   VehicleType? get hand => _hand;
   Branch? get branch => _branch;
   DateTime? get purchaseDate => _purchaseDate;
@@ -77,6 +83,11 @@ class CreateVehicleViewModel extends ChangeNotifier {
   bool get isSecondHand => _hand == VehicleType.secondHand;
 
   // ── Setters ──────────────────────────────────────────────────────────────
+  set financerId(int? v) {
+    _financerId = v;
+    notifyListeners();
+  }
+
   set hand(VehicleType? v) {
     _hand = v;
     notifyListeners();
@@ -165,6 +176,7 @@ class CreateVehicleViewModel extends ChangeNotifier {
         v.buyingExpenses != null ? '${v.buyingExpenses}' : '';
     _fuelType = v.fuelType;
     _purchaseDate = v.purchaseDate;
+    _financerId = v.financerId;
     _showroom = v.showroom;
     _rcPermit = v.rcPermit;
     _status = v.status;
@@ -176,6 +188,7 @@ class CreateVehicleViewModel extends ChangeNotifier {
     prevOwnerNameController.text = v.prevOwnerName ?? '';
     prevOwnerMobileController.text = v.prevOwnerMobile ?? '';
     prevOwnerAddressController.text = v.prevOwnerAddress ?? '';
+    remarksController.text = v.remarks ?? '';
   }
 
   /// Creates (or, in edit mode, updates) the vehicle, then uploads any newly
@@ -206,6 +219,8 @@ class CreateVehicleViewModel extends ChangeNotifier {
             isSecondHand ? prevOwnerAddressController.text.trim() : null,
         saleStatus: _saleStatus,
         status: _status,
+        remarks: remarksController.text.trim().isEmpty ? null : remarksController.text.trim(),
+        financerId: _financerId,
       );
       vehicleId = v.id;
     } else {
@@ -232,6 +247,8 @@ class CreateVehicleViewModel extends ChangeNotifier {
         prevOwnerAddress:
             isSecondHand ? prevOwnerAddressController.text.trim() : null,
         status: _status,
+        remarks: remarksController.text.trim().isEmpty ? null : remarksController.text.trim(),
+        financerId: _financerId,
       );
       vehicleId = v.id;
     }
@@ -270,6 +287,7 @@ class CreateVehicleViewModel extends ChangeNotifier {
     prevOwnerNameController.dispose();
     prevOwnerMobileController.dispose();
     prevOwnerAddressController.dispose();
+    remarksController.dispose();
     super.dispose();
   }
 }

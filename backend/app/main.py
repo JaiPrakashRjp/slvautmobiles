@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.controllers.auth_controller import router as auth_router
 from app.controllers.customer_controller import router as customers_router
+from app.controllers.financer_controller import router as financers_router
 from app.controllers.notification_controller import router as notifications_router
 from app.controllers.sale_controller import router as sales_router
 from app.controllers.user_controller import router as users_router
@@ -28,6 +29,7 @@ app.include_router(vehicles_router)
 app.include_router(customers_router)
 app.include_router(sales_router)
 app.include_router(notifications_router)
+app.include_router(financers_router)
 
 
 @app.get("/health", tags=["health"])

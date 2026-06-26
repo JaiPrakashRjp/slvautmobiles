@@ -64,6 +64,8 @@ class Vehicle(Base):
     showroom: Mapped[Showroom | None] = mapped_column(pg_enum(Showroom, "showroom"))
     rc_permit: Mapped[bool] = mapped_column(nullable=False, server_default="false")
 
+    remarks: Mapped[str | None] = mapped_column(Text)
+
     # second-hand only
     reg_no: Mapped[str | None] = mapped_column(Text)
     insurance_date: Mapped[date | None] = mapped_column(Date)
@@ -72,6 +74,11 @@ class Vehicle(Base):
     prev_owner_name: Mapped[str | None] = mapped_column(Text)
     prev_owner_mobile: Mapped[str | None] = mapped_column(String(10))
     prev_owner_address: Mapped[str | None] = mapped_column(Text)
+
+    # financer (optional FK to financers table)
+    financer_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("financers.id", ondelete="SET NULL")
+    )
 
     # inventory / sale / service
     inventory_status: Mapped[InventoryStatus] = mapped_column(

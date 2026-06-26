@@ -29,6 +29,7 @@ class SaleCreate(BaseModel):
     first_due_date: date | None = None
     customer_whatsapp: str | None = None
     status: EntityStatus | None = None  # optional override; else from role
+    remarks: str | None = None
 
 
 class InstallmentOut(BaseModel):
@@ -94,5 +95,6 @@ class SaleOut(BaseModel):
     confirmed_at: datetime | None = None
     rejection_reason: str | None = None
     unsell_reason: str | None = None
+    remarks: str | None = None
     installments: list[InstallmentOut] = []
     payments: list[PaymentOut] = []

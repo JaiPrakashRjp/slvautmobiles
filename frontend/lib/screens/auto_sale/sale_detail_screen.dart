@@ -211,6 +211,12 @@ class _SaleDetailViewState extends State<_SaleDetailView> {
                               label: 'Status',
                               value: sale.saleStatus,
                               c: c),
+                          if (sale.remarks != null &&
+                              sale.remarks!.isNotEmpty)
+                            _SummaryRow(
+                                label: 'Remarks',
+                                value: sale.remarks!,
+                                c: c),
                         ],
                       ),
                     ),

@@ -21,6 +21,7 @@ class Sale with GatedEntity {
     List<Installment>? installments,
     this.saleStatus = 'active',
     this.invoicePath,
+    this.remarks,
     required this.createdBy,
     required this.createdAt,
     this.status = EntityStatus.active,
@@ -53,6 +54,7 @@ class Sale with GatedEntity {
   /// 'active' | 'closed' | 'cancelled' | 'rejected'
   String saleStatus;
   String? invoicePath;
+  String? remarks;
 
   @override
   final String createdBy;

@@ -68,6 +68,7 @@ class Sale(Base):
     confirmed_at: Mapped[datetime | None] = mapped_column()
     rejection_reason: Mapped[str | None] = mapped_column(Text)
     unsell_reason: Mapped[str | None] = mapped_column(Text)
+    remarks: Mapped[str | None] = mapped_column(Text)
 
     installments: Mapped[list["SaleInstallment"]] = relationship(  # noqa: F821
         back_populates="sale",

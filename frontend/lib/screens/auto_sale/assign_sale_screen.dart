@@ -294,6 +294,13 @@ class _AssignSaleView extends StatelessWidget {
                   LengthLimitingTextInputFormatter(10),
                 ],
               ),
+              const SizedBox(height: AppSpacing.lg),
+              AppTextField(
+                label: 'Remarks',
+                hint: 'Any notes about this sale',
+                controller: vm.remarksController,
+                maxLines: 3,
+              ),
               const SizedBox(height: AppSpacing.xxl),
 
               PrimaryButton(

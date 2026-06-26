@@ -29,6 +29,7 @@ abstract class SaleService extends ChangeNotifier {
     int monthly,
     int installmentCount,
     DateTime? firstDueDate,
+    String? remarks,
   });
 
   /// Mark one installment as paid. Updates local state + persists.
@@ -152,6 +153,7 @@ class MockSaleService extends SaleService {
     int monthly = 0,
     int installmentCount = 0,
     DateTime? firstDueDate,
+    String? remarks,
   }) async {
     final mode = depositType.paymentMode;
     final installments = mode == PaymentMode.installments && installmentCount > 0
@@ -175,6 +177,7 @@ class MockSaleService extends SaleService {
       customerWhatsapp: customerWhatsapp,
       installments: installments,
       saleStatus: 'active',
+      remarks: remarks,
       createdBy: actorId,
       createdAt: DateTime.now(),
       status: Gate.initialStatus(actorRole),

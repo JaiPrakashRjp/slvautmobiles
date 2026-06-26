@@ -27,6 +27,8 @@ class Vehicle with GatedEntity {
     this.prevOwnerIdProof,
     this.prevOwnerPhoto,
     this.assignedToCustomerId,
+    this.financerId,
+    this.remarks,
     this.inventoryStatus = InventoryStatus.available,
     this.saleStatus = SaleStatus.notSold,
     this.nextServiceDueDate,
@@ -75,9 +77,11 @@ class Vehicle with GatedEntity {
   String? prevOwnerAddress;
   String? prevOwnerIdProof;
   String? prevOwnerPhoto;
+  String? remarks;
 
   /// Customer this vehicle is currently assigned to (sale or rental), if any.
   String? assignedToCustomerId;
+  int? financerId;
   InventoryStatus inventoryStatus;
   SaleStatus saleStatus;
 

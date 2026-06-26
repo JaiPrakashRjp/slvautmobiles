@@ -9,11 +9,13 @@ import 'screens/splash_screen.dart';
 import 'services/local_push_service.dart';
 import 'utils/navigator_key.dart';
 import 'services/api_customer_service.dart';
+import 'services/api_financer_service.dart';
 import 'services/api_notification_service.dart';
 import 'services/api_sale_service.dart';
 import 'services/api_user_service.dart';
 import 'services/api_vehicle_service.dart';
 import 'services/customer_service.dart';
+import 'services/financer_service.dart';
 import 'services/loan_service.dart';
 import 'services/notification_service.dart';
 import 'services/pdf_service.dart';
@@ -56,6 +58,9 @@ class SlvApp extends StatelessWidget {
         ChangeNotifierProvider<VehicleService>(
           // Real backend service. Loads the vehicle list from the API on start.
           create: (_) => ApiVehicleService()..refresh(),
+        ),
+        ChangeNotifierProvider<FinancerService>(
+          create: (_) => ApiFinancerService()..refresh(),
         ),
         ChangeNotifierProxyProvider<AuthController, SaleService>(
           create: (ctx) =>

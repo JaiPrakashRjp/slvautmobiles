@@ -28,6 +28,7 @@ class CreateCustomerViewModel extends ChangeNotifier {
   final addressController = TextEditingController();
   final assurityNameController = TextEditingController();
   final assurityMobileController = TextEditingController();
+  final remarksController = TextEditingController();
 
   DateTime? _dob;
   Branch? _branch;
@@ -50,6 +51,7 @@ class CreateCustomerViewModel extends ChangeNotifier {
     addressController.text = c.address;
     assurityNameController.text = c.assurityName ?? '';
     assurityMobileController.text = c.assurityMobile ?? '';
+    remarksController.text = c.remarks ?? '';
     _dob = c.dob;
     _branch = c.branch;
   }
@@ -98,6 +100,7 @@ class CreateCustomerViewModel extends ChangeNotifier {
         dob: _dob,
         assurityName: assurityNameController.text.trim(),
         assurityMobile: assurityMobileController.text.trim(),
+        remarks: remarksController.text.trim().isEmpty ? null : remarksController.text.trim(),
       );
       return (pending: false, failedDocs: failedDocs);
     }
@@ -114,6 +117,7 @@ class CreateCustomerViewModel extends ChangeNotifier {
       dob: _dob,
       assurityName: assurityNameController.text.trim(),
       assurityMobile: assurityMobileController.text.trim(),
+      remarks: remarksController.text.trim().isEmpty ? null : remarksController.text.trim(),
     );
 
     for (final entry in _docs.entries) {
@@ -145,6 +149,7 @@ class CreateCustomerViewModel extends ChangeNotifier {
     addressController.dispose();
     assurityNameController.dispose();
     assurityMobileController.dispose();
+    remarksController.dispose();
     super.dispose();
   }
 }

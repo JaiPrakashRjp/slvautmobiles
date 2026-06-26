@@ -16,6 +16,7 @@ class CustomerBase(BaseModel):
     dob: date | None = None
     assurity_name: str | None = None
     assurity_mobile: str | None = None
+    remarks: str | None = None
 
 
 class CustomerCreate(CustomerBase):
@@ -35,6 +36,7 @@ class CustomerUpdate(BaseModel):
     assurity_name: str | None = None
     assurity_mobile: str | None = None
     status: EntityStatus | None = None
+    remarks: str | None = None
 
 
 class DocumentOut(BaseModel):

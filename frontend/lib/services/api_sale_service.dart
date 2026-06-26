@@ -69,6 +69,7 @@ class ApiSaleService extends SaleService {
     int monthly = 0,
     int installmentCount = 0,
     DateTime? firstDueDate,
+    String? remarks,
   }) async {
     final isDown = depositType == DepositType.downPayment;
     final body = <String, dynamic>{
@@ -82,6 +83,7 @@ class ApiSaleService extends SaleService {
       if (isDown) 'monthly_amount': monthly,
       if (isDown) 'installment_count': installmentCount,
       if (isDown && firstDueDate != null) 'first_due_date': _dateStr(firstDueDate),
+      if (remarks != null && remarks.isNotEmpty) 'remarks': remarks,
     };
     // Backend param is "created_by", actor_role matches backend default 'admin'
     final j = await _api.post('/sales',
@@ -224,6 +226,7 @@ class ApiSaleService extends SaleService {
       // SaleOut uses "status" (not "entity_status") for the gated entity status
       status: EntityStatus.fromWire((j['status'] as String?) ?? 'active'),
       unsellReason: j['unsell_reason'] as String?,
+      remarks: j['remarks'] as String?,
     );
   }
 
