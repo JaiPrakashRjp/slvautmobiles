@@ -9,7 +9,10 @@ from app.db import Base
 import app.models  # noqa: F401  (registers all tables on Base.metadata)
 
 config = context.config
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+# Escape '%' as '%%' so ConfigParser (used by set_main_option) doesn't treat
+# it as interpolation syntax — needed when the DB password is URL-encoded
+# (e.g. '@' -> '%40'). engine_from_config un-escapes it back when reading.
+config.set_main_option("sqlalchemy.url", settings.DATABASE_URL.replace("%", "%%"))
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
