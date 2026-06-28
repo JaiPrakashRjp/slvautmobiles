@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 # Load .env sitting at backend/python/.env (two levels up from this file).
 load_dotenv()
 
-
+#settings
 class Settings:
     DATABASE_URL: str = os.getenv(
         "DATABASE_URL",
