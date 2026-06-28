@@ -12,3 +12,6 @@ python-multipart>=0.0.9     # file uploads (documents)
 
 # ── Auth ───────────────────────────────────────────────────────────────────
 bcrypt>=4.0                  # password hashing for user login
+
+# ── Production server (systemd runs gunicorn with uvicorn workers) ─────────
+gunicorn>=21.2              # process manager used by slv-api / slv-api-dev .service
