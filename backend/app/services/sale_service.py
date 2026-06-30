@@ -22,7 +22,6 @@ from app.models.enums import (
     SaleLifecycle,
     SaleStatus,
 )
-from app.models.financer import Financer
 from app.models.sale import Sale
 from app.models.sale_financer import SaleFinancer
 from app.models.sale_installment import SaleInstallment
@@ -123,11 +122,11 @@ class SaleService:
         SaleDAO.add(db, sale)  # flush → sale.id
         sale.invoice_no = f"INV-AUTO-{sale.id:04d}"
 
-        # link the finance company for this sale (one financer per sale)
+        # the sale's own financer (separate master from vehicle financers)
         if data.financer_id is not None:
-            if db.get(Financer, data.financer_id) is None:
-                raise HTTPException(status_code=400, detail="Unknown financer")
-            sale.financer_link = SaleFinancer(financer_id=data.financer_id)
+            if db.get(SaleFinancer, data.financer_id) is None:
+                raise HTTPException(status_code=400, detail="Unknown sale financer")
+            sale.financer_id = data.financer_id
 
         # NOTE: installment schedule is intentionally not built here yet — the
         # monthly/EMI flow is being revisited alongside WhatsApp reminders.

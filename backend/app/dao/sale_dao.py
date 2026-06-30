@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session, selectinload
 from app.models.module import Module
 from app.models.reminder_log import ReminderLog
 from app.models.sale import Sale
-from app.models.sale_financer import SaleFinancer
 from app.models.sale_installment import SaleInstallment
 from app.models.sale_payment import SalePayment
 
@@ -22,7 +21,7 @@ class SaleDAO:
         return stmt.options(
             selectinload(Sale.installments),
             selectinload(Sale.payments),
-            selectinload(Sale.financer_link).selectinload(SaleFinancer.financer),
+            selectinload(Sale.financer),
         )
 
     @staticmethod

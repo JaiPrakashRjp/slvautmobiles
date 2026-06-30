@@ -13,6 +13,9 @@ abstract class CustomerService extends ChangeNotifier {
   List<Customer> all();
   Customer? byId(String id);
 
+  /// True while a [refresh] is in flight (drives the list loading spinner).
+  bool get loading => false;
+
   /// Loads customers from the backing store (no-op for the in-memory mock).
   Future<void> refresh() async {}
 

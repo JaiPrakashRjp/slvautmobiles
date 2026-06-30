@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../controllers/auth_controller.dart';
 import '../../services/customer_service.dart';
-import '../../services/financer_service.dart';
+import '../../services/sale_financer_service.dart';
 import '../../services/sale_service.dart';
 import '../../services/vehicle_service.dart';
 import '../../theme/app_colors.dart';
@@ -47,7 +47,7 @@ class _AssignSaleScreenState extends State<AssignSaleScreen> {
         customers: context.read<CustomerService>(),
         vehicles: context.read<VehicleService>(),
         sales: context.read<SaleService>(),
-        financers: context.read<FinancerService>(),
+        financers: context.read<SaleFinancerService>(),
         auth: context.read<AuthController>(),
         initialVehicleId: widget.initialVehicleId,
       ),
@@ -78,17 +78,68 @@ class _AssignSaleView extends StatelessWidget {
   }
 
   Future<void> _pickFinancer(BuildContext context, AssignSaleViewModel vm) async {
+    final financerService = context.read<SaleFinancerService>();
+    final messenger = ScaffoldMessenger.of(context);
+    final financers = financerService.all();
+    // -1 = add new, 0 = none, >0 = real financer id
+    final options = [
+      const SheetOption<int>(value: 0, label: '— None —'),
+      const SheetOption<int>(value: -1, label: '＋ Add new financer'),
+      ...financers.map((f) => SheetOption<int>(value: f.id, label: f.name)),
+    ];
     final picked = await OptionSheet.show<int>(
       context,
       title: 'Financer',
-      searchable: true,
+      selected: vm.financerId ?? 0,
+      options: options,
+      searchable: financers.length > 5,
       searchHint: 'Search financer',
-      selected: vm.financerId,
-      options: vm.financers
-          .map((f) => SheetOption(value: f.id, label: f.name))
-          .toList(),
     );
-    if (picked != null) vm.financerId = picked;
+    if (picked == null) return;
+    if (picked == 0) {
+      vm.financerId = null;
+      return;
+    }
+    if (picked == -1) {
+      if (!context.mounted) return;
+      final nameCtrl = TextEditingController();
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Add financer'),
+          content: TextField(
+            controller: nameCtrl,
+            autofocus: true,
+            textCapitalization: TextCapitalization.words,
+            decoration: const InputDecoration(
+              labelText: 'Finance company name',
+              hintText: 'e.g. HDFC Bank',
+            ),
+            onSubmitted: (_) => Navigator.of(ctx).pop(true),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: const Text('Cancel')),
+            TextButton(
+                onPressed: () => Navigator.of(ctx).pop(true),
+                child: const Text('Add')),
+          ],
+        ),
+      );
+      if (confirmed == true && nameCtrl.text.trim().isNotEmpty) {
+        try {
+          final f = await financerService.create(nameCtrl.text.trim());
+          vm.financerId = f.id;
+        } catch (e) {
+          messenger.showSnackBar(
+              SnackBar(content: Text('Failed to add financer: $e')));
+        }
+      }
+      nameCtrl.dispose();
+      return;
+    }
+    vm.financerId = picked;
   }
 
   Future<void> _pickSaleDate(BuildContext context, AssignSaleViewModel vm) async {

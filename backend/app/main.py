@@ -8,6 +8,7 @@ from app.controllers.customer_controller import router as customers_router
 from app.controllers.financer_controller import router as financers_router
 from app.controllers.notification_controller import router as notifications_router
 from app.controllers.sale_controller import router as sales_router
+from app.controllers.sale_financer_controller import router as sale_financers_router
 from app.controllers.user_controller import router as users_router
 from app.controllers.vehicle_controller import router as vehicles_router
 
@@ -32,6 +33,7 @@ app.include_router(customers_router)
 app.include_router(sales_router)
 app.include_router(notifications_router)
 app.include_router(financers_router)
+app.include_router(sale_financers_router)
 
 
 @app.get("/health", tags=["health"])

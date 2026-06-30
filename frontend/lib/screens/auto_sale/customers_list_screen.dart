@@ -48,7 +48,7 @@ class _CustomersListView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    context.watch<CustomerService>();
+    final customers = context.watch<CustomerService>();
     context.watch<VehicleService>();
     final vm = context.watch<CustomersListViewModel>();
 
@@ -82,7 +82,9 @@ class _CustomersListView extends StatelessWidget {
                 ),
               ),
               Expanded(
-                child: vm.isEmpty
+                child: customers.loading && vm.isEmpty
+                    ? const Center(child: CircularProgressIndicator())
+                    : vm.isEmpty
                     ? EmptyState(
                         icon: Icons.people_outline,
                         title: vm.tab == 0

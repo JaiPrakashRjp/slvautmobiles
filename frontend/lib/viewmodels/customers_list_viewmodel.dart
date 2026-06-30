@@ -8,7 +8,14 @@ import '../services/vehicle_service.dart';
 /// Backs the customers list: Assigned / Not Assigned tabs + role-aware actions.
 /// A customer is "Assigned" when at least one vehicle is assigned to them.
 class CustomersListViewModel extends ChangeNotifier {
-  CustomersListViewModel(this._customers, this._vehicles, this._auth);
+  CustomersListViewModel(this._customers, this._vehicles, this._auth) {
+    // Pull fresh data when the list opens (shows the loading spinner).
+    // Deferred so notifyListeners() doesn't fire during the widget build.
+    Future.microtask(() async {
+      await _customers.refresh();
+      await _vehicles.refresh();
+    });
+  }
 
   final CustomerService _customers;
   final VehicleService _vehicles;

@@ -53,7 +53,7 @@ class _VehiclesListView extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.colors;
     // Rebuild when the underlying vehicle data changes.
-    context.watch<VehicleService>();
+    final vehicles = context.watch<VehicleService>();
     final vm = context.watch<VehiclesListViewModel>();
 
     return Scaffold(
@@ -86,7 +86,9 @@ class _VehiclesListView extends StatelessWidget {
                 ),
               ),
               Expanded(
-                child: vm.isEmpty
+                child: vehicles.loading && vm.isEmpty
+                    ? const Center(child: CircularProgressIndicator())
+                    : vm.isEmpty
                     ? EmptyState(
                         title: vm.tab == 0
                             ? 'No sold vehicles'

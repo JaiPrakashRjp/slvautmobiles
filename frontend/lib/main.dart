@@ -11,12 +11,14 @@ import 'utils/navigator_key.dart';
 import 'services/api_customer_service.dart';
 import 'services/api_financer_service.dart';
 import 'services/api_notification_service.dart';
+import 'services/api_sale_financer_service.dart';
 import 'services/api_sale_service.dart';
 import 'services/api_user_service.dart';
 import 'services/api_vehicle_service.dart';
 import 'services/customer_service.dart';
 import 'services/financer_service.dart';
 import 'services/loan_service.dart';
+import 'services/sale_financer_service.dart';
 import 'services/notification_service.dart';
 import 'services/pdf_service.dart';
 import 'services/rental_service.dart';
@@ -61,6 +63,9 @@ class SlvApp extends StatelessWidget {
         ),
         ChangeNotifierProvider<FinancerService>(
           create: (_) => ApiFinancerService()..refresh(),
+        ),
+        ChangeNotifierProvider<SaleFinancerService>(
+          create: (_) => ApiSaleFinancerService()..refresh(),
         ),
         ChangeNotifierProxyProvider<AuthController, SaleService>(
           create: (ctx) =>

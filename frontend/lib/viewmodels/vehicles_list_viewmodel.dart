@@ -7,7 +7,11 @@ import '../services/vehicle_service.dart';
 /// Backs the vehicles list: Assigned / Unassigned tabs, search, pagination,
 /// and role-aware delete/approve actions.
 class VehiclesListViewModel extends ChangeNotifier {
-  VehiclesListViewModel(this._vehicles, this._auth);
+  VehiclesListViewModel(this._vehicles, this._auth) {
+    // Pull fresh data when the list opens (shows the loading spinner).
+    // Deferred so notifyListeners() doesn't fire during the widget build.
+    Future.microtask(_vehicles.refresh);
+  }
 
   final VehicleService _vehicles;
   final AuthController _auth;

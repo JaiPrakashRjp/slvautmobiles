@@ -78,9 +78,9 @@ class Vehicle(Base):
     prev_owner_mobile: Mapped[str | None] = mapped_column(String(10))
     prev_owner_address: Mapped[str | None] = mapped_column(Text)
 
-    # financer (optional FK to financers table)
+    # financer (optional FK to the vehicle financer master)
     financer_id: Mapped[int | None] = mapped_column(
-        BigInteger, ForeignKey("financers.id", ondelete="SET NULL")
+        BigInteger, ForeignKey("vehicle_financers.id", ondelete="SET NULL")
     )
 
     # inventory / sale / service

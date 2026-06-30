@@ -96,17 +96,13 @@ class Sale(Base):
     payments: Mapped[list["SalePayment"]] = relationship(  # noqa: F821
         back_populates="sale", cascade="all, delete-orphan"
     )
-    financer_link: Mapped["SaleFinancer | None"] = relationship(  # noqa: F821
-        back_populates="sale", uselist=False, cascade="all, delete-orphan"
+    # the sale's own financer (separate master from vehicle financers)
+    financer_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("sale_financers.id", ondelete="SET NULL")
     )
-
-    @property
-    def financer_id(self) -> int | None:
-        """The linked financer's id (None if no financer assigned)."""
-        return self.financer_link.financer_id if self.financer_link else None
+    financer: Mapped["SaleFinancer | None"] = relationship()  # noqa: F821
 
     @property
     def financer_name(self) -> str | None:
-        """The linked financer's name, for display."""
-        link = self.financer_link
-        return link.financer.name if link and link.financer else None
+        """The sale financer's name, for display."""
+        return self.financer.name if self.financer else None

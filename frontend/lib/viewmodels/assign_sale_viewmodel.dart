@@ -6,7 +6,7 @@ import '../models/enums.dart';
 import '../models/financer.dart';
 import '../models/vehicle.dart';
 import '../services/customer_service.dart';
-import '../services/financer_service.dart';
+import '../services/sale_financer_service.dart';
 import '../services/sale_service.dart';
 import '../services/vehicle_service.dart';
 
@@ -24,7 +24,7 @@ class AssignSaleViewModel extends ChangeNotifier {
     required CustomerService customers,
     required VehicleService vehicles,
     required SaleService sales,
-    required FinancerService financers,
+    required SaleFinancerService financers,
     required AuthController auth,
     String? initialVehicleId,
   })  : _customers = customers,
@@ -47,7 +47,7 @@ class AssignSaleViewModel extends ChangeNotifier {
   final CustomerService _customers;
   final VehicleService _vehicles;
   final SaleService _sales;
-  final FinancerService _financers;
+  final SaleFinancerService _financers;
   final AuthController _auth;
 
   final vehicleAmountController = TextEditingController();

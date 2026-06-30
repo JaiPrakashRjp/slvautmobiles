@@ -19,15 +19,26 @@ class ApiVehicleService extends VehicleService {
 
   final ApiClient _api;
   final List<Vehicle> _vehicles = [];
+  bool _loading = false;
+
+  @override
+  bool get loading => _loading;
 
   // ── Reads ─────────────────────────────────────────────────────────────────
   @override
   Future<void> refresh() async {
-    final data = await _api.get('/vehicles');
-    _vehicles
-      ..clear()
-      ..addAll((data as List).map((j) => _fromJson(j as Map<String, dynamic>)));
+    _loading = true;
     notifyListeners();
+    try {
+      final data = await _api.get('/vehicles');
+      _vehicles
+        ..clear()
+        ..addAll(
+            (data as List).map((j) => _fromJson(j as Map<String, dynamic>)));
+    } finally {
+      _loading = false;
+      notifyListeners();
+    }
   }
 
   @override
