@@ -3,8 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../controllers/auth_controller.dart';
-import '../../models/enums.dart';
 import '../../services/customer_service.dart';
+import '../../services/financer_service.dart';
 import '../../services/sale_service.dart';
 import '../../services/vehicle_service.dart';
 import '../../theme/app_colors.dart';
@@ -19,7 +19,8 @@ import '../../widgets/option_sheet.dart';
 import '../../widgets/picker_field.dart';
 import '../../widgets/primary_button.dart';
 
-/// Assign vehicle + payment to a customer.
+/// Sell a vehicle to a customer. Total is computed from the price breakdown;
+/// full-cash vs down-payment is derived from the down payment.
 class AssignSaleScreen extends StatefulWidget {
   const AssignSaleScreen({
     super.key,
@@ -35,8 +36,6 @@ class AssignSaleScreen extends StatefulWidget {
 }
 
 class _AssignSaleScreenState extends State<AssignSaleScreen> {
-  // Stable key stored in state — survives rebuilds (keyboard, MediaQuery, etc.)
-  // but is unique per route push, so stale data never carries over.
   final _providerKey = UniqueKey();
 
   @override
@@ -48,6 +47,7 @@ class _AssignSaleScreenState extends State<AssignSaleScreen> {
         customers: context.read<CustomerService>(),
         vehicles: context.read<VehicleService>(),
         sales: context.read<SaleService>(),
+        financers: context.read<FinancerService>(),
         auth: context.read<AuthController>(),
         initialVehicleId: widget.initialVehicleId,
       ),
@@ -77,16 +77,18 @@ class _AssignSaleView extends StatelessWidget {
     if (picked != null) vm.vehicleId = picked;
   }
 
-  Future<void> _pickDeposit(BuildContext context, AssignSaleViewModel vm) async {
-    final picked = await OptionSheet.show<DepositType>(
+  Future<void> _pickFinancer(BuildContext context, AssignSaleViewModel vm) async {
+    final picked = await OptionSheet.show<int>(
       context,
-      title: 'Deposit type',
-      selected: vm.depositType,
-      options: DepositType.values
-          .map((d) => SheetOption(value: d, label: d.label))
+      title: 'Financer',
+      searchable: true,
+      searchHint: 'Search financer',
+      selected: vm.financerId,
+      options: vm.financers
+          .map((f) => SheetOption(value: f.id, label: f.name))
           .toList(),
     );
-    if (picked != null) vm.depositType = picked;
+    if (picked != null) vm.financerId = picked;
   }
 
   Future<void> _pickSaleDate(BuildContext context, AssignSaleViewModel vm) async {
@@ -97,16 +99,6 @@ class _AssignSaleView extends StatelessWidget {
       lastDate: DateTime(2035),
     );
     if (picked != null) vm.saleDate = picked;
-  }
-
-  Future<void> _pickFirstDue(BuildContext context, AssignSaleViewModel vm) async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: vm.firstDueDate ?? DateTime.now(),
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2035),
-    );
-    if (picked != null) vm.firstDueDate = picked;
   }
 
   Future<void> _confirm(BuildContext context, AssignSaleViewModel vm) async {
@@ -156,39 +148,27 @@ class _AssignSaleView extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _InfoRow(
-                      label: 'Module',
-                      value: AppModule.autoSale.label,
-                      c: c,
-                    ),
-                    const SizedBox(height: AppSpacing.sm),
-                    _InfoRow(
-                      label: 'Customer',
-                      value: customer?.fullName ?? '—',
-                      c: c,
-                    ),
+                    _InfoRow(label: 'Customer', value: customer?.fullName ?? '—', c: c),
                     if (customer != null && customer.phone.isNotEmpty) ...[
                       const SizedBox(height: AppSpacing.xs),
                       _InfoRow(
-                        label: 'Phone',
-                        value: Formatters.phone(customer.phone),
-                        c: c,
-                      ),
+                          label: 'Phone',
+                          value: Formatters.phone(customer.phone),
+                          c: c),
                     ],
                     if (vm.selectedVehicle != null) ...[
                       const SizedBox(height: AppSpacing.xs),
                       _InfoRow(
-                        label: 'Vehicle',
-                        value: vm.selectedVehicle!.displayLabel,
-                        c: c,
-                      ),
+                          label: 'Vehicle',
+                          value: vm.selectedVehicle!.displayLabel,
+                          c: c),
                     ],
                   ],
                 ),
               ),
               const SizedBox(height: AppSpacing.lg),
 
-              // ── Vehicle picker ────────────────────────────────────────────
+              // ── Vehicle + financer pickers ────────────────────────────────
               PickerField(
                 label: 'Assign vehicle',
                 placeholder: 'Search vehicle',
@@ -197,93 +177,67 @@ class _AssignSaleView extends StatelessWidget {
                 onTap: () => _pickVehicle(context, vm),
               ),
               const SizedBox(height: AppSpacing.lg),
-
-              // ── Deposit type ──────────────────────────────────────────────
               PickerField(
-                label: 'Deposit type',
-                placeholder: 'Select deposit type',
-                value: vm.depositType.label,
-                onTap: () => _pickDeposit(context, vm),
+                label: 'Financer (optional)',
+                placeholder: 'Select financer',
+                value: vm.selectedFinancer?.name,
+                onTap: () => _pickFinancer(context, vm),
               ),
               const SizedBox(height: AppSpacing.lg),
 
-              // ── Total sale price (always shown) ───────────────────────────
-              AppTextField(
-                label: 'Total sale price',
-                prefixText: '₹ ',
-                controller: vm.totalSalePriceController,
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              ),
+              // ── Amounts ───────────────────────────────────────────────────
+              _SectionLabel('Amount details', c: c),
+              const SizedBox(height: AppSpacing.md),
+              _money(label: 'Vehicle amount', controller: vm.vehicleAmountController),
+              const SizedBox(height: AppSpacing.md),
+              _money(
+                  label: 'Additional fitting',
+                  controller: vm.additionalFittingController),
+              const SizedBox(height: AppSpacing.md),
+              _money(label: 'DL charges', controller: vm.dlChargesController),
+              const SizedBox(height: AppSpacing.md),
+              _money(
+                  label: 'Document charges',
+                  controller: vm.documentChargesController),
+              const SizedBox(height: AppSpacing.md),
+              _money(label: 'Other expenses', controller: vm.otherExpensesController),
               const SizedBox(height: AppSpacing.lg),
 
-              // ── Down payment extra fields ─────────────────────────────────
-              if (vm.depositType == DepositType.downPayment) ...[
-                AppTextField(
-                  label: 'Advance received',
-                  prefixText: '₹ ',
-                  controller: vm.advanceController,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              // ── Total (read-only) ─────────────────────────────────────────
+              _TotalCard(amount: vm.total, c: c),
+              const SizedBox(height: AppSpacing.lg),
+
+              // ── Down payment ──────────────────────────────────────────────
+              _money(label: 'Down payment', controller: vm.downPaymentController),
+              const SizedBox(height: AppSpacing.sm),
+              if (vm.total > 0 && vm.downPayment > 0)
+                _ModeHint(
+                  isFullCash: vm.isFullCash,
+                  remaining: (vm.total - vm.downPayment).clamp(0, 1 << 31),
+                  c: c,
                 ),
-                const SizedBox(height: AppSpacing.md),
-                // Remaining — computed read-only
-                _RemainingCard(amount: vm.remaining, c: c),
+
+              // ── Loan-case fields ──────────────────────────────────────────
+              if (vm.showLoanFields) ...[
                 const SizedBox(height: AppSpacing.lg),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: AppTextField(
-                        label: 'Monthly amount',
-                        prefixText: '₹ ',
-                        controller: vm.monthlyController,
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: AppSpacing.md),
-                    Expanded(
-                      child: AppTextField(
-                        label: 'Number of months',
-                        controller: vm.monthsController,
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly,
-                          LengthLimitingTextInputFormatter(3),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: AppSpacing.lg),
-                PickerField(
-                  label: 'First installment due date',
-                  leadingIcon: Icons.calendar_today_outlined,
-                  placeholder: 'Select date',
-                  value: vm.firstDueDate == null
-                      ? null
-                      : Formatters.date(vm.firstDueDate!),
-                  onTap: () => _pickFirstDue(context, vm),
-                ),
-                const SizedBox(height: AppSpacing.lg),
+                if (vm.isSuperAdmin) ...[
+                  _money(label: 'HP amount (loan)', controller: vm.hpAmountController),
+                  const SizedBox(height: AppSpacing.md),
+                ],
+                _money(
+                    label: 'Remaining amount', controller: vm.remainingController),
               ],
+              const SizedBox(height: AppSpacing.lg),
 
-              // ── Sale date (always shown) ───────────────────────────────────
+              // ── Sale date / WhatsApp / remarks ────────────────────────────
               PickerField(
                 label: 'Sale date',
                 leadingIcon: Icons.calendar_today_outlined,
                 placeholder: 'Select date',
-                value: vm.saleDate == null
-                    ? null
-                    : Formatters.date(vm.saleDate!),
+                value: vm.saleDate == null ? null : Formatters.date(vm.saleDate!),
                 onTap: () => _pickSaleDate(context, vm),
               ),
               const SizedBox(height: AppSpacing.lg),
-
-              // ── Customer WhatsApp ─────────────────────────────────────────
               AppTextField(
                 label: 'Customer WhatsApp',
                 hint: '10-digit mobile number',
@@ -305,8 +259,7 @@ class _AssignSaleView extends StatelessWidget {
 
               PrimaryButton(
                 label: vm.loading ? 'Saving…' : 'Confirm sale',
-                onPressed:
-                    vm.loading ? null : () => _confirm(context, vm),
+                onPressed: vm.loading ? null : () => _confirm(context, vm),
               ),
             ],
           ),
@@ -314,6 +267,30 @@ class _AssignSaleView extends StatelessWidget {
       ),
     );
   }
+
+  /// A ₹ amount text field (digits only).
+  Widget _money({
+    required String label,
+    required TextEditingController controller,
+  }) {
+    return AppTextField(
+      label: label,
+      prefixText: '₹ ',
+      controller: controller,
+      keyboardType: TextInputType.number,
+      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+    );
+  }
+}
+
+class _SectionLabel extends StatelessWidget {
+  const _SectionLabel(this.text, {required this.c});
+  final String text;
+  final AppColors c;
+
+  @override
+  Widget build(BuildContext context) =>
+      Text(text, style: AppTextStyles.h2.copyWith(color: c.textMain));
 }
 
 class _InfoRow extends StatelessWidget {
@@ -342,8 +319,8 @@ class _InfoRow extends StatelessWidget {
   }
 }
 
-class _RemainingCard extends StatelessWidget {
-  const _RemainingCard({required this.amount, required this.c});
+class _TotalCard extends StatelessWidget {
+  const _TotalCard({required this.amount, required this.c});
   final int amount;
   final AppColors c;
 
@@ -359,13 +336,37 @@ class _RemainingCard extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Text('Remaining',
+          Text('Total amount',
               style: AppTextStyles.label.copyWith(color: c.textSub)),
           const Spacer(),
           Text(Formatters.currency(amount),
-              style: AppTextStyles.bodyStrong.copyWith(color: c.primary)),
+              style: AppTextStyles.h2.copyWith(color: c.primary)),
         ],
       ),
+    );
+  }
+}
+
+/// Small line under the down payment telling the user the derived mode.
+class _ModeHint extends StatelessWidget {
+  const _ModeHint(
+      {required this.isFullCash, required this.remaining, required this.c});
+  final bool isFullCash;
+  final int remaining;
+  final AppColors c;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = isFullCash
+        ? 'Paid in full — full cash sale'
+        : 'Down payment — balance ${Formatters.currency(remaining)}';
+    return Row(
+      children: [
+        Icon(isFullCash ? Icons.check_circle_outline : Icons.account_balance_outlined,
+            size: 16, color: isFullCash ? c.success : c.primary),
+        const SizedBox(width: AppSpacing.xs),
+        Text(text, style: AppTextStyles.caption.copyWith(color: c.textSub)),
+      ],
     );
   }
 }

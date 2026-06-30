@@ -21,14 +21,19 @@ class AuthController extends ChangeNotifier {
   int get currentUserId => int.tryParse(_current?.id ?? '') ?? 0;
 
   /// Signs in with email + password against the backend. Returns true on success.
+  ///
+  /// The backend responds with `{access_token, token_type, user}`. We store the
+  /// token on [ApiClient] so every later request carries it as a Bearer header,
+  /// and the backend derives the acting user + role from it.
   Future<bool> signIn(String email, String password) async {
     if (email.trim().isEmpty || password.isEmpty) return false;
     try {
       final json = await _api.post('/auth/login', body: {
         'email': email.trim().toLowerCase(),
         'password': password,
-      });
-      _current = _userFromJson(json as Map<String, dynamic>);
+      }) as Map<String, dynamic>;
+      ApiClient.authToken = json['access_token'] as String?;
+      _current = _userFromJson(json['user'] as Map<String, dynamic>);
       notifyListeners();
       return true;
     } on ApiException {
@@ -38,6 +43,7 @@ class AuthController extends ChangeNotifier {
 
   void signOut() {
     _current = null;
+    ApiClient.authToken = null;
     notifyListeners();
   }
 

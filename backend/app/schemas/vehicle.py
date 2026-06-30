@@ -29,7 +29,10 @@ class VehicleBase(BaseModel):
     buying_expenses: Decimal | None = None
     # first-hand
     showroom: Showroom | None = None
-    rc_permit: bool = False
+    # RC / Permit / Insurance — independent flags (both hand types)
+    rc: bool = False
+    permit: bool = False
+    insurance: bool = False
     # second-hand
     reg_no: str | None = None
     insurance_date: date | None = None
@@ -59,7 +62,9 @@ class VehicleUpdate(BaseModel):
     purchase_date: date | None = None
     buying_expenses: Decimal | None = None
     showroom: Showroom | None = None
-    rc_permit: bool | None = None
+    rc: bool | None = None
+    permit: bool | None = None
+    insurance: bool | None = None
     reg_no: str | None = None
     insurance_date: date | None = None
     fc_date: date | None = None

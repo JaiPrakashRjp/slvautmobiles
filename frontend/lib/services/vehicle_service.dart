@@ -31,7 +31,9 @@ abstract class VehicleService extends ChangeNotifier {
     FuelType? fuelType,
     num? buyingExpenses,
     Showroom? showroom,
-    bool rcPermit = false,
+    bool rc = false,
+    bool permit = false,
+    bool insurance = false,
     DateTime? insuranceDate,
     DateTime? fcDate,
     DateTime? permitDate,
@@ -70,7 +72,9 @@ abstract class VehicleService extends ChangeNotifier {
     FuelType? fuelType,
     num? buyingExpenses,
     Showroom? showroom,
-    bool? rcPermit,
+    bool? rc,
+    bool? permit,
+    bool? insurance,
     DateTime? insuranceDate,
     DateTime? fcDate,
     DateTime? permitDate,
@@ -175,7 +179,9 @@ class MockVehicleService extends VehicleService {
     FuelType? fuelType,
     num? buyingExpenses,
     Showroom? showroom,
-    bool rcPermit = false,
+    bool rc = false,
+    bool permit = false,
+    bool insurance = false,
     DateTime? insuranceDate,
     DateTime? fcDate,
     DateTime? permitDate,
@@ -198,7 +204,9 @@ class MockVehicleService extends VehicleService {
       fuelType: fuelType,
       buyingExpenses: buyingExpenses,
       showroom: showroom,
-      rcPermit: rcPermit,
+      rc: rc,
+      permit: permit,
+      insurance: insurance,
       insuranceDate: insuranceDate,
       fcDate: fcDate,
       permitDate: permitDate,
@@ -260,7 +268,9 @@ class MockVehicleService extends VehicleService {
     FuelType? fuelType,
     num? buyingExpenses,
     Showroom? showroom,
-    bool? rcPermit,
+    bool? rc,
+    bool? permit,
+    bool? insurance,
     DateTime? insuranceDate,
     DateTime? fcDate,
     DateTime? permitDate,
@@ -281,7 +291,9 @@ class MockVehicleService extends VehicleService {
     if (fuelType != null) v.fuelType = fuelType;
     if (buyingExpenses != null) v.buyingExpenses = buyingExpenses;
     if (showroom != null) v.showroom = showroom;
-    if (rcPermit != null) v.rcPermit = rcPermit;
+    if (rc != null) v.rc = rc;
+    if (permit != null) v.permit = permit;
+    if (insurance != null) v.insurance = insurance;
     if (insuranceDate != null) v.insuranceDate = insuranceDate;
     if (fcDate != null) v.fcDate = fcDate;
     if (permitDate != null) v.permitDate = permitDate;

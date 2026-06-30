@@ -62,7 +62,10 @@ class Vehicle(Base):
 
     # first-hand only
     showroom: Mapped[Showroom | None] = mapped_column(pg_enum(Showroom, "showroom"))
-    rc_permit: Mapped[bool] = mapped_column(nullable=False, server_default="false")
+    # RC / Permit / Insurance — independent flags, shown for both hand types
+    rc: Mapped[bool] = mapped_column(nullable=False, server_default="false")
+    permit: Mapped[bool] = mapped_column(nullable=False, server_default="false")
+    insurance: Mapped[bool] = mapped_column(nullable=False, server_default="false")
 
     remarks: Mapped[str | None] = mapped_column(Text)
 

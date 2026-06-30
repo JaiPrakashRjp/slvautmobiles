@@ -1,8 +1,8 @@
 """FastAPI router for sales, installments, payments, and per-sale reminders.
 
-NOTE: auth isn't tokenised yet — `created_by` / `actor_role` / `by_user_id` /
-`recorded_by` are passed explicitly (the real signed-in user) until bearer
-tokens land.
+The acting user (id + role) comes from the Bearer token via get_current_user,
+not from client params. Approvals (confirm/reject/cancel) require the Super
+Admin; recording payments only needs an authenticated user.
 """
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import Response
@@ -10,7 +10,9 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.models.enums import EntityStatus
+from app.models.user import User
 from app.schemas.sale import ReminderLogOut, SaleCreate, SaleOut
+from app.security import get_current_user, require_super_admin
 from app.services.sale_service import SaleService
 
 router = APIRouter(prefix="/sales", tags=["sales"])
@@ -34,54 +36,67 @@ def get_sale(sale_id: int, db: Session = Depends(get_db)):
 @router.post("", response_model=SaleOut, status_code=201)
 def create_sale(
     payload: SaleCreate,
-    created_by: int = Query(...),
-    actor_role: str = Query("admin", description="super_admin | admin"),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    return SaleService.create(db, payload, actor_role=actor_role, created_by=created_by)
+    return SaleService.create(
+        db, payload, actor_role=current_user.role.name, created_by=current_user.id
+    )
 
 
 @router.post("/installments/{installment_id}/pay", response_model=SaleOut)
 def mark_installment_paid(
     installment_id: int,
-    recorded_by: int = Query(...),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    return SaleService.mark_paid(db, installment_id, recorded_by=recorded_by)
+    return SaleService.mark_paid(db, installment_id, recorded_by=current_user.id)
 
 
 @router.post("/{sale_id}/payoff", response_model=SaleOut)
-def pay_off(sale_id: int, recorded_by: int = Query(...), db: Session = Depends(get_db)):
-    return SaleService.pay_off(db, sale_id, recorded_by=recorded_by)
+def pay_off(
+    sale_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return SaleService.pay_off(db, sale_id, recorded_by=current_user.id)
 
 
 @router.post("/{sale_id}/confirm", response_model=SaleOut)
-def confirm_sale(sale_id: int, by_user_id: int = Query(...), db: Session = Depends(get_db)):
-    return SaleService.confirm(db, sale_id, by_user_id)
+def confirm_sale(
+    sale_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_super_admin),
+):
+    return SaleService.confirm(db, sale_id, current_user.id)
 
 
 @router.post("/{sale_id}/reject", response_model=SaleOut)
 def reject_sale(
     sale_id: int,
     reason: str = Query(..., min_length=1),
-    by_user_id: int = Query(...),
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_super_admin),
 ):
-    return SaleService.reject(db, sale_id, reason, by_user_id)
+    return SaleService.reject(db, sale_id, reason, current_user.id)
 
 
 @router.post("/{sale_id}/cancel", response_model=SaleOut)
 def cancel_sale(
     sale_id: int,
     reason: str = Query(..., min_length=1),
-    by_user_id: int = Query(...),
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_super_admin),
 ):
-    return SaleService.cancel(db, sale_id, reason, by_user_id)
+    return SaleService.cancel(db, sale_id, reason, current_user.id)
 
 
 @router.delete("/{sale_id}", status_code=204)
-def delete_sale(sale_id: int, db: Session = Depends(get_db)):
+def delete_sale(
+    sale_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     SaleService.delete(db, sale_id)
     return Response(status_code=204)
 

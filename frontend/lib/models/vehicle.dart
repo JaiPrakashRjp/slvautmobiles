@@ -16,7 +16,9 @@ class Vehicle with GatedEntity {
     this.fuelType,
     this.buyingExpenses,
     this.showroom,
-    this.rcPermit = false,
+    this.rc = false,
+    this.permit = false,
+    this.insurance = false,
     this.insuranceDate,
     this.fcDate,
     this.permitDate,
@@ -58,9 +60,12 @@ class Vehicle with GatedEntity {
   FuelType? fuelType;
   num? buyingExpenses;
 
-  // First-hand only: source showroom + RC permit flag.
+  // First-hand only: source showroom.
   Showroom? showroom;
-  bool rcPermit;
+  // RC / Permit / Insurance — independent flags (both hand types).
+  bool rc;
+  bool permit;
+  bool insurance;
 
   // Second-hand only: existing paperwork dates + uploaded documents.
   DateTime? insuranceDate;

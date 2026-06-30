@@ -18,8 +18,6 @@ class ApiSaleService extends SaleService {
   final AuthController? _auth;
   final List<Sale> _cache = [];
 
-  String get _actorId => (_auth?.currentUserId ?? 0).toString();
-
   @override
   List<Sale> all() => List.unmodifiable(_cache);
 
@@ -61,34 +59,38 @@ class ApiSaleService extends SaleService {
     required String actorId,
     required String vehicleId,
     required String customerId,
-    required DepositType depositType,
     required DateTime saleDate,
     required String customerWhatsapp,
-    required int totalSalePrice,
-    required int amountReceived,
-    int monthly = 0,
-    int installmentCount = 0,
-    DateTime? firstDueDate,
+    int vehicleAmount = 0,
+    int additionalFitting = 0,
+    int dlCharges = 0,
+    int documentCharges = 0,
+    int otherExpenses = 0,
+    required int downPayment,
+    int remainingAmount = 0,
+    int? hpAmount,
     String? remarks,
+    int? financerId,
   }) async {
-    final isDown = depositType == DepositType.downPayment;
+    // deposit_type (full cash / down payment) is DERIVED on the server.
     final body = <String, dynamic>{
       'vehicle_id': int.parse(vehicleId),
       'customer_id': int.parse(customerId),
-      'deposit_type': depositType.wire,
-      'sale_price': totalSalePrice,
       'sale_date': _dateStr(saleDate),
-      'amount_received': amountReceived,
+      'vehicle_amount': vehicleAmount,
+      'additional_fitting': additionalFitting,
+      'dl_charges': dlCharges,
+      'document_charges': documentCharges,
+      'other_expenses': otherExpenses,
+      'amount_received': downPayment,
+      'remaining_amount': remainingAmount,
+      if (hpAmount != null) 'hp_amount': hpAmount,
       'customer_whatsapp': customerWhatsapp,
-      if (isDown) 'monthly_amount': monthly,
-      if (isDown) 'installment_count': installmentCount,
-      if (isDown && firstDueDate != null) 'first_due_date': _dateStr(firstDueDate),
+      if (financerId != null) 'financer_id': financerId,
       if (remarks != null && remarks.isNotEmpty) 'remarks': remarks,
     };
-    // Backend param is "created_by", actor_role matches backend default 'admin'
-    final j = await _api.post('/sales',
-        body: body,
-        query: {'created_by': actorId, 'actor_role': actorRole.wire});
+    // created_by + actor_role are derived from the Bearer token server-side.
+    final j = await _api.post('/sales', body: body);
     final sale = _fromJson(j as Map<String, dynamic>);
     _cache.insert(0, sale);
     notifyListeners();
@@ -98,9 +100,8 @@ class ApiSaleService extends SaleService {
   @override
   Future<void> markPaid(String saleId, String installmentId) async {
     final instId = int.tryParse(installmentId) ?? 0;
-    // Backend param is "recorded_by"
-    await _api.post('/sales/installments/$instId/pay',
-        query: {'recorded_by': _actorId});
+    // recorded_by comes from the Bearer token server-side.
+    await _api.post('/sales/installments/$instId/pay');
     final sale = byId(saleId);
     if (sale != null) {
       final idx =
@@ -118,8 +119,8 @@ class ApiSaleService extends SaleService {
   @override
   Future<void> payOff(String saleId) async {
     final id = int.tryParse(saleId) ?? 0;
-    // Backend param is "recorded_by"
-    await _api.post('/sales/$id/payoff', query: {'recorded_by': _actorId});
+    // recorded_by comes from the Bearer token server-side.
+    await _api.post('/sales/$id/payoff');
     final sale = byId(saleId);
     if (sale != null) {
       final now = DateTime.now();
@@ -148,8 +149,8 @@ class ApiSaleService extends SaleService {
   @override
   Future<void> cancel(String saleId, String reason, String byUserId) async {
     final numId = int.tryParse(saleId) ?? 0;
-    final j = await _api.post('/sales/$numId/cancel',
-        query: {'reason': reason, 'by_user_id': byUserId});
+    // by_user_id comes from the Bearer token server-side.
+    final j = await _api.post('/sales/$numId/cancel', query: {'reason': reason});
     final updated = _fromJson(j as Map<String, dynamic>);
     final idx = _cache.indexWhere((s) => s.id == saleId);
     if (idx != -1) {
@@ -161,9 +162,9 @@ class ApiSaleService extends SaleService {
   @override
   void confirm(String id, String byUserId) {
     final numId = int.tryParse(id) ?? 0;
-    // Backend param is "by_user_id"
+    // by_user_id comes from the Bearer token server-side.
     unawaited(_api
-        .post('/sales/$numId/confirm', query: {'by_user_id': byUserId})
+        .post('/sales/$numId/confirm')
         .catchError((_) => null));
     final sale = byId(id);
     if (sale != null) {
@@ -175,9 +176,9 @@ class ApiSaleService extends SaleService {
   @override
   void reject(String id, String reason, String byUserId) {
     final numId = int.tryParse(id) ?? 0;
-    // Backend expects reason + by_user_id as query params (not body)
+    // reason stays a query param; by_user_id comes from the Bearer token.
     unawaited(_api.post('/sales/$numId/reject',
-        query: {'reason': reason, 'by_user_id': byUserId})
+        query: {'reason': reason})
         .catchError((_) => null));
     final sale = byId(id);
     if (sale != null) {
@@ -213,7 +214,16 @@ class ApiSaleService extends SaleService {
       monthly: (j['monthly_amount'] as num?)?.round() ?? 0,
       dueDate: _parseDate(j['first_due_date'] as String?),
       saleDate: _parseDate(j['sale_date'] as String?),
+      vehicleAmount: (j['vehicle_amount'] as num?)?.round() ?? 0,
+      additionalFitting: (j['additional_fitting'] as num?)?.round() ?? 0,
+      dlCharges: (j['dl_charges'] as num?)?.round() ?? 0,
+      documentCharges: (j['document_charges'] as num?)?.round() ?? 0,
+      otherExpenses: (j['other_expenses'] as num?)?.round() ?? 0,
+      hpAmount: (j['hp_amount'] as num?)?.round(),
+      remainingAmount: (j['remaining_amount'] as num?)?.round() ?? 0,
       customerWhatsapp: (j['customer_whatsapp'] as String?) ?? '',
+      financerId: j['financer_id'] as int?,
+      financerName: j['financer_name'] as String?,
       invoiceNo: j['invoice_no'] as String?,
       closedAt: j['closed_at'] == null
           ? null

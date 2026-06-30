@@ -184,6 +184,12 @@ class _SaleDetailViewState extends State<_SaleDetailView> {
                               label: 'Deposit',
                               value: sale.depositType.label,
                               c: c),
+                          if (sale.financerName != null &&
+                              sale.financerName!.isNotEmpty)
+                            _SummaryRow(
+                                label: 'Financer',
+                                value: sale.financerName!,
+                                c: c),
                           if (sale.saleDate != null)
                             _SummaryRow(
                                 label: 'Sale date',
@@ -191,21 +197,25 @@ class _SaleDetailViewState extends State<_SaleDetailView> {
                                 c: c),
                           if (sale.salePrice != null)
                             _SummaryRow(
-                                label: 'Total price',
+                                label: 'Total amount',
                                 value: Formatters.currency(sale.salePrice!),
                                 c: c),
-                          // For down payment: show advance and remaining.
-                          // For full cash: total price IS the amount paid — no separate row needed.
+                          _SummaryRow(
+                              label: 'Down payment',
+                              value: Formatters.currency(sale.advance),
+                              c: c),
+                          // Down-payment / loan sale: show HP + typed remaining.
                           if (sale.mode == PaymentMode.installments) ...[
-                            _SummaryRow(
-                                label: 'Advance',
-                                value: Formatters.currency(sale.advance),
-                                c: c),
+                            if (sale.hpAmount != null)
+                              _SummaryRow(
+                                  label: 'HP amount',
+                                  value: Formatters.currency(sale.hpAmount!),
+                                  c: c),
                             _SummaryRow(
                                 label: 'Remaining',
-                                value: Formatters.currency(sale.outstanding),
+                                value: Formatters.currency(sale.remainingAmount),
                                 c: c,
-                                highlight: sale.outstanding > 0),
+                                highlight: sale.remainingAmount > 0),
                           ],
                           _SummaryRow(
                               label: 'Status',

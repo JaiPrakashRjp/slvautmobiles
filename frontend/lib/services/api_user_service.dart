@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import '../controllers/auth_controller.dart';
 import '../models/app_user.dart';
 import '../models/enums.dart';
 import 'api_client.dart';
@@ -12,15 +11,10 @@ import 'user_service.dart';
 /// and ChangeNotifier reactivity keep working; mutations update the cache and
 /// fire the backend call.
 class ApiUserService extends UserService {
-  ApiUserService({required AuthController auth, ApiClient? client})
-      : _auth = auth,
-        _api = client ?? ApiClient();
+  ApiUserService({ApiClient? client}) : _api = client ?? ApiClient();
 
-  final AuthController _auth;
   final ApiClient _api;
   final List<AppUser> _users = [];
-
-  int get _actorId => int.tryParse(_auth.currentUser?.id ?? '') ?? 1;
 
   @override
   Future<void> refresh() async {
@@ -52,9 +46,9 @@ class ApiUserService extends UserService {
     final parts = name.trim().split(RegExp(r'\s+'));
     final firstName = parts.isEmpty ? name : parts.first;
     final lastName = parts.length > 1 ? parts.sublist(1).join(' ') : '';
+    // created_by is derived from the Bearer token server-side.
     final json = await _api.post(
       '/users',
-      query: {'created_by': _actorId},
       body: {
         'first_name': firstName,
         'last_name': lastName,
@@ -87,9 +81,9 @@ class ApiUserService extends UserService {
   void setModuleAccess(String id, List<AppModule> modules) {
     byId(id)?.moduleAccess = modules;
     notifyListeners();
+    // by_user_id is derived from the Bearer token server-side.
     unawaited(_api.put(
       '/users/$id/modules',
-      query: {'by_user_id': _actorId},
       body: {'module_codes': modules.map((m) => m.backendCode).toList()},
     ).catchError((_) => null));
   }

@@ -20,10 +20,6 @@ class ApiVehicleService extends VehicleService {
   final ApiClient _api;
   final List<Vehicle> _vehicles = [];
 
-  // Until the users module + auth land, the backend requires a numeric creator.
-  // Use a fixed dev placeholder (1) so records can be created.
-  static const _devUserId = 1;
-
   // ── Reads ─────────────────────────────────────────────────────────────────
   @override
   Future<void> refresh() async {
@@ -73,7 +69,9 @@ class ApiVehicleService extends VehicleService {
     FuelType? fuelType,
     num? buyingExpenses,
     Showroom? showroom,
-    bool rcPermit = false,
+    bool rc = false,
+    bool permit = false,
+    bool insurance = false,
     DateTime? insuranceDate,
     DateTime? fcDate,
     DateTime? permitDate,
@@ -97,7 +95,10 @@ class ApiVehicleService extends VehicleService {
       'buying_expenses': buyingExpenses,
       // first-hand only
       'showroom': isSecondHand ? null : showroom?.wire,
-      'rc_permit': isSecondHand ? null : rcPermit,
+      // RC / Permit / Insurance — both hand types
+      'rc': rc,
+      'permit': permit,
+      'insurance': insurance,
       // second-hand only
       'reg_no': isSecondHand && regNo.isNotEmpty ? regNo : null,
       'insurance_date': isSecondHand ? _date(insuranceDate) : null,
@@ -108,18 +109,12 @@ class ApiVehicleService extends VehicleService {
       'prev_owner_address': isSecondHand ? prevOwnerAddress : null,
       'remarks': remarks,
       'financer_id': financerId,
-      // Do NOT send status on create — backend derives it from actor_role.
+      // Do NOT send status on create — backend derives it from the token's role.
       // Status is only sent on PATCH (edit) calls.
     }..removeWhere((_, v) => v == null);
 
-    final json = await _api.post(
-      '/vehicles',
-      body: body,
-      query: {
-        'created_by': int.tryParse(actorId) ?? _devUserId,
-        'actor_role': actorRole.wire,
-      },
-    );
+    // created_by + actor_role are derived from the Bearer token server-side.
+    final json = await _api.post('/vehicles', body: body);
     final vehicle = _fromJson(json as Map<String, dynamic>);
     _vehicles.insert(0, vehicle);
     notifyListeners();
@@ -173,8 +168,9 @@ class ApiVehicleService extends VehicleService {
     if (v == null) return;
     Gate.confirm(v, byUserId: byUserId); // optimistic local update
     notifyListeners();
+    // by_user_id comes from the Bearer token server-side.
     unawaited(_api
-        .post('/vehicles/$id/confirm', query: {'by_user_id': _devUserId})
+        .post('/vehicles/$id/confirm')
         .catchError((_) => null));
   }
 
@@ -184,8 +180,9 @@ class ApiVehicleService extends VehicleService {
     if (v == null) return;
     Gate.reject(v, reason: reason, byUserId: byUserId);
     notifyListeners();
+    // reason stays a query param; by_user_id comes from the Bearer token.
     unawaited(_api.post('/vehicles/$id/reject',
-        query: {'reason': reason, 'by_user_id': _devUserId}).catchError((_) => null));
+        query: {'reason': reason}).catchError((_) => null));
   }
 
   @override
@@ -206,7 +203,9 @@ class ApiVehicleService extends VehicleService {
     FuelType? fuelType,
     num? buyingExpenses,
     Showroom? showroom,
-    bool? rcPermit,
+    bool? rc,
+    bool? permit,
+    bool? insurance,
     DateTime? insuranceDate,
     DateTime? fcDate,
     DateTime? permitDate,
@@ -227,7 +226,9 @@ class ApiVehicleService extends VehicleService {
       'fuel_type': fuelType?.wire,
       'buying_expenses': buyingExpenses,
       'showroom': showroom?.wire,
-      'rc_permit': rcPermit,
+      'rc': rc,
+      'permit': permit,
+      'insurance': insurance,
       'insurance_date': _date(insuranceDate),
       'fc_date': _date(fcDate),
       'permit_date': _date(permitDate),
@@ -299,7 +300,9 @@ class ApiVehicleService extends VehicleService {
           ? null
           : num.tryParse(j['buying_expenses'].toString()),
       showroom: Showroom.fromWire(j['showroom'] as String?),
-      rcPermit: (j['rc_permit'] as bool?) ?? false,
+      rc: (j['rc'] as bool?) ?? false,
+      permit: (j['permit'] as bool?) ?? false,
+      insurance: (j['insurance'] as bool?) ?? false,
       insuranceDate: _parseDate(j['insurance_date']),
       fcDate: _parseDate(j['fc_date']),
       permitDate: _parseDate(j['permit_date']),

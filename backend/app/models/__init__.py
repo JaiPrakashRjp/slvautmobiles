@@ -6,6 +6,7 @@ from app.models.notification import Notification
 from app.models.reminder_log import ReminderLog
 from app.models.role import Role
 from app.models.sale import Sale
+from app.models.sale_financer import SaleFinancer
 from app.models.sale_installment import SaleInstallment
 from app.models.sale_payment import SalePayment
 from app.models.user import User
@@ -23,6 +24,7 @@ __all__ = [
     "Vehicle",
     "VehicleDocument",
     "Sale",
+    "SaleFinancer",
     "SaleInstallment",
     "SalePayment",
     "ReminderLog",

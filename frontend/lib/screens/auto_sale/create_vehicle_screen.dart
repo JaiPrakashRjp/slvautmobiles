@@ -453,13 +453,44 @@ class _CreateVehicleViewState extends State<_CreateVehicleView> {
         textInputAction: TextInputAction.next,
         maxLines: 3,
       ),
+      const SizedBox(height: AppSpacing.lg),
+      const _SectionLabel('RC / Permit'),
+      const SizedBox(height: AppSpacing.xs),
+      Text('Tick if available, then take a photo or upload the document.',
+          style: AppTextStyles.caption.copyWith(color: context.colors.textSub)),
+      const SizedBox(height: AppSpacing.sm),
+      ..._docFlagRow(
+        context,
+        vm,
+        label: 'RC',
+        value: vm.rc,
+        onChanged: (v) => vm.rc = v,
+        docType: VehicleDocType.rc,
+      ),
+      const SizedBox(height: AppSpacing.md),
+      ..._docFlagRow(
+        context,
+        vm,
+        label: 'Permit',
+        value: vm.permit,
+        onChanged: (v) => vm.permit = v,
+        docType: VehicleDocType.permit,
+      ),
+      const SizedBox(height: AppSpacing.md),
+      ..._docFlagRow(
+        context,
+        vm,
+        label: 'Insurance',
+        value: vm.insurance,
+        onChanged: (v) => vm.insurance = v,
+        docType: VehicleDocType.insurance,
+      ),
     ];
   }
 
   // ── First hand only ────────────────────────────────────────────────────────
   List<Widget> _firstHandFields(
       BuildContext context, CreateVehicleViewModel vm) {
-    final c = context.colors;
     return [
       const SizedBox(height: AppSpacing.lg),
       const _SectionLabel('First hand details'),
@@ -470,23 +501,42 @@ class _CreateVehicleViewState extends State<_CreateVehicleView> {
         value: vm.showroom?.label,
         onTap: () => _pickShowroom(vm),
       ),
-      const SizedBox(height: AppSpacing.lg),
-      // RC Permit checkbox
+    ];
+  }
+
+  /// One RC/Permit row: a checkbox + a camera/upload tile. Shown for both hands.
+  List<Widget> _docFlagRow(
+    BuildContext context,
+    CreateVehicleViewModel vm, {
+    required String label,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+    required VehicleDocType docType,
+  }) {
+    final c = context.colors;
+    return [
       InkWell(
-        onTap: () => vm.rcPermit = !vm.rcPermit,
+        onTap: () => onChanged(!value),
         borderRadius: BorderRadius.circular(8),
         child: Row(
           children: [
             Checkbox(
-              value: vm.rcPermit,
+              value: value,
               activeColor: c.primary,
-              onChanged: (v) => vm.rcPermit = v ?? false,
+              onChanged: (v) => onChanged(v ?? false),
             ),
             const SizedBox(width: AppSpacing.xs),
-            Text('RC Permit',
-                style: AppTextStyles.body.copyWith(color: c.textMain)),
+            Text(label, style: AppTextStyles.body.copyWith(color: c.textMain)),
           ],
         ),
+      ),
+      const SizedBox(height: AppSpacing.xs),
+      DocUploadTile(
+        label: '$label document',
+        fileName: vm.documents[docType]?.name,
+        onTakePhoto: () => _takePhotoInto((doc) => vm.setDocument(docType, doc)),
+        onUpload: () => _uploadFileInto((doc) => vm.setDocument(docType, doc)),
+        onRemove: () => vm.removeDocument(docType),
       ),
     ];
   }
@@ -545,7 +595,10 @@ class _CreateVehicleViewState extends State<_CreateVehicleView> {
       Text('Upload a file or take a photo (pdf, png, heic, jpg, jpeg)',
           style: AppTextStyles.caption.copyWith(color: context.colors.textSub)),
       const SizedBox(height: AppSpacing.sm),
-      for (final d in VehicleDocType.values) ...[
+      for (final d in VehicleDocType.values.where((d) =>
+          d != VehicleDocType.rc &&
+          d != VehicleDocType.permit &&
+          d != VehicleDocType.insurance)) ...[
         DocUploadTile(
           label: d.label,
           fileName: vm.documents[d]?.name,

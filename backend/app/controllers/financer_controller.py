@@ -1,10 +1,12 @@
-"""FastAPI router for the financers module."""
+"""FastAPI router for the financers module. All endpoints require a signed-in user."""
 from fastapi import APIRouter, Depends
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.db import get_db
+from app.models.user import User
 from app.schemas.financer import FinancerCreate, FinancerOut
+from app.security import get_current_user
 from app.services.financer_service import FinancerService
 
 router = APIRouter(prefix="/financers", tags=["financers"])
@@ -16,11 +18,19 @@ def list_financers(db: Session = Depends(get_db)):
 
 
 @router.post("", response_model=FinancerOut, status_code=201)
-def create_financer(payload: FinancerCreate, db: Session = Depends(get_db)):
+def create_financer(
+    payload: FinancerCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     return FinancerService.create(db, payload)
 
 
 @router.delete("/{financer_id}", status_code=204)
-def delete_financer(financer_id: int, db: Session = Depends(get_db)):
+def delete_financer(
+    financer_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     FinancerService.delete(db, financer_id)
     return Response(status_code=204)

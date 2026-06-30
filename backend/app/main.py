@@ -2,6 +2,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.config import settings
 from app.controllers.auth_controller import router as auth_router
 from app.controllers.customer_controller import router as customers_router
 from app.controllers.financer_controller import router as financers_router
@@ -13,11 +14,12 @@ from app.controllers.vehicle_controller import router as vehicles_router
 app = FastAPI(title="SLV Auto Consultant API", version="0.1.0")
 
 # CORS: the Flutter app (web build, or any origin during development) calls this
-# API from a different origin, so allow cross-origin requests. Tighten
-# allow_origins to the real frontend domain(s) in production.
+# API from a different origin, so allow cross-origin requests. Origins come from
+# the CORS_ORIGINS env var (comma-separated); defaults to "*" for local dev and
+# the mobile APK. Set it to the real frontend domain(s) in production.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.CORS_ORIGINS,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],

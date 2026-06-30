@@ -16,8 +16,6 @@ class ApiCustomerService extends CustomerService {
   final ApiClient _api;
   final List<Customer> _customers = [];
 
-  static const _devUserId = 1; // placeholder until auth lands
-
   @override
   Future<void> refresh() async {
     final data = await _api.get('/customers');
@@ -63,14 +61,8 @@ class ApiCustomerService extends CustomerService {
       'remarks': remarks,
     }..removeWhere((_, v) => v == null);
 
-    final json = await _api.post(
-      '/customers',
-      body: body,
-      query: {
-        'created_by': int.tryParse(actorId) ?? _devUserId,
-        'actor_role': actorRole.wire,
-      },
-    );
+    // created_by + actor_role are derived from the Bearer token server-side.
+    final json = await _api.post('/customers', body: body);
     final customer = _fromJson(json as Map<String, dynamic>);
     _customers.insert(0, customer);
     notifyListeners();
@@ -154,8 +146,9 @@ class ApiCustomerService extends CustomerService {
     if (c == null) return;
     Gate.confirm(c, byUserId: byUserId);
     notifyListeners();
+    // by_user_id comes from the Bearer token server-side.
     _api
-        .post('/customers/$id/confirm', query: {'by_user_id': _devUserId})
+        .post('/customers/$id/confirm')
         .catchError((_) => null);
   }
 
@@ -165,8 +158,9 @@ class ApiCustomerService extends CustomerService {
     if (c == null) return;
     Gate.reject(c, reason: reason, byUserId: byUserId);
     notifyListeners();
+    // reason stays a query param; by_user_id comes from the Bearer token.
     _api.post('/customers/$id/reject',
-        query: {'reason': reason, 'by_user_id': _devUserId}).catchError((_) => null);
+        query: {'reason': reason}).catchError((_) => null);
   }
 
   // ── helpers ────────────────────────────────────────────────────────────────

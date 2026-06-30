@@ -1,8 +1,12 @@
-"""Password hashing + email/password login."""
+"""Password hashing + email/password login + signed bearer tokens."""
+from datetime import datetime, timedelta, timezone
+
 import bcrypt
+import jwt
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.dao.user_dao import UserDAO
 from app.models.enums import AccountStatus, EntityStatus
 from app.models.user import User
@@ -20,6 +24,26 @@ def verify_password(password: str, password_hash: str) -> bool:
         )
     except ValueError:
         return False
+
+
+def create_access_token(user: User) -> str:
+    """Sign a JWT carrying the user's id and role. The role travels in the token
+    (not a client-supplied param) so the server, not the caller, decides whether
+    an action is a super-admin action."""
+    now = datetime.now(timezone.utc)
+    payload = {
+        "sub": str(user.id),
+        "role": user.role.name,
+        "iat": int(now.timestamp()),
+        "exp": int((now + timedelta(minutes=settings.JWT_EXPIRE_MINUTES)).timestamp()),
+    }
+    return jwt.encode(payload, settings.JWT_SECRET, algorithm=settings.JWT_ALG)
+
+
+def decode_token(token: str) -> dict:
+    """Verify signature + expiry and return the claims. Raises jwt.PyJWTError on
+    any problem (bad signature, expired, malformed)."""
+    return jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALG])
 
 
 class AuthService:

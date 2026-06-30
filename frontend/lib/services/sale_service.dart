@@ -21,15 +21,18 @@ abstract class SaleService extends ChangeNotifier {
     required String actorId,
     required String vehicleId,
     required String customerId,
-    required DepositType depositType,
     required DateTime saleDate,
     required String customerWhatsapp,
-    required int totalSalePrice,
-    required int amountReceived,
-    int monthly,
-    int installmentCount,
-    DateTime? firstDueDate,
+    int vehicleAmount,
+    int additionalFitting,
+    int dlCharges,
+    int documentCharges,
+    int otherExpenses,
+    required int downPayment,
+    int remainingAmount,
+    int? hpAmount,
     String? remarks,
+    int? financerId,
   });
 
   /// Mark one installment as paid. Updates local state + persists.
@@ -145,37 +148,44 @@ class MockSaleService extends SaleService {
     required String actorId,
     required String vehicleId,
     required String customerId,
-    required DepositType depositType,
     required DateTime saleDate,
     required String customerWhatsapp,
-    required int totalSalePrice,
-    required int amountReceived,
-    int monthly = 0,
-    int installmentCount = 0,
-    DateTime? firstDueDate,
+    int vehicleAmount = 0,
+    int additionalFitting = 0,
+    int dlCharges = 0,
+    int documentCharges = 0,
+    int otherExpenses = 0,
+    required int downPayment,
+    int remainingAmount = 0,
+    int? hpAmount,
     String? remarks,
+    int? financerId,
   }) async {
-    final mode = depositType.paymentMode;
-    final installments = mode == PaymentMode.installments && installmentCount > 0
-        ? buildSchedule(
-            monthly: monthly,
-            count: installmentCount,
-            firstDue: firstDueDate ?? DateTime.now(),
-          )
-        : <Installment>[];
+    final total = vehicleAmount +
+        additionalFitting +
+        dlCharges +
+        documentCharges +
+        otherExpenses;
+    final isFullCash = downPayment >= total;
+    final mode = isFullCash ? PaymentMode.full : PaymentMode.installments;
 
     final sale = Sale(
       id: IdGen.nextId('sale'),
       vehicleId: vehicleId,
       customerId: customerId,
       mode: mode,
-      salePrice: totalSalePrice,
-      advance: amountReceived,
-      monthly: monthly,
-      dueDate: firstDueDate,
+      salePrice: total,
+      advance: downPayment,
+      vehicleAmount: vehicleAmount,
+      additionalFitting: additionalFitting,
+      dlCharges: dlCharges,
+      documentCharges: documentCharges,
+      otherExpenses: otherExpenses,
+      hpAmount: hpAmount,
+      remainingAmount: isFullCash ? 0 : remainingAmount,
       saleDate: saleDate,
       customerWhatsapp: customerWhatsapp,
-      installments: installments,
+      financerId: financerId,
       saleStatus: 'active',
       remarks: remarks,
       createdBy: actorId,
@@ -187,7 +197,7 @@ class MockSaleService extends SaleService {
     _vehicles.assignTo(
       vehicleId,
       customerId,
-      mode == PaymentMode.full ? InventoryStatus.sold : InventoryStatus.reserved,
+      isFullCash ? InventoryStatus.sold : InventoryStatus.reserved,
     );
 
     notifyListeners();

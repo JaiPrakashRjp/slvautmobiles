@@ -75,7 +75,7 @@ class SlvApp extends StatelessWidget {
           create: (_) => MockLoanService(),
         ),
         ChangeNotifierProvider<UserService>(
-          create: (ctx) => ApiUserService(auth: ctx.read<AuthController>())..refresh(),
+          create: (_) => ApiUserService()..refresh(),
         ),
         ChangeNotifierProxyProvider<AuthController, NotificationFeed>(
           create: (ctx) => NotificationFeed(auth: ctx.read<AuthController>()),

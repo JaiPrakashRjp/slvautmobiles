@@ -58,3 +58,10 @@ class UserOut(BaseModel):
     created_by: int
     created_at: datetime
     module_codes: list[str] = []
+
+
+class TokenOut(BaseModel):
+    """Login response: the signed bearer token plus the user it belongs to."""
+    access_token: str
+    token_type: str = "bearer"
+    user: UserOut

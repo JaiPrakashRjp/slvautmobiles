@@ -3,78 +3,129 @@ import 'package:flutter/material.dart';
 import '../controllers/auth_controller.dart';
 import '../models/customer.dart';
 import '../models/enums.dart';
+import '../models/financer.dart';
 import '../models/vehicle.dart';
 import '../services/customer_service.dart';
+import '../services/financer_service.dart';
 import '../services/sale_service.dart';
 import '../services/vehicle_service.dart';
 
-/// Backs the assign-sale screen.
+/// Backs the assign-sale (sell vehicle) screen.
+///
+/// The user enters a price breakdown (vehicle + additional fitting + DL +
+/// document + other expenses) which sums to the **Total**, plus a **Down
+/// payment**. Full-cash vs down-payment is DERIVED on the server: when the down
+/// payment covers the whole total it is full cash; otherwise it is a
+/// down-payment / loan sale and the user also enters an HP amount (super admin
+/// only) and a typed Remaining amount.
 class AssignSaleViewModel extends ChangeNotifier {
   AssignSaleViewModel({
     required this.customerId,
     required CustomerService customers,
     required VehicleService vehicles,
     required SaleService sales,
+    required FinancerService financers,
     required AuthController auth,
     String? initialVehicleId,
   })  : _customers = customers,
         _vehicles = vehicles,
         _sales = sales,
+        _financers = financers,
         _auth = auth,
         _vehicleId = initialVehicleId,
         vehicleLocked = initialVehicleId != null {
-    // Pre-fill customer WhatsApp from the customer's phone
     final phone = customers.byId(customerId)?.phone ?? '';
     if (phone.isNotEmpty) whatsappController.text = phone;
+    // Recompute total + loan-field visibility live as amounts change.
+    for (final ctl in _amountControllers) {
+      ctl.addListener(notifyListeners);
+    }
+    _financers.refresh().then((_) => notifyListeners());
   }
 
   final String customerId;
   final CustomerService _customers;
   final VehicleService _vehicles;
   final SaleService _sales;
+  final FinancerService _financers;
   final AuthController _auth;
 
-  final totalSalePriceController = TextEditingController();
-  final advanceController = TextEditingController();
-  final monthlyController = TextEditingController();
-  final monthsController = TextEditingController(text: '12');
+  final vehicleAmountController = TextEditingController();
+  final additionalFittingController = TextEditingController();
+  final dlChargesController = TextEditingController();
+  final documentChargesController = TextEditingController();
+  final otherExpensesController = TextEditingController();
+  final downPaymentController = TextEditingController();
+  final hpAmountController = TextEditingController();
+  final remainingController = TextEditingController();
   final whatsappController = TextEditingController();
   final remarksController = TextEditingController();
 
-  DepositType _depositType = DepositType.fullCash;
+  late final List<TextEditingController> _amountControllers = [
+    vehicleAmountController,
+    additionalFittingController,
+    dlChargesController,
+    documentChargesController,
+    otherExpensesController,
+    downPaymentController,
+  ];
+
   String? _vehicleId;
+  int? _financerId;
   DateTime? _saleDate;
-  DateTime? _firstDueDate;
   bool _loading = false;
 
   final bool vehicleLocked;
 
-  DepositType get depositType => _depositType;
   String? get vehicleId => _vehicleId;
+  int? get financerId => _financerId;
   DateTime? get saleDate => _saleDate;
-  DateTime? get firstDueDate => _firstDueDate;
   bool get loading => _loading;
 
   Customer? get customer => _customers.byId(customerId);
   List<Vehicle> get availableVehicles => _vehicles.available();
   Vehicle? get selectedVehicle =>
       _vehicleId == null ? null : _vehicles.byId(_vehicleId!);
+  List<Financer> get financers => _financers.all();
+  Financer? get selectedFinancer =>
+      _financerId == null ? null : _financers.byId(_financerId!);
 
-  int get _totalPrice =>
-      int.tryParse(totalSalePriceController.text.replaceAll(RegExp(r'[^\d]'), '')) ?? 0;
-  int get _advance =>
-      int.tryParse(advanceController.text.replaceAll(RegExp(r'[^\d]'), '')) ?? 0;
+  /// Only a super admin may enter the HP (loan) amount.
+  bool get isSuperAdmin => _auth.currentUser?.isSuperAdmin ?? false;
 
-  /// Read-only computed remaining for down payment.
-  int get remaining => (_totalPrice - _advance).clamp(0, 999999999);
+  int _parse(TextEditingController c) =>
+      int.tryParse(c.text.replaceAll(RegExp(r'[^\d]'), '')) ?? 0;
 
-  set depositType(DepositType v) {
-    _depositType = v;
-    notifyListeners();
-  }
+  int get vehicleAmount => _parse(vehicleAmountController);
+  int get additionalFitting => _parse(additionalFittingController);
+  int get dlCharges => _parse(dlChargesController);
+  int get documentCharges => _parse(documentChargesController);
+  int get otherExpenses => _parse(otherExpensesController);
+  int get downPayment => _parse(downPaymentController);
+  int get hpAmount => _parse(hpAmountController);
+  int get remainingTyped => _parse(remainingController);
+
+  /// Total = sum of the five price components.
+  int get total =>
+      vehicleAmount +
+      additionalFitting +
+      dlCharges +
+      documentCharges +
+      otherExpenses;
+
+  /// Full cash when the down payment covers the whole total.
+  bool get isFullCash => total > 0 && downPayment >= total;
+
+  /// Loan case — show HP / remaining fields.
+  bool get showLoanFields => total > 0 && downPayment < total;
 
   set vehicleId(String? v) {
     _vehicleId = v;
+    notifyListeners();
+  }
+
+  set financerId(int? v) {
+    _financerId = v;
     notifyListeners();
   }
 
@@ -83,30 +134,15 @@ class AssignSaleViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  set firstDueDate(DateTime? v) {
-    _firstDueDate = v;
-    notifyListeners();
-  }
-
-  int _parseInt(TextEditingController ctl) =>
-      int.tryParse(ctl.text.replaceAll(RegExp(r'[^\d]'), '')) ?? 0;
-
   String? validate() {
     if (_vehicleId == null) return 'Please select a vehicle';
     if (_saleDate == null) return 'Select the sale date';
-    if (whatsappController.text.trim().isEmpty) {
-      return 'Enter the customer WhatsApp number';
+    if (total <= 0) return 'Enter the amounts — total must be greater than 0';
+    if (downPaymentController.text.trim().isEmpty) {
+      return 'Enter the down payment amount';
     }
-    if (_parseInt(totalSalePriceController) <= 0) {
-      return 'Enter the total sale price';
-    }
-    if (_depositType == DepositType.downPayment) {
-      if (_parseInt(advanceController) <= 0) return 'Enter the advance amount';
-      if (_parseInt(monthlyController) <= 0) return 'Enter the monthly amount';
-      if ((int.tryParse(monthsController.text.trim()) ?? 0) <= 0) {
-        return 'Enter the number of months';
-      }
-      if (_firstDueDate == null) return 'Pick the first installment due date';
+    if (downPayment > total) {
+      return 'Down payment cannot exceed the total (₹$total)';
     }
     return null;
   }
@@ -117,27 +153,27 @@ class AssignSaleViewModel extends ChangeNotifier {
     notifyListeners();
     try {
       final user = _auth.currentUser!;
-      final isDown = _depositType == DepositType.downPayment;
       await _sales.create(
         actorRole: user.role,
         actorId: user.id,
         vehicleId: _vehicleId!,
         customerId: customerId,
-        depositType: _depositType,
         saleDate: _saleDate!,
         customerWhatsapp: whatsappController.text.trim(),
-        totalSalePrice: _parseInt(totalSalePriceController),
-        amountReceived: isDown
-            ? _parseInt(advanceController)
-            : _parseInt(totalSalePriceController),
-        monthly: isDown ? _parseInt(monthlyController) : 0,
-        installmentCount: isDown
-            ? (int.tryParse(monthsController.text.trim()) ?? 0)
-            : 0,
-        firstDueDate: isDown ? _firstDueDate : null,
-        remarks: remarksController.text.trim().isEmpty ? null : remarksController.text.trim(),
+        vehicleAmount: vehicleAmount,
+        additionalFitting: additionalFitting,
+        dlCharges: dlCharges,
+        documentCharges: documentCharges,
+        otherExpenses: otherExpenses,
+        downPayment: downPayment,
+        remainingAmount: showLoanFields ? remainingTyped : 0,
+        hpAmount:
+            (showLoanFields && isSuperAdmin && hpAmount > 0) ? hpAmount : null,
+        remarks: remarksController.text.trim().isEmpty
+            ? null
+            : remarksController.text.trim(),
+        financerId: _financerId,
       );
-      // Keep local vehicle cache in sync
       await _vehicles.update(_vehicleId!, saleStatus: SaleStatus.sold);
       return !user.isSuperAdmin;
     } finally {
@@ -148,10 +184,17 @@ class AssignSaleViewModel extends ChangeNotifier {
 
   @override
   void dispose() {
-    totalSalePriceController.dispose();
-    advanceController.dispose();
-    monthlyController.dispose();
-    monthsController.dispose();
+    for (final ctl in _amountControllers) {
+      ctl.removeListener(notifyListeners);
+    }
+    vehicleAmountController.dispose();
+    additionalFittingController.dispose();
+    dlChargesController.dispose();
+    documentChargesController.dispose();
+    otherExpensesController.dispose();
+    downPaymentController.dispose();
+    hpAmountController.dispose();
+    remainingController.dispose();
     whatsappController.dispose();
     remarksController.dispose();
     super.dispose();

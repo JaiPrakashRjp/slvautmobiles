@@ -15,7 +15,16 @@ class Sale with GatedEntity {
     this.monthly = 0,
     this.dueDate,
     this.saleDate,
+    this.vehicleAmount = 0,
+    this.additionalFitting = 0,
+    this.dlCharges = 0,
+    this.documentCharges = 0,
+    this.otherExpenses = 0,
+    this.hpAmount,
+    this.remainingAmount = 0,
     this.customerWhatsapp = '',
+    this.financerId,
+    this.financerName,
     this.invoiceNo,
     this.closedAt,
     List<Installment>? installments,
@@ -43,9 +52,21 @@ class Sale with GatedEntity {
   int monthly; // per-month installment amount
   DateTime? dueDate; // first installment due date
 
+  // Price breakdown (total = salePrice = sum of the five below).
+  int vehicleAmount;
+  int additionalFitting;
+  int dlCharges;
+  int documentCharges;
+  int otherExpenses;
+  // Loan case only:
+  int? hpAmount; // HP / loan amount (super admin only)
+  int remainingAmount; // typed by the user
+
   // Fields added for the real API flow:
   DateTime? saleDate;
   String customerWhatsapp;
+  int? financerId; // finance company for this sale (optional)
+  String? financerName; // its display name, from the API
   String? invoiceNo;
   DateTime? closedAt;
 

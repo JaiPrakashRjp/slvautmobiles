@@ -27,6 +27,23 @@ class ApiClient {
   final http.Client _client;
   static const _jsonHeaders = {'Content-Type': 'application/json'};
 
+  /// Bearer token for the signed-in user. Set by [AuthController] after a
+  /// successful login and cleared on sign-out. It is shared across every
+  /// [ApiClient] instance and attached as `Authorization: Bearer <token>` on
+  /// every request, so the backend derives the acting user + role from it
+  /// (instead of trusting client-supplied params).
+  static String? authToken;
+
+  /// Builds request headers, adding the Authorization header when signed in.
+  Map<String, String> _headers([Map<String, String>? extra]) {
+    final headers = <String, String>{if (extra != null) ...extra};
+    final token = authToken;
+    if (token != null && token.isNotEmpty) {
+      headers['Authorization'] = 'Bearer $token';
+    }
+    return headers;
+  }
+
   Uri _uri(String path, [Map<String, dynamic>? query]) {
     final base = Uri.parse(AppConfig.apiBaseUrl);
     return base.replace(
@@ -40,7 +57,7 @@ class ApiClient {
   String absoluteUrl(String path) => _uri(path).toString();
 
   Future<dynamic> get(String path, {Map<String, dynamic>? query}) async {
-    final res = await _client.get(_uri(path, query));
+    final res = await _client.get(_uri(path, query), headers: _headers());
     return _decode(res);
   }
 
@@ -51,7 +68,7 @@ class ApiClient {
   }) async {
     final res = await _client.post(
       _uri(path, query),
-      headers: _jsonHeaders,
+      headers: _headers(_jsonHeaders),
       body: jsonEncode(body ?? {}),
     );
     return _decode(res);
@@ -64,7 +81,7 @@ class ApiClient {
   }) async {
     final res = await _client.patch(
       _uri(path, query),
-      headers: _jsonHeaders,
+      headers: _headers(_jsonHeaders),
       body: jsonEncode(body ?? {}),
     );
     return _decode(res);
@@ -77,20 +94,20 @@ class ApiClient {
   }) async {
     final res = await _client.put(
       _uri(path, query),
-      headers: _jsonHeaders,
+      headers: _headers(_jsonHeaders),
       body: jsonEncode(body ?? {}),
     );
     return _decode(res);
   }
 
   Future<void> delete(String path) async {
-    final res = await _client.delete(_uri(path));
+    final res = await _client.delete(_uri(path), headers: _headers());
     _decode(res);
   }
 
   /// Fetches raw bytes (e.g. a document) for in-app preview.
   Future<Uint8List> getBytes(String path) async {
-    final res = await _client.get(_uri(path));
+    final res = await _client.get(_uri(path), headers: _headers());
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw ApiException(res.statusCode, 'Failed to load document');
     }
@@ -108,6 +125,7 @@ class ApiClient {
     String? mimeType,
   }) async {
     final req = http.MultipartRequest('POST', _uri(path))
+      ..headers.addAll(_headers())
       ..fields.addAll(fields)
       ..files.add(http.MultipartFile.fromBytes(
         fileField,

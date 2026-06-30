@@ -45,7 +45,11 @@ class CreateVehicleViewModel extends ChangeNotifier {
 
   // ── First-hand only ──────────────────────────────────────────────────────
   Showroom? _showroom;
-  bool _rcPermit = false;
+
+  // ── RC / Permit / Insurance (both hand types) ────────────────────────────
+  bool _rc = false;
+  bool _permit = false;
+  bool _insurance = false;
 
   // ── Second-hand only ─────────────────────────────────────────────────────
   final regNoController = TextEditingController();
@@ -71,7 +75,9 @@ class CreateVehicleViewModel extends ChangeNotifier {
   EntityStatus get status => _status;
   SaleStatus get saleStatus => _saleStatus;
   Showroom? get showroom => _showroom;
-  bool get rcPermit => _rcPermit;
+  bool get rc => _rc;
+  bool get permit => _permit;
+  bool get insurance => _insurance;
   Map<VehicleDocType, PickedDoc> get documents => _documents;
   DateTime? get insuranceDate => _insuranceDate;
   DateTime? get fcDate => _fcDate;
@@ -123,8 +129,18 @@ class CreateVehicleViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  set rcPermit(bool v) {
-    _rcPermit = v;
+  set rc(bool v) {
+    _rc = v;
+    notifyListeners();
+  }
+
+  set permit(bool v) {
+    _permit = v;
+    notifyListeners();
+  }
+
+  set insurance(bool v) {
+    _insurance = v;
     notifyListeners();
   }
 
@@ -178,7 +194,9 @@ class CreateVehicleViewModel extends ChangeNotifier {
     _purchaseDate = v.purchaseDate;
     _financerId = v.financerId;
     _showroom = v.showroom;
-    _rcPermit = v.rcPermit;
+    _rc = v.rc;
+    _permit = v.permit;
+    _insurance = v.insurance;
     _status = v.status;
     _saleStatus = v.saleStatus;
     regNoController.text = v.regNo;
@@ -208,7 +226,9 @@ class CreateVehicleViewModel extends ChangeNotifier {
         fuelType: _fuelType,
         buyingExpenses: _parseAmount(buyingExpensesController.text),
         showroom: isFirstHand ? _showroom : null,
-        rcPermit: isFirstHand ? _rcPermit : false,
+        rc: _rc,
+        permit: _permit,
+        insurance: _insurance,
         insuranceDate: isSecondHand ? _insuranceDate : null,
         fcDate: isSecondHand ? _fcDate : null,
         permitDate: isSecondHand ? _permitDate : null,
@@ -237,7 +257,9 @@ class CreateVehicleViewModel extends ChangeNotifier {
         purchaseDate: _purchaseDate,
         buyingExpenses: _parseAmount(buyingExpensesController.text),
         showroom: isFirstHand ? _showroom : null,
-        rcPermit: isFirstHand ? _rcPermit : false,
+        rc: _rc,
+        permit: _permit,
+        insurance: _insurance,
         insuranceDate: isSecondHand ? _insuranceDate : null,
         fcDate: isSecondHand ? _fcDate : null,
         permitDate: isSecondHand ? _permitDate : null,
@@ -254,8 +276,22 @@ class CreateVehicleViewModel extends ChangeNotifier {
     }
 
     final failedDocs = <String>[];
+    // RC / Permit / Insurance documents apply to both hand types.
+    await _tryUpload(vehicleId, VehicleDocType.rc.wire,
+        _documents[VehicleDocType.rc], VehicleDocType.rc.label, failedDocs);
+    await _tryUpload(vehicleId, VehicleDocType.permit.wire,
+        _documents[VehicleDocType.permit], VehicleDocType.permit.label, failedDocs);
+    await _tryUpload(vehicleId, VehicleDocType.insurance.wire,
+        _documents[VehicleDocType.insurance], VehicleDocType.insurance.label,
+        failedDocs);
     if (isSecondHand) {
       for (final entry in _documents.entries) {
+        // rc / permit / insurance already handled above (both hands)
+        if (entry.key == VehicleDocType.rc ||
+            entry.key == VehicleDocType.permit ||
+            entry.key == VehicleDocType.insurance) {
+          continue;
+        }
         await _tryUpload(
             vehicleId, entry.key.wire, entry.value, entry.key.label, failedDocs);
       }

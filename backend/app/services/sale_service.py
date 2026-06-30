@@ -22,7 +22,9 @@ from app.models.enums import (
     SaleLifecycle,
     SaleStatus,
 )
+from app.models.financer import Financer
 from app.models.sale import Sale
+from app.models.sale_financer import SaleFinancer
 from app.models.sale_installment import SaleInstallment
 from app.models.sale_payment import SalePayment
 from app.models.vehicle import Vehicle
@@ -65,29 +67,54 @@ class SaleService:
         if module_id is None:
             raise HTTPException(status_code=400, detail=f"Unknown module '{data.module_code}'")
 
-        is_down = data.deposit_type == DepositType.down_payment
-        amount_received = data.amount_received if is_down else data.sale_price
-        remaining = round(float(data.sale_price) - float(amount_received), 2) if is_down else 0.0
-        if remaining < 0:
-            raise HTTPException(status_code=400, detail="Advance cannot exceed the sale price")
-        if is_down and (not data.monthly_amount or not data.installment_count or not data.first_due_date):
+        # Total = sum of the price breakdown.
+        total = round(
+            float(data.vehicle_amount)
+            + float(data.additional_fitting)
+            + float(data.dl_charges)
+            + float(data.document_charges)
+            + float(data.other_expenses),
+            2,
+        )
+        if total <= 0:
             raise HTTPException(
-                status_code=400,
-                detail="Down payment needs monthly_amount, installment_count and first_due_date",
+                status_code=400, detail="Total amount must be greater than 0"
             )
+
+        down = round(float(data.amount_received), 2)
+        if down < 0 or down > total:
+            raise HTTPException(
+                status_code=400, detail="Down payment cannot exceed the total amount"
+            )
+
+        # Full cash when the down payment covers the whole total; else down payment.
+        is_full_cash = abs(down - total) < 0.01
+        deposit_type = (
+            DepositType.full_cash if is_full_cash else DepositType.down_payment
+        )
+        remaining = 0.0 if is_full_cash else round(float(data.remaining_amount), 2)
+        # HP (loan) amount is honoured only when a super admin creates the sale.
+        hp_amount = (
+            float(data.hp_amount)
+            if (data.hp_amount is not None and actor_role == "super_admin")
+            else None
+        )
 
         sale = Sale(
             module_id=module_id,
             vehicle_id=data.vehicle_id,
             customer_id=data.customer_id,
-            deposit_type=data.deposit_type,
-            sale_price=data.sale_price,
+            deposit_type=deposit_type,
+            sale_price=total,
             sale_date=data.sale_date,
-            amount_received=amount_received,
+            amount_received=down,
             remaining_amount=remaining,
-            monthly_amount=data.monthly_amount if is_down else None,
-            installment_count=data.installment_count if is_down else None,
-            first_due_date=data.first_due_date if is_down else None,
+            vehicle_amount=data.vehicle_amount,
+            additional_fitting=data.additional_fitting,
+            dl_charges=data.dl_charges,
+            document_charges=data.document_charges,
+            other_expenses=data.other_expenses,
+            hp_amount=hp_amount,
             customer_whatsapp=data.customer_whatsapp,
             sale_status=SaleLifecycle.active,
             status=data.status or initial_status(actor_role),
@@ -96,18 +123,14 @@ class SaleService:
         SaleDAO.add(db, sale)  # flush → sale.id
         sale.invoice_no = f"INV-AUTO-{sale.id:04d}"
 
-        if is_down:
-            for n in range(1, data.installment_count + 1):
-                db.add(
-                    SaleInstallment(
-                        sale_id=sale.id,
-                        module_id=module_id,
-                        month_number=n,
-                        due_date=_add_months(data.first_due_date, n - 1),
-                        amount=data.monthly_amount,
-                        status=InstallmentStatus.pending,
-                    )
-                )
+        # link the finance company for this sale (one financer per sale)
+        if data.financer_id is not None:
+            if db.get(Financer, data.financer_id) is None:
+                raise HTTPException(status_code=400, detail="Unknown financer")
+            sale.financer_link = SaleFinancer(financer_id=data.financer_id)
+
+        # NOTE: installment schedule is intentionally not built here yet — the
+        # monthly/EMI flow is being revisited alongside WhatsApp reminders.
 
         # mark the vehicle sold + assigned
         vehicle = db.get(Vehicle, data.vehicle_id)

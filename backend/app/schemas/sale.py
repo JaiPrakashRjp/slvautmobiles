@@ -19,15 +19,19 @@ class SaleCreate(BaseModel):
     module_code: str = "auto_sale"
     vehicle_id: int
     customer_id: int
-    deposit_type: DepositType
-    sale_price: float
     sale_date: date | None = None
-    # full cash: amount_received = full amount; down payment: amount_received = advance
-    amount_received: float = 0
-    monthly_amount: float | None = None
-    installment_count: int | None = None
-    first_due_date: date | None = None
+    # price breakdown — total (= sale_price) is computed from these five
+    vehicle_amount: float = 0
+    additional_fitting: float = 0
+    dl_charges: float = 0
+    document_charges: float = 0
+    other_expenses: float = 0
+    # payment: deposit_type (full cash / down payment) is DERIVED on the server
+    amount_received: float = 0  # down payment paid now
+    remaining_amount: float = 0  # typed by user in the loan case
+    hp_amount: float | None = None  # loan amount — honoured only for super admin
     customer_whatsapp: str | None = None
+    financer_id: int | None = None  # finance company for this sale (optional)
     status: EntityStatus | None = None  # optional override; else from role
     remarks: str | None = None
 
@@ -81,10 +85,18 @@ class SaleOut(BaseModel):
     sale_date: date | None = None
     amount_received: float
     remaining_amount: float
+    vehicle_amount: float = 0
+    additional_fitting: float = 0
+    dl_charges: float = 0
+    document_charges: float = 0
+    other_expenses: float = 0
+    hp_amount: float | None = None
     monthly_amount: float | None = None
     installment_count: int | None = None
     first_due_date: date | None = None
     customer_whatsapp: str | None = None
+    financer_id: int | None = None
+    financer_name: str | None = None
     invoice_no: str | None = None
     sale_status: SaleLifecycle
     closed_at: datetime | None = None

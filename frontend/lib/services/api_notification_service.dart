@@ -68,7 +68,8 @@ class NotificationFeed extends ChangeNotifier {
     _loading = true;
     notifyListeners();
     try {
-      final data = await _api.get('/notifications', query: {'user_id': id});
+      // user_id is derived from the Bearer token server-side.
+      final data = await _api.get('/notifications');
       _items
         ..clear()
         ..addAll((data as List)

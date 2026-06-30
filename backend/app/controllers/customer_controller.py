@@ -1,16 +1,22 @@
-"""FastAPI router for the customers module (controller layer)."""
+"""FastAPI router for the customers module (controller layer).
+
+Acting user (id + role) comes from the Bearer token, not client params;
+approvals require the Super Admin.
+"""
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.models.enums import Branch, EntityStatus, KycDocType
+from app.models.user import User
 from app.schemas.customer import (
     CustomerCreate,
     CustomerOut,
     CustomerUpdate,
     DocumentOut,
 )
+from app.security import get_current_user, require_super_admin
 from app.services.customer_service import CustomerService
 
 router = APIRouter(prefix="/customers", tags=["customers"])
@@ -33,11 +39,12 @@ def get_customer(customer_id: int, db: Session = Depends(get_db)):
 @router.post("", response_model=CustomerOut, status_code=201)
 def create_customer(
     payload: CustomerCreate,
-    created_by: int = Query(..., description="id of the user creating this"),
-    actor_role: str = Query("admin", description="super_admin | admin"),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    return CustomerService.create(db, payload, actor_role=actor_role, created_by=created_by)
+    return CustomerService.create(
+        db, payload, actor_role=current_user.role.name, created_by=current_user.id
+    )
 
 
 @router.patch("/{customer_id}", response_model=CustomerOut)
@@ -45,6 +52,7 @@ def update_customer(
     customer_id: int,
     payload: CustomerUpdate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     return CustomerService.update(db, customer_id, payload)
 
@@ -52,24 +60,28 @@ def update_customer(
 @router.post("/{customer_id}/confirm", response_model=CustomerOut)
 def confirm_customer(
     customer_id: int,
-    by_user_id: int = Query(...),
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_super_admin),
 ):
-    return CustomerService.confirm(db, customer_id, by_user_id)
+    return CustomerService.confirm(db, customer_id, current_user.id)
 
 
 @router.post("/{customer_id}/reject", response_model=CustomerOut)
 def reject_customer(
     customer_id: int,
     reason: str = Query(..., min_length=1),
-    by_user_id: int = Query(...),
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_super_admin),
 ):
-    return CustomerService.reject(db, customer_id, reason, by_user_id)
+    return CustomerService.reject(db, customer_id, reason, current_user.id)
 
 
 @router.delete("/{customer_id}", status_code=204)
-def delete_customer(customer_id: int, db: Session = Depends(get_db)):
+def delete_customer(
+    customer_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     CustomerService.delete(db, customer_id)
     return Response(status_code=204)
 
@@ -81,6 +93,7 @@ async def upload_document(
     doc_type: KycDocType = Form(...),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     content = await file.read()
     return CustomerService.add_document(
@@ -99,6 +112,10 @@ def download_document(doc_id: int, db: Session = Depends(get_db)):
 
 
 @router.delete("/documents/{doc_id}", status_code=204)
-def delete_document(doc_id: int, db: Session = Depends(get_db)):
+def delete_document(
+    doc_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     CustomerService.delete_document(db, doc_id)
     return Response(status_code=204)

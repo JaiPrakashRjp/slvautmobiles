@@ -319,8 +319,10 @@ class VehicleDetailScreen extends StatelessWidget {
     }
     if (v.type == VehicleType.firstHand) {
       card('Showroom', value: v.showroom?.label);
-      card('RC Permit', value: v.rcPermit ? 'Yes' : 'No');
     }
+    card('RC', value: v.rc ? 'Yes' : 'No');
+    card('Permit', value: v.permit ? 'Yes' : 'No');
+    card('Insurance', value: v.insurance ? 'Yes' : 'No');
     if (v.insuranceDate != null) {
       card('Insurance date', value: Formatters.date(v.insuranceDate!));
     }

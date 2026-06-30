@@ -43,6 +43,24 @@ class Sale(Base):
     remaining_amount: Mapped[float] = mapped_column(
         Numeric(12, 2), nullable=False, server_default="0"
     )
+    # sale-price breakdown (sale_price/total = sum of these five)
+    vehicle_amount: Mapped[float] = mapped_column(
+        Numeric(12, 2), nullable=False, server_default="0"
+    )
+    additional_fitting: Mapped[float] = mapped_column(
+        Numeric(12, 2), nullable=False, server_default="0"
+    )
+    dl_charges: Mapped[float] = mapped_column(
+        Numeric(12, 2), nullable=False, server_default="0"
+    )
+    document_charges: Mapped[float] = mapped_column(
+        Numeric(12, 2), nullable=False, server_default="0"
+    )
+    other_expenses: Mapped[float] = mapped_column(
+        Numeric(12, 2), nullable=False, server_default="0"
+    )
+    # HP (hire-purchase / loan) amount — set by super admin only
+    hp_amount: Mapped[float | None] = mapped_column(Numeric(12, 2))
     monthly_amount: Mapped[float | None] = mapped_column(Numeric(12, 2))
     installment_count: Mapped[int | None] = mapped_column(Integer)
     first_due_date: Mapped[date | None] = mapped_column(Date)
@@ -78,3 +96,17 @@ class Sale(Base):
     payments: Mapped[list["SalePayment"]] = relationship(  # noqa: F821
         back_populates="sale", cascade="all, delete-orphan"
     )
+    financer_link: Mapped["SaleFinancer | None"] = relationship(  # noqa: F821
+        back_populates="sale", uselist=False, cascade="all, delete-orphan"
+    )
+
+    @property
+    def financer_id(self) -> int | None:
+        """The linked financer's id (None if no financer assigned)."""
+        return self.financer_link.financer_id if self.financer_link else None
+
+    @property
+    def financer_name(self) -> str | None:
+        """The linked financer's name, for display."""
+        link = self.financer_link
+        return link.financer.name if link and link.financer else None
