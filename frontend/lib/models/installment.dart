@@ -1,6 +1,6 @@
 import 'enums.dart';
 
-/// One scheduled installment of an advance+installments [Sale].
+/// One scheduled installment / collection reminder of a down-payment [Sale].
 class Installment {
   Installment({
     required this.id,
@@ -10,6 +10,10 @@ class Installment {
     this.paidDate,
     this.penalty = 0,
     this.reminderSent = false,
+    this.status = 'pending',
+    this.takenBy,
+    this.createdBy,
+    this.cancelReason,
   });
 
   final String id;
@@ -20,7 +24,16 @@ class Installment {
   int penalty;
   bool reminderSent;
 
-  bool get isPaid => paidDate != null;
+  /// 'pending' | 'in_progress' | 'paid' | 'cancelled' | 'overdue'
+  String status;
+  String? takenBy; // admin who claimed the call (lock owner)
+  String? createdBy;
+  String? cancelReason;
+
+  bool get isPaid => status == 'paid' || paidDate != null;
+  bool get isCancelled => status == 'cancelled';
+  bool get isInProgress => status == 'in_progress';
+  bool get isPending => status == 'pending';
 
   /// Derives the schedule status from paid state and the due date.
   ScheduleStatus statusAt(DateTime now) {

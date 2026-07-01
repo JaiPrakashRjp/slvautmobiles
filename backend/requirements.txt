@@ -9,6 +9,7 @@ fastapi>=0.110
 uvicorn[standard]>=0.29
 pydantic>=2.6
 python-multipart>=0.0.9     # file uploads (documents)
+httpx>=0.27                 # WhatsApp Cloud API calls (Meta Graph)
 
 # ── Auth ───────────────────────────────────────────────────────────────────
 bcrypt>=4.0                  # password hashing for user login

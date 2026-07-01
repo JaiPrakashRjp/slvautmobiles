@@ -17,8 +17,9 @@ class ReminderLog(Base):
     __tablename__ = "reminder_logs"
 
     id: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)
-    sale_id: Mapped[int] = mapped_column(
-        BigInteger, ForeignKey("sales.id", ondelete="CASCADE"), nullable=False
+    # nullable so standalone / test sends (not tied to a sale) can be logged too
+    sale_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("sales.id", ondelete="CASCADE")
     )
     installment_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("sale_installments.id", ondelete="SET NULL")
@@ -33,7 +34,7 @@ class ReminderLog(Base):
         server_default=ReminderChannel.whatsapp.value,
     )
     message: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
-    due_date: Mapped[date] = mapped_column(Date, nullable=False)
+    due_date: Mapped[date | None] = mapped_column(Date)
     sent_at: Mapped[datetime | None] = mapped_column()
     status: Mapped[ReminderStatus] = mapped_column(
         pg_enum(ReminderStatus, "reminder_status"),

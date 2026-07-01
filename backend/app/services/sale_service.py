@@ -26,6 +26,7 @@ from app.models.sale import Sale
 from app.models.sale_financer import SaleFinancer
 from app.models.sale_installment import SaleInstallment
 from app.models.sale_payment import SalePayment
+from app.models.sale_payment_document import SalePaymentDocument
 from app.models.vehicle import Vehicle
 from app.schemas.sale import SaleCreate
 from app.services.notification_service import NotificationService
@@ -257,3 +258,186 @@ class SaleService:
     def reminders_for_sale(db: Session, sale_id: int):
         SaleService.get(db, sale_id)  # 404 guard
         return SaleDAO.reminders_for_sale(db, sale_id)
+
+    # ── Reminders / collections flow ────────────────────────────────────────
+    @staticmethod
+    def add_reminder(db: Session, sale_id: int, *, due_date, amount, created_by) -> Sale:
+        """Admin/super-admin schedules a collection reminder (date + amount)."""
+        sale = SaleService.get(db, sale_id)
+        if sale.status != EntityStatus.active:
+            raise HTTPException(status_code=403, detail="Sale is not active")
+        if float(amount) <= 0:
+            raise HTTPException(status_code=400, detail="Amount must be greater than 0")
+        next_month = max((i.month_number for i in sale.installments), default=0) + 1
+        db.add(
+            SaleInstallment(
+                sale_id=sale.id,
+                module_id=sale.module_id,
+                month_number=next_month,
+                due_date=due_date,
+                amount=amount,
+                status=InstallmentStatus.pending,
+                created_by=created_by,
+            )
+        )
+        db.commit()
+        return SaleService.get(db, sale_id)
+
+    @staticmethod
+    def take_call(db: Session, installment_id: int, *, user_id: int) -> Sale:
+        """Claim a reminder to handle the call — locks it to this user."""
+        inst = SaleDAO.get_installment(db, installment_id)
+        if inst is None:
+            raise HTTPException(status_code=404, detail="Reminder not found")
+        if inst.status == InstallmentStatus.paid:
+            raise HTTPException(status_code=400, detail="Already paid")
+        if (
+            inst.status == InstallmentStatus.in_progress
+            and inst.taken_by is not None
+            and inst.taken_by != user_id
+        ):
+            raise HTTPException(
+                status_code=409, detail="Another admin is handling this call"
+            )
+        inst.status = InstallmentStatus.in_progress
+        inst.taken_by = user_id
+        inst.taken_at = datetime.now(timezone.utc)
+        db.commit()
+        return SaleService.get(db, inst.sale_id)
+
+    @staticmethod
+    def cancel_reminder(
+        db: Session, installment_id: int, reason: str, *, user_id: int
+    ) -> Sale:
+        """Call made but no payment — defer. Balance stays the same."""
+        inst = SaleDAO.get_installment(db, installment_id)
+        if inst is None:
+            raise HTTPException(status_code=404, detail="Reminder not found")
+        if inst.status == InstallmentStatus.paid:
+            raise HTTPException(status_code=400, detail="Already paid")
+        inst.status = InstallmentStatus.cancelled
+        inst.cancel_reason = reason
+        db.commit()
+        return SaleService.get(db, inst.sale_id)
+
+    @staticmethod
+    def _apply_paid(db: Session, inst: SaleInstallment, sale: Sale, amount) -> None:
+        inst.status = InstallmentStatus.paid
+        inst.paid_date = date.today()
+        sale.remaining_amount = round(float(sale.remaining_amount) - float(amount), 2)
+        if sale.remaining_amount <= 0:
+            sale.remaining_amount = 0
+            sale.sale_status = SaleLifecycle.closed
+            sale.closed_at = datetime.now(timezone.utc)
+
+    @staticmethod
+    def submit_payment(
+        db: Session,
+        installment_id: int,
+        *,
+        amount,
+        actor_role: str,
+        recorded_by: int,
+        screenshot: dict | None = None,
+    ) -> Sale:
+        """Record an installment payment. Super-admin → applied immediately;
+        admin → pending_confirmation (super admin approves/declines)."""
+        inst = SaleDAO.get_installment(db, installment_id)
+        if inst is None:
+            raise HTTPException(status_code=404, detail="Reminder not found")
+        sale = SaleService.get(db, inst.sale_id)
+        if sale.status != EntityStatus.active:
+            raise HTTPException(status_code=403, detail="Sale is not active")
+        if inst.status == InstallmentStatus.paid:
+            raise HTTPException(status_code=400, detail="Already paid")
+
+        is_super = actor_role == "super_admin"
+        payment = SalePayment(
+            sale_id=sale.id,
+            installment_id=inst.id,
+            amount=amount,
+            kind=PaymentKind.installment,
+            recorded_by=recorded_by,
+            status=EntityStatus.active if is_super else EntityStatus.pending_confirmation,
+        )
+        if is_super:
+            payment.confirmed_by = recorded_by
+            payment.confirmed_at = datetime.now(timezone.utc)
+        SaleDAO.add_payment(db, payment)  # flush → payment.id
+
+        if screenshot is not None:
+            db.add(
+                SalePaymentDocument(
+                    payment_id=payment.id,
+                    file_name=screenshot["file_name"],
+                    mime_type=screenshot["mime_type"],
+                    size_bytes=screenshot.get("size_bytes"),
+                    content=screenshot["content"],
+                    uploaded_by=recorded_by,
+                )
+            )
+
+        if is_super:
+            SaleService._apply_paid(db, inst, sale, amount)
+        else:
+            NotificationService.create_verification(
+                db,
+                entity_type=NotificationEntity.sale,
+                entity_id=sale.id,
+                title="Installment payment needs approval",
+                message=f"A ₹{float(amount):,.0f} payment for {sale.invoice_no} awaits verification.",
+            )
+        db.commit()
+        return SaleService.get(db, inst.sale_id)
+
+    @staticmethod
+    def approve_payment(db: Session, payment_id: int, *, by_user_id: int) -> Sale:
+        payment = db.get(SalePayment, payment_id)
+        if payment is None:
+            raise HTTPException(status_code=404, detail="Payment not found")
+        if payment.status != EntityStatus.active:
+            payment.status = EntityStatus.active
+            payment.confirmed_by = by_user_id
+            payment.confirmed_at = datetime.now(timezone.utc)
+            payment.rejection_reason = None
+            sale = SaleService.get(db, payment.sale_id)
+            inst = (
+                SaleDAO.get_installment(db, payment.installment_id)
+                if payment.installment_id
+                else None
+            )
+            if inst is not None and inst.status != InstallmentStatus.paid:
+                SaleService._apply_paid(db, inst, sale, payment.amount)
+            db.commit()
+        return SaleService.get(db, payment.sale_id)
+
+    @staticmethod
+    def decline_payment(
+        db: Session, payment_id: int, reason: str, *, by_user_id: int
+    ) -> Sale:
+        payment = db.get(SalePayment, payment_id)
+        if payment is None:
+            raise HTTPException(status_code=404, detail="Payment not found")
+        payment.status = EntityStatus.rejected
+        payment.confirmed_by = by_user_id
+        payment.confirmed_at = datetime.now(timezone.utc)
+        payment.rejection_reason = reason
+        # Balance unchanged. Free the reminder up for a retry.
+        inst = (
+            SaleDAO.get_installment(db, payment.installment_id)
+            if payment.installment_id
+            else None
+        )
+        if inst is not None and inst.status != InstallmentStatus.paid:
+            inst.status = InstallmentStatus.pending
+            inst.taken_by = None
+            inst.taken_at = None
+        db.commit()
+        return SaleService.get(db, payment.sale_id)
+
+    @staticmethod
+    def payment_document(db: Session, doc_id: int) -> SalePaymentDocument:
+        doc = db.get(SalePaymentDocument, doc_id)
+        if doc is None:
+            raise HTTPException(status_code=404, detail="Screenshot not found")
+        return doc

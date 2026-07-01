@@ -89,4 +89,47 @@ class SaleDetailViewModel extends ChangeNotifier {
       notifyListeners();
     }
   }
+
+  // ── Reminders / collections ─────────────────────────────────────────────
+  bool _busy = false;
+  bool get busy => _busy;
+
+  bool get isSuperAdmin => _auth.isSuperAdmin;
+  String get currentUserId => _auth.currentUser?.id ?? '';
+
+  Future<void> _run(Future<void> Function() action) async {
+    _busy = true;
+    notifyListeners();
+    try {
+      await action();
+    } finally {
+      _busy = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> addReminder(DateTime dueDate, int amount) =>
+      _run(() => _sales.addReminder(_saleId, dueDate: dueDate, amount: amount));
+
+  Future<void> takeCall(String installmentId) =>
+      _run(() => _sales.takeCall(_saleId, installmentId));
+
+  Future<void> cancelReminder(String installmentId, String reason) =>
+      _run(() => _sales.cancelReminder(_saleId, installmentId, reason));
+
+  Future<void> submitPayment(String installmentId, int amount,
+          Uint8List screenshot, String filename, String? mimeType) =>
+      _run(() => _sales.submitPayment(_saleId, installmentId,
+          amount: amount,
+          screenshot: screenshot,
+          filename: filename,
+          mimeType: mimeType));
+
+  Future<void> approvePayment(String paymentId) =>
+      _run(() => _sales.approvePayment(_saleId, paymentId));
+
+  Future<void> declinePayment(String paymentId, String reason) =>
+      _run(() => _sales.declinePayment(_saleId, paymentId, reason));
+
+  String screenshotUrl(int docId) => _sales.screenshotUrl(docId);
 }

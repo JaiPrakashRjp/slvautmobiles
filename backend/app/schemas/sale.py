@@ -36,6 +36,12 @@ class SaleCreate(BaseModel):
     remarks: str | None = None
 
 
+class ReminderCreate(BaseModel):
+    """Admin schedules a collection reminder (date + amount) on a sale."""
+    due_date: date
+    amount: float
+
+
 class InstallmentOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -45,6 +51,9 @@ class InstallmentOut(BaseModel):
     amount: float
     paid_date: date | None = None
     status: InstallmentStatus
+    created_by: int | None = None
+    taken_by: int | None = None
+    cancel_reason: str | None = None
 
 
 class PaymentOut(BaseModel):
@@ -56,6 +65,10 @@ class PaymentOut(BaseModel):
     paid_at: datetime
     kind: PaymentKind
     recorded_by: int
+    status: EntityStatus
+    confirmed_by: int | None = None
+    rejection_reason: str | None = None
+    document_ids: list[int] = []
 
 
 class ReminderLogOut(BaseModel):

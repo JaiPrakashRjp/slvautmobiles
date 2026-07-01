@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import '../controllers/auth_controller.dart';
 import '../models/enums.dart';
 import '../models/installment.dart';
 import '../models/reminder_log.dart';
 import '../models/sale.dart';
+import '../models/sale_payment.dart';
 import 'api_client.dart';
 import 'gate.dart';
 import 'sale_service.dart';
@@ -146,6 +148,79 @@ class ApiSaleService extends SaleService {
     }
   }
 
+  // ── Reminders / collections ─────────────────────────────────────────────
+  void _replace(Sale sale) {
+    final idx = _cache.indexWhere((s) => s.id == sale.id);
+    if (idx != -1) {
+      _cache[idx] = sale;
+    } else {
+      _cache.insert(0, sale);
+    }
+    notifyListeners();
+  }
+
+  @override
+  Future<void> addReminder(String saleId,
+      {required DateTime dueDate, required int amount}) async {
+    final j = await _api.post('/sales/$saleId/reminders',
+        body: {'due_date': _dateStr(dueDate), 'amount': amount});
+    _replace(_fromJson(j as Map<String, dynamic>));
+  }
+
+  @override
+  Future<void> takeCall(String saleId, String installmentId) async {
+    final id = int.tryParse(installmentId) ?? 0;
+    final j = await _api.post('/sales/installments/$id/take');
+    _replace(_fromJson(j as Map<String, dynamic>));
+  }
+
+  @override
+  Future<void> cancelReminder(
+      String saleId, String installmentId, String reason) async {
+    final id = int.tryParse(installmentId) ?? 0;
+    final j = await _api.post('/sales/installments/$id/cancel',
+        query: {'reason': reason});
+    _replace(_fromJson(j as Map<String, dynamic>));
+  }
+
+  @override
+  Future<void> submitPayment(String saleId, String installmentId,
+      {required int amount,
+      required Uint8List screenshot,
+      required String filename,
+      String? mimeType}) async {
+    final id = int.tryParse(installmentId) ?? 0;
+    final j = await _api.postMultipart(
+      '/sales/installments/$id/pay',
+      fields: {'amount': '$amount'},
+      fileField: 'screenshot',
+      filename: filename,
+      bytes: screenshot,
+      mimeType: mimeType,
+    );
+    _replace(_fromJson(j as Map<String, dynamic>));
+  }
+
+  @override
+  Future<void> approvePayment(String saleId, String paymentId) async {
+    final id = int.tryParse(paymentId) ?? 0;
+    final j = await _api.post('/sales/payments/$id/approve');
+    _replace(_fromJson(j as Map<String, dynamic>));
+  }
+
+  @override
+  Future<void> declinePayment(
+      String saleId, String paymentId, String reason) async {
+    final id = int.tryParse(paymentId) ?? 0;
+    final j = await _api.post('/sales/payments/$id/decline',
+        query: {'reason': reason});
+    _replace(_fromJson(j as Map<String, dynamic>));
+  }
+
+  @override
+  String screenshotUrl(int docId) =>
+      _api.absoluteUrl('/sales/payments/documents/$docId');
+
   @override
   Future<void> cancel(String saleId, String reason, String byUserId) async {
     final numId = int.tryParse(saleId) ?? 0;
@@ -204,6 +279,9 @@ class ApiSaleService extends SaleService {
     final installments = rawInstallments
         .map((i) => _installmentFromJson(i as Map<String, dynamic>))
         .toList();
+    final payments = (j['payments'] as List? ?? [])
+        .map((p) => _paymentFromJson(p as Map<String, dynamic>))
+        .toList();
     return Sale(
       id: (j['id'] as int).toString(),
       vehicleId: (j['vehicle_id'] as int).toString(),
@@ -229,6 +307,7 @@ class ApiSaleService extends SaleService {
           ? null
           : DateTime.tryParse(j['closed_at'] as String),
       installments: installments,
+      payments: payments,
       saleStatus: (j['sale_status'] as String?) ?? 'active',
       createdBy: (j['created_by'] as int? ?? 0).toString(),
       createdAt:
@@ -250,6 +329,22 @@ class ApiSaleService extends SaleService {
       paidDate: j['paid_date'] == null
           ? null
           : DateTime.tryParse(j['paid_date'] as String),
+      status: (j['status'] as String?) ?? 'pending',
+      takenBy: (j['taken_by'] as int?)?.toString(),
+      createdBy: (j['created_by'] as int?)?.toString(),
+      cancelReason: j['cancel_reason'] as String?,
+    );
+  }
+
+  SalePayment _paymentFromJson(Map<String, dynamic> j) {
+    return SalePayment(
+      id: (j['id'] as int).toString(),
+      installmentId: (j['installment_id'] as int?)?.toString(),
+      amount: (j['amount'] as num).round(),
+      status: (j['status'] as String?) ?? 'active',
+      documentIds:
+          ((j['document_ids'] as List?) ?? []).map((e) => e as int).toList(),
+      rejectionReason: j['rejection_reason'] as String?,
     );
   }
 

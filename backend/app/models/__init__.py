@@ -9,6 +9,7 @@ from app.models.sale import Sale
 from app.models.sale_financer import SaleFinancer
 from app.models.sale_installment import SaleInstallment
 from app.models.sale_payment import SalePayment
+from app.models.sale_payment_document import SalePaymentDocument
 from app.models.user import User
 from app.models.user_module import UserModule
 from app.models.vehicle import Vehicle
@@ -27,6 +28,7 @@ __all__ = [
     "SaleFinancer",
     "SaleInstallment",
     "SalePayment",
+    "SalePaymentDocument",
     "ReminderLog",
     "Notification",
 ]

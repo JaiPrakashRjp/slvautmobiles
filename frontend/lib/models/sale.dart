@@ -1,6 +1,7 @@
 import 'enums.dart';
 import 'gated_entity.dart';
 import 'installment.dart';
+import 'sale_payment.dart';
 
 /// A vehicle sale to a customer — either full cash or advance + monthly
 /// installments. Gated like every other entity.
@@ -28,6 +29,7 @@ class Sale with GatedEntity {
     this.invoiceNo,
     this.closedAt,
     List<Installment>? installments,
+    List<SalePayment>? payments,
     this.saleStatus = 'active',
     this.invoicePath,
     this.remarks,
@@ -38,7 +40,8 @@ class Sale with GatedEntity {
     this.confirmedAt,
     this.rejectionReason,
     this.unsellReason,
-  }) : installments = installments ?? [];
+  })  : installments = installments ?? [],
+        payments = payments ?? [];
 
   @override
   final String id;
@@ -71,6 +74,13 @@ class Sale with GatedEntity {
   DateTime? closedAt;
 
   List<Installment> installments;
+  List<SalePayment> payments;
+
+  /// The pending (awaiting-approval) payment for an installment, if any.
+  SalePayment? pendingPaymentFor(String installmentId) => payments
+      .where((p) => p.installmentId == installmentId && p.isPending)
+      .cast<SalePayment?>()
+      .firstOrNull;
 
   /// 'active' | 'closed' | 'cancelled' | 'rejected'
   String saleStatus;

@@ -9,6 +9,7 @@ from app.models.reminder_log import ReminderLog
 from app.models.sale import Sale
 from app.models.sale_installment import SaleInstallment
 from app.models.sale_payment import SalePayment
+from app.models.sale_payment_document import SalePaymentDocument  # noqa: F401
 
 
 class SaleDAO:
@@ -20,7 +21,7 @@ class SaleDAO:
     def _with_relations(stmt):
         return stmt.options(
             selectinload(Sale.installments),
-            selectinload(Sale.payments),
+            selectinload(Sale.payments).selectinload(SalePayment.documents),
             selectinload(Sale.financer),
         )
 

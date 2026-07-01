@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../controllers/auth_controller.dart';
 import '../../models/enums.dart';
 import '../../models/installment.dart';
 import '../../models/reminder_log.dart';
+import '../../models/sale.dart';
+import '../../models/sale_payment.dart';
 import '../../services/customer_service.dart';
 import '../../services/pdf_service.dart';
 import '../../services/sale_service.dart';
@@ -60,21 +65,297 @@ class _SaleDetailViewState extends State<_SaleDetailView> {
     });
   }
 
-  Future<void> _onMarkPaid(
-      BuildContext context, SaleDetailViewModel vm, Installment inst) async {
-    if (inst.isPaid || !vm.canModify) return;
+  Future<void> _act(BuildContext context, Future<void> Function() action,
+      String okMsg) async {
+    final messenger = ScaffoldMessenger.of(context);
     try {
-      await vm.markPaid(inst.id);
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Month ${inst.monthNumber} marked paid.')),
-      );
+      await action();
+      messenger.showSnackBar(SnackBar(content: Text(okMsg)));
     } catch (e) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed: $e')),
-      );
+      messenger.showSnackBar(SnackBar(content: Text('Failed: $e')));
     }
+  }
+
+  Future<String?> _askReason(
+      BuildContext context, String title, String hint) async {
+    final ctrl = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: TextField(
+            controller: ctrl,
+            autofocus: true,
+            decoration: InputDecoration(hintText: hint)),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('OK')),
+        ],
+      ),
+    );
+    final text = ctrl.text.trim();
+    ctrl.dispose();
+    return (ok == true && text.isNotEmpty) ? text : null;
+  }
+
+  Future<void> _setReminder(BuildContext context, SaleDetailViewModel vm) async {
+    DateTime date = DateTime.now().add(const Duration(days: 5));
+    final amountCtrl = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          title: const Text('Set reminder'),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            TextField(
+              controller: amountCtrl,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              decoration:
+                  const InputDecoration(labelText: 'Amount', prefixText: '₹ '),
+            ),
+            const SizedBox(height: 12),
+            Row(children: [
+              Expanded(child: Text('Due ${Formatters.date(date)}')),
+              TextButton(
+                onPressed: () async {
+                  final picked = await showDatePicker(
+                    context: ctx,
+                    initialDate: date,
+                    firstDate: DateTime(2020),
+                    lastDate: DateTime(2035),
+                  );
+                  if (picked != null) setLocal(() => date = picked);
+                },
+                child: const Text('Pick date'),
+              ),
+            ]),
+          ]),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel')),
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Set')),
+          ],
+        ),
+      ),
+    );
+    final amount = int.tryParse(amountCtrl.text.trim()) ?? 0;
+    amountCtrl.dispose();
+    if (ok != true || amount <= 0 || !context.mounted) return;
+    await _act(context, () => vm.addReminder(date, amount), 'Reminder set.');
+  }
+
+  Future<void> _callCustomer(SaleDetailViewModel vm) async {
+    final phone = vm.sale?.customerWhatsapp.trim() ?? '';
+    final number = phone.isNotEmpty ? phone : (vm.customer?.phone ?? '');
+    if (number.isEmpty) return;
+    final uri = Uri.parse('tel:$number');
+    if (await canLaunchUrl(uri)) await launchUrl(uri);
+  }
+
+  Future<void> _recordPayment(
+      BuildContext context, SaleDetailViewModel vm, Installment inst) async {
+    final amountCtrl = TextEditingController(text: '${inst.amount}');
+    _PickedShot? shot;
+    final messenger = ScaffoldMessenger.of(context);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          title: const Text('Record payment'),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            TextField(
+              controller: amountCtrl,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              decoration: const InputDecoration(
+                  labelText: 'Amount received', prefixText: '₹ '),
+            ),
+            const SizedBox(height: 12),
+            Row(children: [
+              Expanded(
+                child: Text(
+                  shot == null ? 'Attach payment screenshot' : shot!.name,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              TextButton.icon(
+                onPressed: () async {
+                  final img = await ImagePicker()
+                      .pickImage(source: ImageSource.gallery);
+                  if (img != null) {
+                    final bytes = await img.readAsBytes();
+                    setLocal(
+                        () => shot = _PickedShot(img.name, bytes, img.mimeType));
+                  }
+                },
+                icon: const Icon(Icons.image_outlined, size: 18),
+                label: const Text('Screenshot'),
+              ),
+            ]),
+          ]),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel')),
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Submit')),
+          ],
+        ),
+      ),
+    );
+    final amount = int.tryParse(amountCtrl.text.trim()) ?? 0;
+    amountCtrl.dispose();
+    if (ok != true || !context.mounted) return;
+    if (amount <= 0) {
+      messenger.showSnackBar(const SnackBar(content: Text('Enter an amount')));
+      return;
+    }
+    if (shot == null) {
+      messenger.showSnackBar(
+          const SnackBar(content: Text('Attach a payment screenshot')));
+      return;
+    }
+    await _act(
+      context,
+      () => vm.submitPayment(inst.id, amount, shot!.bytes, shot!.name, shot!.mime),
+      vm.isSuperAdmin ? 'Payment recorded.' : 'Payment submitted for approval.',
+    );
+  }
+
+  Future<void> _viewScreenshot(SaleDetailViewModel vm, int docId) async {
+    final uri = Uri.parse(vm.screenshotUrl(docId));
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  Widget _statusChip(Installment inst, SalePayment? pending, AppColors c) {
+    String label;
+    Color color;
+    if (inst.isPaid) {
+      label = 'Paid';
+      color = c.success;
+    } else if (pending != null) {
+      label = 'Pending approval';
+      color = c.primary;
+    } else if (inst.isCancelled) {
+      label = 'Cancelled';
+      color = c.textSub;
+    } else if (inst.isInProgress) {
+      label = 'In progress';
+      color = c.primary;
+    } else {
+      label = 'Pending';
+      color = c.textSub;
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(label,
+          style: AppTextStyles.caption
+              .copyWith(color: color, fontWeight: FontWeight.w600)),
+    );
+  }
+
+  Widget _reminderTile(BuildContext context, SaleDetailViewModel vm, Sale sale,
+      Installment inst, AppColors c) {
+    final pending = sale.pendingPaymentFor(inst.id);
+    final actions = <Widget>[];
+    if (pending != null) {
+      if (vm.isSuperAdmin) {
+        if (pending.documentIds.isNotEmpty) {
+          actions.add(TextButton.icon(
+            onPressed: () => _viewScreenshot(vm, pending.documentIds.first),
+            icon: const Icon(Icons.image_outlined, size: 18),
+            label: const Text('Screenshot'),
+          ));
+        }
+        actions.add(TextButton(
+            onPressed:
+                vm.busy ? null : () => _act(context, () => vm.approvePayment(pending.id), 'Payment approved.'),
+            child: const Text('Approve')));
+        actions.add(TextButton(
+            onPressed: vm.busy
+                ? null
+                : () async {
+                    final r = await _askReason(
+                        context, 'Decline payment', 'Reason for declining');
+                    if (r == null || !context.mounted) return;
+                    await _act(context, () => vm.declinePayment(pending.id, r),
+                        'Payment declined.');
+                  },
+            child: const Text('Decline')));
+      } else {
+        actions.add(Text('₹${pending.amount} awaiting super-admin approval',
+            style: AppTextStyles.caption.copyWith(color: c.textSub)));
+      }
+    } else if (vm.canModify &&
+        !vm.isClosed &&
+        !inst.isPaid &&
+        !inst.isCancelled) {
+      if (inst.isPending) {
+        actions.add(TextButton.icon(
+          onPressed: vm.busy
+              ? null
+              : () => _act(context, () => vm.takeCall(inst.id),
+                  'Call assigned to you.'),
+          icon: const Icon(Icons.headset_mic_outlined, size: 18),
+          label: const Text('Take call'),
+        ));
+      } else if (inst.isInProgress) {
+        actions.add(IconButton(
+          onPressed: () => _callCustomer(vm),
+          icon: const Icon(Icons.call),
+          tooltip: 'Call customer',
+        ));
+        actions.add(TextButton(
+            onPressed: vm.busy ? null : () => _recordPayment(context, vm, inst),
+            child: const Text('Record payment')));
+        actions.add(TextButton(
+            onPressed: vm.busy
+                ? null
+                : () async {
+                    final r = await _askReason(
+                        context, 'Cancel reminder', 'Why is it deferred?');
+                    if (r == null || !context.mounted) return;
+                    await _act(context, () => vm.cancelReminder(inst.id, r),
+                        'Reminder cancelled.');
+                  },
+            child: const Text('Cancel')));
+      }
+    }
+    return AppCard(
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Expanded(
+            child: Text('₹${inst.amount}  ·  due ${Formatters.date(inst.dueDate)}',
+                style: AppTextStyles.body.copyWith(color: c.textMain)),
+          ),
+          _statusChip(inst, pending, c),
+        ]),
+        if (inst.isCancelled && inst.cancelReason != null) ...[
+          const SizedBox(height: 4),
+          Text('Deferred: ${inst.cancelReason}',
+              style: AppTextStyles.caption.copyWith(color: c.textSub)),
+        ],
+        if (actions.isNotEmpty) ...[
+          const SizedBox(height: AppSpacing.xs),
+          Wrap(spacing: 8, runSpacing: 4, children: actions),
+        ],
+      ]),
+    );
   }
 
   Future<void> _onPayOff(BuildContext context, SaleDetailViewModel vm) async {
@@ -255,45 +536,39 @@ class _SaleDetailViewState extends State<_SaleDetailView> {
                       const SizedBox(height: AppSpacing.lg),
                     ],
 
-                    // ── Installment history ─────────────────────────────────
-                    if (sale.installments.isNotEmpty) ...[
-                      Text('Installments',
-                          style: AppTextStyles.pageTitle
-                              .copyWith(color: c.textMain)),
-                      const SizedBox(height: AppSpacing.sm),
-                      AppCard(
-                        padding: EdgeInsets.zero,
-                        child: Column(
-                          children: [
-                            for (var i = 0;
-                                i < sale.installments.length;
-                                i++) ...[
-                              _InstallmentRow(
-                                inst: sale.installments[i],
-                                now: DateTime.now(),
-                                canPay: vm.canModify && !vm.isClosed,
-                                paying: vm.paying,
-                                onPay: () => _onMarkPaid(
-                                    context, vm, sale.installments[i]),
-                                onReceipt: vm.customer != null &&
-                                        vm.vehicle != null &&
-                                        sale.installments[i].isPaid
-                                    ? () => context
-                                        .read<PdfService>()
-                                        .installmentReceipt(
-                                          sale: sale,
-                                          customer: vm.customer!,
-                                          vehicle: vm.vehicle!,
-                                          installment: sale.installments[i],
-                                        )
-                                    : null,
-                              ),
-                              if (i != sale.installments.length - 1)
-                                Divider(height: 1, color: c.borderColor),
-                            ],
-                          ],
-                        ),
+                    // ── Reminders / Collections ──────────────────────────────
+                    if (sale.mode == PaymentMode.installments) ...[
+                      Row(
+                        children: [
+                          Text('Reminders',
+                              style: AppTextStyles.pageTitle
+                                  .copyWith(color: c.textMain)),
+                          const Spacer(),
+                          if (vm.canModify && !vm.isClosed)
+                            TextButton.icon(
+                              onPressed: vm.busy
+                                  ? null
+                                  : () => _setReminder(context, vm),
+                              icon: const Icon(Icons.add, size: 18),
+                              label: const Text('Set reminder'),
+                            ),
+                        ],
                       ),
+                      const SizedBox(height: AppSpacing.sm),
+                      if (sale.installments.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                          child: Text(
+                            'No reminders yet. Tap "Set reminder" to schedule a collection.',
+                            style:
+                                AppTextStyles.body.copyWith(color: c.textSub),
+                          ),
+                        )
+                      else
+                        for (final inst in sale.installments) ...[
+                          _reminderTile(context, vm, sale, inst, c),
+                          const SizedBox(height: AppSpacing.sm),
+                        ],
                       const SizedBox(height: AppSpacing.lg),
                     ],
 
@@ -389,82 +664,12 @@ class _SummaryRow extends StatelessWidget {
   }
 }
 
-class _InstallmentRow extends StatelessWidget {
-  const _InstallmentRow({
-    required this.inst,
-    required this.now,
-    required this.canPay,
-    required this.paying,
-    required this.onPay,
-    this.onReceipt,
-  });
-
-  final Installment inst;
-  final DateTime now;
-  final bool canPay;
-  final bool paying;
-  final VoidCallback onPay;
-  final VoidCallback? onReceipt;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    final status = inst.statusAt(now);
-    return InkWell(
-      onTap: inst.isPaid || !canPay || paying ? null : onPay,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.lg, vertical: AppSpacing.md),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Month ${inst.monthNumber}  ·  ${Formatters.currency(inst.amount)}',
-                    style: AppTextStyles.body.copyWith(color: c.textMain),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Due ${Formatters.date(inst.dueDate)}'
-                    '${inst.paidDate != null ? '  ·  Paid ${Formatters.date(inst.paidDate!)}' : ''}',
-                    style: AppTextStyles.caption.copyWith(color: c.textSub),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: AppSpacing.sm),
-            if (inst.isPaid) ...[
-              if (onReceipt != null)
-                IconButton(
-                  tooltip: 'Download receipt',
-                  icon: Icon(Icons.download_outlined,
-                      size: 18, color: c.textSub),
-                  onPressed: onReceipt,
-                  constraints: const BoxConstraints(),
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                ),
-              Icon(Icons.check_circle, color: c.success, size: 20),
-            ] else if (canPay && !paying)
-              Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.sm, vertical: 4),
-                decoration: BoxDecoration(
-                  border: Border.all(color: c.primary),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text('Mark paid',
-                    style: AppTextStyles.caption.copyWith(
-                        color: c.primary, fontWeight: FontWeight.w600)),
-              )
-            else
-              StatusPill.forSchedule(status),
-          ],
-        ),
-      ),
-    );
-  }
+/// A picked payment-proof screenshot held in memory before upload.
+class _PickedShot {
+  _PickedShot(this.name, this.bytes, this.mime);
+  final String name;
+  final Uint8List bytes;
+  final String? mime;
 }
 
 class _ReminderRow extends StatelessWidget {

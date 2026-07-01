@@ -1,11 +1,11 @@
 """Payment ledger row — a received payment (installment / advance / early payoff)."""
 from datetime import datetime
 
-from sqlalchemy import BigInteger, ForeignKey, Identity, Numeric, func
+from sqlalchemy import BigInteger, ForeignKey, Identity, Numeric, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
-from app.models.enums import PaymentKind, pg_enum
+from app.models.enums import EntityStatus, PaymentKind, pg_enum
 
 
 class SalePayment(Base):
@@ -26,6 +26,25 @@ class SalePayment(Base):
         server_default=PaymentKind.installment.value,
     )
     recorded_by: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+    # super-admin approval gate: admin-submitted payments wait as
+    # pending_confirmation; super-admin submissions are active immediately.
+    status: Mapped[EntityStatus] = mapped_column(
+        pg_enum(EntityStatus, "entity_status"),
+        nullable=False,
+        server_default=EntityStatus.active.value,
+    )
+    confirmed_by: Mapped[int | None] = mapped_column(BigInteger)
+    confirmed_at: Mapped[datetime | None] = mapped_column()
+    rejection_reason: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now(), nullable=False)
 
     sale: Mapped["Sale"] = relationship(back_populates="payments")  # noqa: F821
+    documents: Mapped[list["SalePaymentDocument"]] = relationship(  # noqa: F821
+        back_populates="payment", cascade="all, delete-orphan"
+    )
+
+    @property
+    def document_ids(self) -> list[int]:
+        """Ids of attached proof screenshots (for the API response)."""
+        return [d.id for d in self.documents]

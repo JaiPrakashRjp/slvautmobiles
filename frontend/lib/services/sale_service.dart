@@ -47,6 +47,33 @@ abstract class SaleService extends ChangeNotifier {
   /// Returns the reminder-dispatch log for a sale.
   Future<List<ReminderLog>> remindersForSale(String saleId);
 
+  // ── Reminders / collections ─────────────────────────────────────────────
+  /// Schedule a collection reminder (date + amount) on a sale.
+  Future<void> addReminder(String saleId,
+      {required DateTime dueDate, required int amount});
+
+  /// Claim a reminder's call (locks it to the current user).
+  Future<void> takeCall(String saleId, String installmentId);
+
+  /// Call made, no payment — defer (balance unchanged).
+  Future<void> cancelReminder(String saleId, String installmentId, String reason);
+
+  /// Record an installment payment with a proof screenshot.
+  Future<void> submitPayment(String saleId, String installmentId,
+      {required int amount,
+      required Uint8List screenshot,
+      required String filename,
+      String? mimeType});
+
+  /// Super-admin: approve a pending payment (balance reduces).
+  Future<void> approvePayment(String saleId, String paymentId);
+
+  /// Super-admin: decline a pending payment (fails, balance unchanged).
+  Future<void> declinePayment(String saleId, String paymentId, String reason);
+
+  /// Absolute URL to view a payment proof screenshot.
+  String screenshotUrl(int docId);
+
   /// Cancel a sale (unsell): saves the reason, resets vehicle to not-sold.
   Future<void> cancel(String saleId, String reason, String byUserId);
 
@@ -240,6 +267,75 @@ class MockSaleService extends SaleService {
 
   @override
   Future<List<ReminderLog>> remindersForSale(String saleId) async => [];
+
+  Installment? _inst(String saleId, String installmentId) => byId(saleId)
+      ?.installments
+      .where((i) => i.id == installmentId)
+      .cast<Installment?>()
+      .firstOrNull;
+
+  @override
+  Future<void> addReminder(String saleId,
+      {required DateTime dueDate, required int amount}) async {
+    final s = byId(saleId);
+    if (s == null) return;
+    final next =
+        s.installments.fold<int>(0, (m, i) => i.monthNumber > m ? i.monthNumber : m) + 1;
+    s.installments.add(Installment(
+      id: IdGen.nextId('inst'),
+      monthNumber: next,
+      dueDate: dueDate,
+      amount: amount,
+      status: 'pending',
+    ));
+    notifyListeners();
+  }
+
+  @override
+  Future<void> takeCall(String saleId, String installmentId) async {
+    final inst = _inst(saleId, installmentId);
+    if (inst != null) {
+      inst.status = 'in_progress';
+      notifyListeners();
+    }
+  }
+
+  @override
+  Future<void> cancelReminder(
+      String saleId, String installmentId, String reason) async {
+    final inst = _inst(saleId, installmentId);
+    if (inst != null) {
+      inst.status = 'cancelled';
+      inst.cancelReason = reason;
+      notifyListeners();
+    }
+  }
+
+  @override
+  Future<void> submitPayment(String saleId, String installmentId,
+      {required int amount,
+      required Uint8List screenshot,
+      required String filename,
+      String? mimeType}) async {
+    final inst = _inst(saleId, installmentId);
+    if (inst != null) {
+      inst.status = 'paid';
+      inst.paidDate = DateTime.now();
+      notifyListeners();
+    }
+  }
+
+  @override
+  Future<void> approvePayment(String saleId, String paymentId) async =>
+      notifyListeners();
+
+  @override
+  Future<void> declinePayment(
+          String saleId, String paymentId, String reason) async =>
+      notifyListeners();
+
+  @override
+  String screenshotUrl(int docId) => '';
 
   @override
   Future<void> cancel(String saleId, String reason, String byUserId) async {

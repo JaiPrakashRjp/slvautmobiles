@@ -9,6 +9,7 @@ from sqlalchemy import (
     Integer,
     Numeric,
     SmallInteger,
+    Text,
     UniqueConstraint,
     func,
 )
@@ -40,6 +41,11 @@ class SaleInstallment(Base):
         nullable=False,
         server_default=InstallmentStatus.pending.value,
     )
+    # reminder ownership + call lock (who is handling this collection call)
+    created_by: Mapped[int | None] = mapped_column(BigInteger)
+    taken_by: Mapped[int | None] = mapped_column(BigInteger)
+    taken_at: Mapped[datetime | None] = mapped_column()
+    cancel_reason: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), nullable=False)
 

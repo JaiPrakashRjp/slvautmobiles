@@ -32,5 +32,18 @@ class Settings:
     # flow — a user stays signed in until it expires or they sign out.
     JWT_EXPIRE_MINUTES: int = int(os.getenv("JWT_EXPIRE_MINUTES", str(60 * 24 * 30)))
 
+    # ── WhatsApp (Meta Cloud API) ────────────────────────────────────────────
+    # From the Meta app dashboard → WhatsApp → API Setup. The "API Setup" token
+    # is temporary (~24h, for testing); use a System User token for production.
+    # WHATSAPP_PHONE_NUMBER_ID is what the send API is called against; the actual
+    # phone number is only for reference.
+    WHATSAPP_TOKEN: str = os.getenv("WHATSAPP_TOKEN", "")
+    WHATSAPP_PHONE_NUMBER_ID: str = os.getenv("WHATSAPP_PHONE_NUMBER_ID", "")
+    WHATSAPP_BUSINESS_ACCOUNT_ID: str = os.getenv("WHATSAPP_BUSINESS_ACCOUNT_ID", "")
+
+    @property
+    def whatsapp_enabled(self) -> bool:
+        return bool(self.WHATSAPP_TOKEN and self.WHATSAPP_PHONE_NUMBER_ID)
+
 
 settings = Settings()

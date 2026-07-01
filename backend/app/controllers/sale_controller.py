@@ -4,14 +4,14 @@ The acting user (id + role) comes from the Bearer token via get_current_user,
 not from client params. Approvals (confirm/reject/cancel) require the Super
 Admin; recording payments only needs an authenticated user.
 """
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.models.enums import EntityStatus
 from app.models.user import User
-from app.schemas.sale import ReminderLogOut, SaleCreate, SaleOut
+from app.schemas.sale import ReminderCreate, ReminderLogOut, SaleCreate, SaleOut
 from app.security import get_current_user, require_super_admin
 from app.services.sale_service import SaleService
 
@@ -44,13 +44,88 @@ def create_sale(
     )
 
 
-@router.post("/installments/{installment_id}/pay", response_model=SaleOut)
-def mark_installment_paid(
+# ── Reminders / collections ─────────────────────────────────────────────────
+@router.post("/{sale_id}/reminders", response_model=SaleOut, status_code=201)
+def add_reminder(
+    sale_id: int,
+    payload: ReminderCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return SaleService.add_reminder(
+        db, sale_id, due_date=payload.due_date, amount=payload.amount,
+        created_by=current_user.id,
+    )
+
+
+@router.post("/installments/{installment_id}/take", response_model=SaleOut)
+def take_call(
     installment_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return SaleService.mark_paid(db, installment_id, recorded_by=current_user.id)
+    return SaleService.take_call(db, installment_id, user_id=current_user.id)
+
+
+@router.post("/installments/{installment_id}/cancel", response_model=SaleOut)
+def cancel_reminder(
+    installment_id: int,
+    reason: str = Query(..., min_length=1),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return SaleService.cancel_reminder(
+        db, installment_id, reason, user_id=current_user.id
+    )
+
+
+@router.post("/installments/{installment_id}/pay", response_model=SaleOut)
+async def submit_installment_payment(
+    installment_id: int,
+    amount: float = Form(...),
+    screenshot: UploadFile | None = File(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    shot = None
+    if screenshot is not None:
+        content = await screenshot.read()
+        if content:
+            shot = {
+                "file_name": screenshot.filename or "screenshot",
+                "mime_type": screenshot.content_type or "application/octet-stream",
+                "size_bytes": len(content),
+                "content": content,
+            }
+    return SaleService.submit_payment(
+        db, installment_id, amount=amount, actor_role=current_user.role.name,
+        recorded_by=current_user.id, screenshot=shot,
+    )
+
+
+@router.post("/payments/{payment_id}/approve", response_model=SaleOut)
+def approve_payment(
+    payment_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_super_admin),
+):
+    return SaleService.approve_payment(db, payment_id, by_user_id=current_user.id)
+
+
+@router.post("/payments/{payment_id}/decline", response_model=SaleOut)
+def decline_payment(
+    payment_id: int,
+    reason: str = Query(..., min_length=1),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_super_admin),
+):
+    return SaleService.decline_payment(db, payment_id, reason, by_user_id=current_user.id)
+
+
+@router.get("/payments/documents/{doc_id}")
+def payment_screenshot(doc_id: int, db: Session = Depends(get_db)):
+    doc = SaleService.payment_document(db, doc_id)
+    return Response(content=doc.content, media_type=doc.mime_type)
 
 
 @router.post("/{sale_id}/payoff", response_model=SaleOut)

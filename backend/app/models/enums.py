@@ -79,8 +79,10 @@ class SaleLifecycle(str, enum.Enum):
 
 
 class InstallmentStatus(str, enum.Enum):
-    pending = "pending"
-    paid = "paid"
+    pending = "pending"          # reminder set, not yet acted on
+    in_progress = "in_progress"  # an admin took the call (locked)
+    paid = "paid"                # payment approved
+    cancelled = "cancelled"      # call made, no payment (deferred)
     overdue = "overdue"
 
 
