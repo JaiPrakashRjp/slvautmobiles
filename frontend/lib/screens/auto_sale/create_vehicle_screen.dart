@@ -497,7 +497,7 @@ class _CreateVehicleViewState extends State<_CreateVehicleView> {
       const SizedBox(height: AppSpacing.md),
       PickerField(
         label: 'Showroom',
-        placeholder: 'Amba / Aestece / Khivraj',
+        placeholder: 'Amba / Acetec / Khivraj',
         value: vm.showroom?.label,
         onTap: () => _pickShowroom(vm),
       ),

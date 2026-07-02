@@ -55,12 +55,12 @@ class _CreateCustomerViewState extends State<_CreateCustomerView> {
   final _formKey = GlobalKey<FormState>();
   bool _submitting = false;
 
+  // Photo is handled separately at the TOP of the form (profile photo).
   static const _docTypes = [
     KycDocType.aadhaar,
     KycDocType.pan,
     KycDocType.dl,
     KycDocType.rentalAgreement,
-    KycDocType.photo,
   ];
 
   Future<void> _pickDob(CreateCustomerViewModel vm) async {
@@ -83,6 +83,98 @@ class _CreateCustomerViewState extends State<_CreateCustomerView> {
           .toList(),
     );
     if (picked != null) vm.branch = picked;
+  }
+
+  /// Sets the customer photo — create mode holds it for upload-on-submit;
+  /// edit mode uploads it live.
+  Future<void> _setPhoto(CreateCustomerViewModel vm, PickedDoc? p) async {
+    if (p == null) return;
+    if (vm.isEditing) {
+      final customers = context.read<CustomerService>();
+      final messenger = ScaffoldMessenger.of(context);
+      try {
+        await customers.uploadDocument(vm.existingId!, 'photo', p);
+      } catch (e) {
+        messenger.showSnackBar(SnackBar(content: Text('Upload failed: $e')));
+      }
+    } else {
+      vm.setDocument(KycDocType.photo, p);
+    }
+  }
+
+  /// Profile-photo picker shown at the TOP of the form (camera or upload).
+  Widget _photoSection(BuildContext context, CreateCustomerViewModel vm) {
+    final c = context.colors;
+    final picked = vm.docs[KycDocType.photo];
+
+    Widget placeholder() => Container(
+          width: 110,
+          height: 110,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: c.bgSurface,
+            border: Border.all(color: c.borderColor),
+          ),
+          child: Icon(Icons.person_outline, size: 48, color: c.textSub),
+        );
+
+    Widget avatar;
+    if (picked != null) {
+      avatar = ClipOval(
+        child: Image.memory(picked.bytes,
+            width: 110, height: 110, fit: BoxFit.cover),
+      );
+    } else if (vm.isEditing) {
+      final ref = context
+          .read<CustomerService>()
+          .byId(vm.existingId!)
+          ?.uploadedDocs
+          .where((d) => d.docTypeWire == 'photo')
+          .cast<DocRef?>()
+          .firstOrNull;
+      avatar = ref == null
+          ? placeholder()
+          : ClipOval(
+              child: SizedBox(
+                width: 110,
+                height: 110,
+                child: FutureBuilder<Uint8List>(
+                  future:
+                      context.read<CustomerService>().documentBytes(ref.id),
+                  builder: (ctx, snap) =>
+                      (snap.hasData && snap.data!.isNotEmpty)
+                          ? Image.memory(snap.data!, fit: BoxFit.cover)
+                          : placeholder(),
+                ),
+              ),
+            );
+    } else {
+      avatar = placeholder();
+    }
+
+    return Center(
+      child: Column(
+        children: [
+          avatar,
+          const SizedBox(height: AppSpacing.xs),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextButton.icon(
+                onPressed: () async => _setPhoto(vm, await pickPhotoDoc()),
+                icon: const Icon(Icons.camera_alt_outlined, size: 18),
+                label: const Text('Camera'),
+              ),
+              TextButton.icon(
+                onPressed: () async => _setPhoto(vm, await pickFileDoc()),
+                icon: const Icon(Icons.upload_outlined, size: 18),
+                label: const Text('Upload'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 
   void _showError(String message) {
@@ -166,6 +258,8 @@ class _CreateCustomerViewState extends State<_CreateCustomerView> {
             child: ListView(
               padding: EdgeInsets.all(context.screenHPadding),
               children: [
+                _photoSection(context, vm),
+                const SizedBox(height: AppSpacing.lg),
                 PickerField(
                   label: 'Branch',
                   required: true,

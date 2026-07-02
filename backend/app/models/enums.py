@@ -20,7 +20,7 @@ class FuelType(str, enum.Enum):
 
 class Showroom(str, enum.Enum):
     amba = "amba"
-    aestece = "aestece"
+    acetec = "acetec"
     khivraj = "khivraj"
 
 

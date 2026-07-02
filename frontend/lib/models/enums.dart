@@ -146,16 +146,16 @@ enum FuelType {
 /// Showroom a first-hand (new) vehicle was sourced from.
 enum Showroom {
   amba,
-  aestece,
+  acetec,
   khivraj;
 
   String get label => switch (this) {
         Showroom.amba => 'Amba',
-        Showroom.aestece => 'Aestece',
+        Showroom.acetec => 'Acetec',
         Showroom.khivraj => 'Khivraj',
       };
 
-  String get wire => name; // amba / aestece / khivraj — matches backend
+  String get wire => name; // amba / acetec / khivraj — matches backend
 
   static Showroom? fromWire(String? s) => s == null
       ? null

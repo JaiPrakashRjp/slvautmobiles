@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../controllers/auth_controller.dart';
 import '../../models/customer.dart';
+import '../../models/doc_ref.dart';
 import '../../services/customer_service.dart';
 import '../../services/vehicle_service.dart';
 import '../../theme/app_colors.dart';
@@ -188,13 +189,30 @@ class _CustomerCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.colors;
     final auth = context.read<AuthController>();
+    final customers = context.read<CustomerService>();
     final canModify =
         auth.isSuperAdmin || customer.createdBy == auth.currentUser?.id;
+    final photoRef = customer.uploadedDocs
+        .where((d) => d.docTypeWire == 'photo')
+        .cast<DocRef?>()
+        .firstOrNull;
     return AppCard(
       onTap: () => _open(context),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
+          // ── Photo ─────────────────────────────────────────────────
+          CircleAvatar(
+            radius: 22,
+            backgroundColor: c.bgSurface,
+            backgroundImage: photoRef == null
+                ? null
+                : NetworkImage(customers.documentUrl(photoRef.id)),
+            child: photoRef == null
+                ? Icon(Icons.person_outline, color: c.textSub)
+                : null,
+          ),
+          const SizedBox(width: AppSpacing.md),
           // ── Content ───────────────────────────────────────────────
           Expanded(
             child: Column(

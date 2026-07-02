@@ -2,9 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../controllers/auth_controller.dart';
 import '../services/api_notification_service.dart';
+import '../services/app_version_service.dart';
 import '../services/sale_service.dart';
 import '../theme/app_colors.dart';
 import '../utils/app_radius.dart';
@@ -70,6 +72,7 @@ class _SignInView extends StatelessWidget {
                   fit: BoxFit.contain,
                 ),
                 const SizedBox(height: AppSpacing.xxl),
+                const _UpdateBanner(),
                 Text('Sign in', style: AppTextStyles.pageTitle.copyWith(color: c.textMain)),
                 const SizedBox(height: AppSpacing.sm),
                 Text(
@@ -127,6 +130,93 @@ class _SignInView extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Checks for a newer published APK and, if found, shows a download card so the
+/// user can update their sideloaded app. Silent when up to date / offline.
+class _UpdateBanner extends StatefulWidget {
+  const _UpdateBanner();
+
+  @override
+  State<_UpdateBanner> createState() => _UpdateBannerState();
+}
+
+class _UpdateBannerState extends State<_UpdateBanner> {
+  AppUpdateInfo? _info;
+
+  @override
+  void initState() {
+    super.initState();
+    _check();
+  }
+
+  Future<void> _check() async {
+    final info = await AppVersionService().check();
+    if (mounted && info != null && info.updateAvailable) {
+      setState(() => _info = info);
+    }
+  }
+
+  Future<void> _download() async {
+    final url = _info?.downloadUrl;
+    if (url == null) return;
+    final uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final info = _info;
+    if (info == null) return const SizedBox.shrink();
+    final c = context.colors;
+    return Container(
+      margin: const EdgeInsets.only(bottom: AppSpacing.xl),
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        color: c.primary.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: c.primary.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.system_update, color: c.primary, size: 20),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(
+                  info.mandatory ? 'Update required' : 'Update available',
+                  style: AppTextStyles.bodyStrong.copyWith(color: c.textMain),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'New version ${info.latest} (you have ${info.current}).',
+            style: AppTextStyles.caption.copyWith(color: c.textSub),
+          ),
+          if (info.notes.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(info.notes,
+                style: AppTextStyles.caption.copyWith(color: c.textSub)),
+          ],
+          const SizedBox(height: AppSpacing.md),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: _download,
+              icon: const Icon(Icons.download, size: 18),
+              label: const Text('Download update'),
+            ),
+          ),
+        ],
       ),
     );
   }
