@@ -18,6 +18,7 @@ import '../../widgets/empty_state.dart';
 import '../../widgets/gold_create_button.dart';
 import '../../widgets/icon_button_soft.dart';
 import '../../widgets/option_sheet.dart';
+import '../../widgets/page_size_picker.dart';
 import '../../widgets/status_pill.dart';
 import '../../widgets/tab_bar_navy.dart';
 import 'assign_sale_screen.dart';
@@ -83,6 +84,32 @@ class _VehiclesListView extends StatelessWidget {
                   tabs: const ['Sold', 'Not sold'],
                   index: vm.tab,
                   onChanged: (i) => vm.tab = i,
+                ),
+              ),
+              Padding(
+                padding: EdgeInsets.fromLTRB(context.screenHPadding, 0,
+                    context.screenHPadding, AppSpacing.sm),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        onChanged: (q) {
+                          final t = q.trim();
+                          vm.search(t.length >= 4 ? t : '');
+                        },
+                        decoration: InputDecoration(
+                          hintText: 'Search reg no / model…',
+                          prefixIcon: const Icon(Icons.search, size: 20),
+                          isDense: true,
+                          border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    PageSizePicker(
+                        value: vm.pageSize, onChanged: (v) => vm.pageSize = v),
+                  ],
                 ),
               ),
               Expanded(

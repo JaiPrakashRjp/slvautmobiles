@@ -26,8 +26,25 @@ def initial_status(actor_role: str) -> EntityStatus:
 
 class VehicleService:
     @staticmethod
-    def list(db: Session, *, status=None, branch=None) -> list[Vehicle]:
-        return VehicleDAO.list(db, status=status, branch=branch)
+    def list(
+        db: Session,
+        *,
+        status=None,
+        branch=None,
+        sale_status=None,
+        q=None,
+        limit=None,
+        offset=None,
+    ) -> list[Vehicle]:
+        return VehicleDAO.list(
+            db,
+            status=status,
+            branch=branch,
+            sale_status=sale_status,
+            q=q,
+            limit=limit,
+            offset=offset,
+        )
 
     @staticmethod
     def get(db: Session, vehicle_id: int) -> Vehicle:

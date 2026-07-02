@@ -25,6 +25,7 @@ import '../../widgets/primary_button.dart';
 import '../../widgets/role_gate_banner.dart';
 import '../../widgets/secondary_button.dart';
 import '../../widgets/status_pill.dart';
+import '../document_preview_screen.dart';
 
 // ── Receipt helpers (inline) ──────────────────────────────────────────────
 
@@ -231,11 +232,14 @@ class _SaleDetailViewState extends State<_SaleDetailView> {
     );
   }
 
-  Future<void> _viewScreenshot(SaleDetailViewModel vm, int docId) async {
-    final uri = Uri.parse(vm.screenshotUrl(docId));
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    }
+  void _viewScreenshot(BuildContext context, SaleDetailViewModel vm, int docId) {
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => DocumentPreviewScreen(
+        title: 'Payment screenshot',
+        fileName: 'payment_$docId.jpg',
+        loader: () => vm.screenshotBytes(docId),
+      ),
+    ));
   }
 
   Widget _statusChip(Installment inst, SalePayment? pending, AppColors c) {
@@ -277,7 +281,8 @@ class _SaleDetailViewState extends State<_SaleDetailView> {
       if (vm.isSuperAdmin) {
         if (pending.documentIds.isNotEmpty) {
           actions.add(TextButton.icon(
-            onPressed: () => _viewScreenshot(vm, pending.documentIds.first),
+            onPressed: () =>
+                _viewScreenshot(context, vm, pending.documentIds.first),
             icon: const Icon(Icons.image_outlined, size: 18),
             label: const Text('Screenshot'),
           ));
@@ -306,14 +311,26 @@ class _SaleDetailViewState extends State<_SaleDetailView> {
         !inst.isPaid &&
         !inst.isCancelled) {
       if (inst.isPending) {
-        actions.add(TextButton.icon(
-          onPressed: vm.busy
-              ? null
-              : () => _act(context, () => vm.takeCall(inst.id),
-                  'Call assigned to you.'),
-          icon: const Icon(Icons.headset_mic_outlined, size: 18),
-          label: const Text('Take call'),
-        ));
+        final due = DateTime(
+            inst.dueDate.year, inst.dueDate.month, inst.dueDate.day);
+        final now = DateTime.now();
+        final today = DateTime(now.year, now.month, now.day);
+        if (due.isAfter(today)) {
+          // not due yet — the call opens on the due date
+          actions.add(Text(
+            'Scheduled — call opens on ${Formatters.date(inst.dueDate)}',
+            style: AppTextStyles.caption.copyWith(color: c.textSub),
+          ));
+        } else {
+          actions.add(TextButton.icon(
+            onPressed: vm.busy
+                ? null
+                : () => _act(context, () => vm.takeCall(inst.id),
+                    'Call assigned to you.'),
+            icon: const Icon(Icons.headset_mic_outlined, size: 18),
+            label: const Text('Take call'),
+          ));
+        }
       } else if (inst.isInProgress) {
         actions.add(IconButton(
           onPressed: () => _callCustomer(vm),

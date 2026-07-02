@@ -1,5 +1,5 @@
 """Data Access Object for customers — pure persistence, no business rules."""
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.customer import Customer
@@ -13,13 +13,34 @@ class CustomerDAO:
         return db.scalar(select(Module.id).where(Module.code == code))
 
     @staticmethod
-    def list(db: Session, *, status=None, branch=None) -> list[Customer]:
+    def list(
+        db: Session,
+        *,
+        status=None,
+        branch=None,
+        q: str | None = None,
+        limit: int | None = None,
+        offset: int | None = None,
+    ) -> list[Customer]:
         stmt = select(Customer).options(selectinload(Customer.documents))
         if status is not None:
             stmt = stmt.where(Customer.status == status)
         if branch is not None:
             stmt = stmt.where(Customer.branch == branch)
+        if q:
+            like = f"%{q.strip()}%"
+            stmt = stmt.where(
+                or_(
+                    Customer.first_name.ilike(like),
+                    Customer.last_name.ilike(like),
+                    Customer.phone.ilike(like),
+                )
+            )
         stmt = stmt.order_by(Customer.created_at.desc())
+        if offset:
+            stmt = stmt.offset(offset)
+        if limit:
+            stmt = stmt.limit(limit)
         return list(db.scalars(stmt).all())
 
     @staticmethod

@@ -16,7 +16,7 @@ class VehiclesListViewModel extends ChangeNotifier {
   final VehicleService _vehicles;
   final AuthController _auth;
 
-  static const pageSize = 5;
+  int _pageSize = 50;
 
   int _tab = 0; // 0 = Sold, 1 = Not sold
   int _page = 0;
@@ -24,6 +24,14 @@ class VehiclesListViewModel extends ChangeNotifier {
 
   int get tab => _tab;
   int get page => _page;
+  int get pageSize => _pageSize;
+  String get query => _query;
+
+  set pageSize(int v) {
+    _pageSize = v;
+    _page = 0;
+    notifyListeners();
+  }
 
   set tab(int v) {
     _tab = v;
@@ -48,7 +56,9 @@ class VehiclesListViewModel extends ChangeNotifier {
     return base
         .where((v) =>
             v.regNo.toLowerCase().contains(_query) ||
-            v.displayId.toLowerCase().contains(_query))
+            v.displayId.toLowerCase().contains(_query) ||
+            (v.model ?? '').toLowerCase().contains(_query) ||
+            (v.chassisNo ?? '').toLowerCase().contains(_query))
         .toList();
   }
 

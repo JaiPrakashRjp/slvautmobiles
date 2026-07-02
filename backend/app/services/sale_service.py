@@ -291,6 +291,11 @@ class SaleService:
             raise HTTPException(status_code=404, detail="Reminder not found")
         if inst.status == InstallmentStatus.paid:
             raise HTTPException(status_code=400, detail="Already paid")
+        # the call only opens on/after the reminder's due date
+        if inst.due_date > date.today():
+            raise HTTPException(
+                status_code=400, detail="Reminder is not due yet"
+            )
         if (
             inst.status == InstallmentStatus.in_progress
             and inst.taken_by is not None

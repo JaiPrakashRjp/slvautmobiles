@@ -21,10 +21,36 @@ class CustomersListViewModel extends ChangeNotifier {
   final VehicleService _vehicles;
   final AuthController _auth;
 
-  int _tab = 0; // 0 = Assigned, 1 = Not Assigned
+  int _tab = 0; // 0 = With vehicle (assigned), 1 = Without
+  int _page = 0;
+  int _pageSize = 50;
+  String _query = '';
+
   int get tab => _tab;
+  int get page => _page;
+  int get pageSize => _pageSize;
+  String get query => _query;
+
   set tab(int v) {
     _tab = v;
+    _page = 0;
+    notifyListeners();
+  }
+
+  set pageSize(int v) {
+    _pageSize = v;
+    _page = 0;
+    notifyListeners();
+  }
+
+  void search(String q) {
+    _query = q.trim().toLowerCase();
+    _page = 0;
+    notifyListeners();
+  }
+
+  void setPage(int p) {
+    _page = p;
     notifyListeners();
   }
 
@@ -34,17 +60,30 @@ class CustomersListViewModel extends ChangeNotifier {
       .map((v) => v.assignedToCustomerId!)
       .toSet();
 
-  List<Customer> get items {
+  List<Customer> get _filtered {
     final assigned = _assignedIds;
     return _customers.all().where((c) {
       final isAssigned = assigned.contains(c.id);
-      return _tab == 0 ? isAssigned : !isAssigned;
+      final tabOk = _tab == 0 ? isAssigned : !isAssigned;
+      if (!tabOk) return false;
+      if (_query.isEmpty) return true;
+      return c.fullName.toLowerCase().contains(_query) ||
+          c.phone.toLowerCase().contains(_query);
     }).toList();
+  }
+
+  int get totalPages => (_filtered.length / _pageSize).ceil().clamp(1, 9999);
+
+  List<Customer> get pageItems {
+    final all = _filtered;
+    final start = _page * _pageSize;
+    if (start >= all.length) return const [];
+    return all.sublist(start, (start + _pageSize).clamp(0, all.length));
   }
 
   bool isAssigned(Customer c) => _assignedIds.contains(c.id);
 
-  bool get isEmpty => items.isEmpty;
+  bool get isEmpty => _filtered.isEmpty;
 
   void delete(String id) => _customers.delete(id);
 

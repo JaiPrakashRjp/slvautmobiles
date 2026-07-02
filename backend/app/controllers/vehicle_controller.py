@@ -9,7 +9,7 @@ from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models.enums import Branch, EntityStatus, VehicleDocType
+from app.models.enums import Branch, EntityStatus, SaleStatus, VehicleDocType
 from app.models.user import User
 from app.schemas.vehicle import DocumentOut, VehicleCreate, VehicleOut, VehicleUpdate
 from app.security import get_current_user, require_super_admin
@@ -23,8 +23,20 @@ def list_vehicles(
     db: Session = Depends(get_db),
     status: EntityStatus | None = None,
     branch: Branch | None = None,
+    sale_status: SaleStatus | None = None,
+    q: str | None = Query(None, description="search reg no / chassis / model"),
+    limit: int | None = Query(None, ge=1, le=200),
+    offset: int | None = Query(None, ge=0),
 ):
-    return VehicleService.list(db, status=status, branch=branch)
+    return VehicleService.list(
+        db,
+        status=status,
+        branch=branch,
+        sale_status=sale_status,
+        q=q,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.get("/{vehicle_id}", response_model=VehicleOut)

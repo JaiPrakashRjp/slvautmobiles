@@ -74,6 +74,9 @@ abstract class SaleService extends ChangeNotifier {
   /// Absolute URL to view a payment proof screenshot.
   String screenshotUrl(int docId);
 
+  /// Raw bytes of a payment proof screenshot (for the in-app viewer).
+  Future<Uint8List> screenshotBytes(int docId);
+
   /// Cancel a sale (unsell): saves the reason, resets vehicle to not-sold.
   Future<void> cancel(String saleId, String reason, String byUserId);
 
@@ -336,6 +339,9 @@ class MockSaleService extends SaleService {
 
   @override
   String screenshotUrl(int docId) => '';
+
+  @override
+  Future<Uint8List> screenshotBytes(int docId) async => Uint8List(0);
 
   @override
   Future<void> cancel(String saleId, String reason, String byUserId) async {

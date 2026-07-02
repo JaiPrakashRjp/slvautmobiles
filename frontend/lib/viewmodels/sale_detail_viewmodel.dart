@@ -132,4 +132,6 @@ class SaleDetailViewModel extends ChangeNotifier {
       _run(() => _sales.declinePayment(_saleId, paymentId, reason));
 
   String screenshotUrl(int docId) => _sales.screenshotUrl(docId);
+  Future<Uint8List> screenshotBytes(int docId) =>
+      _sales.screenshotBytes(docId);
 }

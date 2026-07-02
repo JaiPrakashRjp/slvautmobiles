@@ -27,8 +27,13 @@ def list_customers(
     db: Session = Depends(get_db),
     status: EntityStatus | None = None,
     branch: Branch | None = None,
+    q: str | None = Query(None, description="search name / phone"),
+    limit: int | None = Query(None, ge=1, le=200),
+    offset: int | None = Query(None, ge=0),
 ):
-    return CustomerService.list(db, status=status, branch=branch)
+    return CustomerService.list(
+        db, status=status, branch=branch, q=q, limit=limit, offset=offset
+    )
 
 
 @router.get("/{customer_id}", response_model=CustomerOut)

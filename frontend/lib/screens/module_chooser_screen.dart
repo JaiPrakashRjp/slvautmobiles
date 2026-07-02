@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../controllers/auth_controller.dart';
 import '../models/enums.dart';
+import '../models/search_result.dart';
 import '../services/api_notification_service.dart';
+import '../services/global_search_service.dart';
 import '../theme/app_colors.dart';
 import '../utils/app_spacing.dart';
 import '../utils/app_text_styles.dart';
@@ -11,6 +15,8 @@ import '../utils/responsive.dart';
 import '../viewmodels/module_chooser_viewmodel.dart';
 import '../widgets/app_card.dart';
 import 'auto_sale/auto_sale_home_screen.dart';
+import 'auto_sale/customer_detail_screen.dart';
+import 'auto_sale/vehicle_detail_screen.dart';
 import 'loan/loan_home_screen.dart';
 import 'notifications_screen.dart';
 import 'rental/rental_home_screen.dart';
@@ -94,6 +100,8 @@ class _ModuleChooserView extends StatelessWidget {
               vertical: AppSpacing.xl,
             ),
             children: [
+              const _GlobalSearchBar(),
+              const SizedBox(height: AppSpacing.lg),
               if (vm.greetingName.isNotEmpty) ...[
                 Text(
                   'Welcome, ${vm.greetingName}',
@@ -114,6 +122,151 @@ class _ModuleChooserView extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Global search — find a customer or vehicle by name / phone / vehicle no.
+/// Fires only after 4 characters (debounced), hitting the indexed backend.
+class _GlobalSearchBar extends StatefulWidget {
+  const _GlobalSearchBar();
+
+  @override
+  State<_GlobalSearchBar> createState() => _GlobalSearchBarState();
+}
+
+class _GlobalSearchBarState extends State<_GlobalSearchBar> {
+  final _ctrl = TextEditingController();
+  final _service = GlobalSearchService();
+  Timer? _debounce;
+  List<SearchResult> _results = [];
+  bool _loading = false;
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  void _onChanged(String q) {
+    _debounce?.cancel();
+    if (q.trim().length < GlobalSearchService.minChars) {
+      setState(() {
+        _results = [];
+        _loading = false;
+      });
+      return;
+    }
+    setState(() => _loading = true);
+    _debounce = Timer(const Duration(milliseconds: 350), () async {
+      try {
+        final r = await _service.search(q);
+        if (mounted) {
+          setState(() {
+            _results = r;
+            _loading = false;
+          });
+        }
+      } catch (_) {
+        if (mounted) {
+          setState(() {
+            _results = [];
+            _loading = false;
+          });
+        }
+      }
+    });
+  }
+
+  void _open(SearchResult r) {
+    final route = r.kind == 'customer'
+        ? MaterialPageRoute<void>(
+            builder: (_) => CustomerDetailScreen(customerId: '${r.id}'))
+        : MaterialPageRoute<void>(
+            builder: (_) => VehicleDetailScreen(vehicleId: '${r.id}'));
+    Navigator.of(context).push(route);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final tooShort =
+        _ctrl.text.trim().isNotEmpty &&
+        _ctrl.text.trim().length < GlobalSearchService.minChars;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextField(
+          controller: _ctrl,
+          onChanged: _onChanged,
+          textInputAction: TextInputAction.search,
+          decoration: InputDecoration(
+            hintText: 'Search vehicle no, name or phone…',
+            prefixIcon: const Icon(Icons.search),
+            suffixIcon: _ctrl.text.isEmpty
+                ? null
+                : IconButton(
+                    icon: const Icon(Icons.clear),
+                    onPressed: () {
+                      _ctrl.clear();
+                      _onChanged('');
+                    },
+                  ),
+            border:
+                OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+            isDense: true,
+          ),
+        ),
+        if (tooShort)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text('Type at least 4 characters…',
+                style: AppTextStyles.caption.copyWith(color: c.textSub)),
+          ),
+        if (_loading)
+          const Padding(
+            padding: EdgeInsets.only(top: 8),
+            child: LinearProgressIndicator(),
+          ),
+        if (_results.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          AppCard(
+            padding: EdgeInsets.zero,
+            child: Column(
+              children: [
+                for (var i = 0; i < _results.length; i++) ...[
+                  ListTile(
+                    dense: true,
+                    leading: Icon(
+                      _results[i].kind == 'customer'
+                          ? Icons.person_outline
+                          : Icons.directions_car_outlined,
+                      color: c.primary,
+                    ),
+                    title: Text(_results[i].label),
+                    subtitle: _results[i].subtitle.isEmpty
+                        ? null
+                        : Text(_results[i].subtitle),
+                    trailing: Text(
+                      _results[i].kind == 'customer' ? 'Customer' : 'Vehicle',
+                      style: AppTextStyles.caption.copyWith(color: c.textSub),
+                    ),
+                    onTap: () => _open(_results[i]),
+                  ),
+                  if (i != _results.length - 1)
+                    Divider(height: 1, color: c.borderColor),
+                ],
+              ],
+            ),
+          ),
+        ] else if (!_loading &&
+            _ctrl.text.trim().length >= GlobalSearchService.minChars) ...[
+          const SizedBox(height: 8),
+          Text('No matches.',
+              style: AppTextStyles.body.copyWith(color: c.textSub)),
+        ],
+      ],
     );
   }
 }

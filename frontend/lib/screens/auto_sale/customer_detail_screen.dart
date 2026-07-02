@@ -16,6 +16,7 @@ import '../../widgets/role_gate_actions.dart';
 import '../../widgets/role_gate_banner.dart';
 import '../../widgets/secondary_button.dart';
 import '../../widgets/status_pill.dart';
+import '../document_preview_screen.dart';
 import 'assign_sale_screen.dart';
 import 'create_customer_screen.dart';
 import 'sale_detail_screen.dart';
@@ -144,6 +145,46 @@ class CustomerDetailScreen extends StatelessWidget {
                 ),
               ],
 
+              // ── Documents (view + share) ──────────────────────────────────
+              if (customer.uploadedDocs.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.lg),
+                Text('Documents',
+                    style: AppTextStyles.label.copyWith(color: c.textSub)),
+                const SizedBox(height: AppSpacing.sm),
+                AppCard(
+                  padding: EdgeInsets.zero,
+                  child: Column(
+                    children: [
+                      for (var i = 0; i < customer.uploadedDocs.length; i++) ...[
+                        ListTile(
+                          dense: true,
+                          leading: Icon(Icons.description_outlined,
+                              color: c.primary),
+                          title: Text(
+                              _kycLabel(customer.uploadedDocs[i].docTypeWire)),
+                          subtitle: Text(customer.uploadedDocs[i].fileName,
+                              maxLines: 1, overflow: TextOverflow.ellipsis),
+                          trailing: const Icon(Icons.visibility_outlined),
+                          onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => DocumentPreviewScreen(
+                                title: _kycLabel(
+                                    customer.uploadedDocs[i].docTypeWire),
+                                fileName: customer.uploadedDocs[i].fileName,
+                                loader: () => customers.documentBytes(
+                                    customer.uploadedDocs[i].id),
+                              ),
+                            ),
+                          ),
+                        ),
+                        if (i != customer.uploadedDocs.length - 1)
+                          Divider(height: 1, color: c.borderColor),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+
               // ── Assigned vehicle / sale ───────────────────────────────────
               const SizedBox(height: AppSpacing.lg),
               Text('Vehicle & sale',
@@ -244,6 +285,26 @@ class CustomerDetailScreen extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// Friendly label for a KYC document's backend type wire.
+String _kycLabel(String wire) {
+  switch (wire) {
+    case 'aadhaar':
+      return 'Aadhaar';
+    case 'pan':
+      return 'PAN';
+    case 'dl':
+      return 'Driving licence';
+    case 'photo':
+      return 'Photo';
+    case 'rental_agreement':
+      return 'Rental agreement';
+    case 'assurity_id_proof':
+      return 'Assurity ID proof';
+    default:
+      return wire.replaceAll('_', ' ');
   }
 }
 

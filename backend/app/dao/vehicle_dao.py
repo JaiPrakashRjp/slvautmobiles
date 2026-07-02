@@ -1,5 +1,5 @@
 """Data Access Object for vehicles — pure persistence, no business rules."""
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.module import Module
@@ -13,13 +13,37 @@ class VehicleDAO:
         return db.scalar(select(Module.id).where(Module.code == code))
 
     @staticmethod
-    def list(db: Session, *, status=None, branch=None) -> list[Vehicle]:
+    def list(
+        db: Session,
+        *,
+        status=None,
+        branch=None,
+        sale_status=None,
+        q: str | None = None,
+        limit: int | None = None,
+        offset: int | None = None,
+    ) -> list[Vehicle]:
         stmt = select(Vehicle).options(selectinload(Vehicle.documents))
         if status is not None:
             stmt = stmt.where(Vehicle.status == status)
         if branch is not None:
             stmt = stmt.where(Vehicle.branch == branch)
+        if sale_status is not None:
+            stmt = stmt.where(Vehicle.sale_status == sale_status)
+        if q:
+            like = f"%{q.strip()}%"
+            stmt = stmt.where(
+                or_(
+                    Vehicle.reg_no.ilike(like),
+                    Vehicle.chassis_no.ilike(like),
+                    Vehicle.model.ilike(like),
+                )
+            )
         stmt = stmt.order_by(Vehicle.created_at.desc())
+        if offset:
+            stmt = stmt.offset(offset)
+        if limit:
+            stmt = stmt.limit(limit)
         return list(db.scalars(stmt).all())
 
     @staticmethod

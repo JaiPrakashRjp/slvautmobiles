@@ -16,6 +16,7 @@ import '../../widgets/confirmation_dialog.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/gold_create_button.dart';
 import '../../widgets/icon_button_soft.dart';
+import '../../widgets/page_size_picker.dart';
 import '../../widgets/status_pill.dart';
 import '../../widgets/tab_bar_navy.dart';
 import 'create_customer_screen.dart';
@@ -81,6 +82,32 @@ class _CustomersListView extends StatelessWidget {
                   onChanged: (i) => vm.tab = i,
                 ),
               ),
+              Padding(
+                padding: EdgeInsets.fromLTRB(context.screenHPadding, 0,
+                    context.screenHPadding, AppSpacing.sm),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        onChanged: (q) {
+                          final t = q.trim();
+                          vm.search(t.length >= 4 ? t : '');
+                        },
+                        decoration: InputDecoration(
+                          hintText: 'Search name / phone…',
+                          prefixIcon: const Icon(Icons.search, size: 20),
+                          isDense: true,
+                          border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    PageSizePicker(
+                        value: vm.pageSize, onChanged: (v) => vm.pageSize = v),
+                  ],
+                ),
+              ),
               Expanded(
                 child: customers.loading && vm.isEmpty
                     ? const Center(child: CircularProgressIndicator())
@@ -98,11 +125,30 @@ class _CustomersListView extends StatelessWidget {
                         padding: EdgeInsets.fromLTRB(context.screenHPadding, 0,
                             context.screenHPadding, AppSpacing.xl),
                         children: [
-                          for (final cust in vm.items)
+                          for (final cust in vm.pageItems)
                             Padding(
                               padding:
                                   const EdgeInsets.only(bottom: AppSpacing.lg),
                               child: _CustomerCard(customer: cust, vm: vm),
+                            ),
+                          if (vm.totalPages > 1)
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                IconButton(
+                                  onPressed: vm.page > 0
+                                      ? () => vm.setPage(vm.page - 1)
+                                      : null,
+                                  icon: const Icon(Icons.chevron_left),
+                                ),
+                                Text('Page ${vm.page + 1} of ${vm.totalPages}'),
+                                IconButton(
+                                  onPressed: vm.page < vm.totalPages - 1
+                                      ? () => vm.setPage(vm.page + 1)
+                                      : null,
+                                  icon: const Icon(Icons.chevron_right),
+                                ),
+                              ],
                             ),
                         ],
                       ),

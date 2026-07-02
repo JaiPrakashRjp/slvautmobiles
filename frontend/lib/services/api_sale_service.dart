@@ -222,6 +222,10 @@ class ApiSaleService extends SaleService {
       _api.absoluteUrl('/sales/payments/documents/$docId');
 
   @override
+  Future<Uint8List> screenshotBytes(int docId) =>
+      _api.getBytes('/sales/payments/documents/$docId');
+
+  @override
   Future<void> cancel(String saleId, String reason, String byUserId) async {
     final numId = int.tryParse(saleId) ?? 0;
     // by_user_id comes from the Bearer token server-side.
