@@ -110,22 +110,42 @@ class _CustomersListView extends StatelessWidget {
                 ),
               ),
               Expanded(
-                child: customers.loading && vm.isEmpty
-                    ? const Center(child: CircularProgressIndicator())
-                    : vm.isEmpty
-                    ? EmptyState(
-                        icon: Icons.people_outline,
-                        title: vm.tab == 0
-                            ? 'No customers with a vehicle'
-                            : 'No customers without a vehicle',
-                        subtitle: 'Tap “+” to add a customer.',
-                        ctaLabel: 'Add customer',
-                        onCta: () => _openCreate(context),
-                      )
-                    : ListView(
-                        padding: EdgeInsets.fromLTRB(context.screenHPadding, 0,
-                            context.screenHPadding, AppSpacing.xl),
-                        children: [
+                child: GestureDetector(
+                  onHorizontalDragEnd: (d) {
+                    final vel = d.primaryVelocity ?? 0;
+                    if (vel < -250 && vm.tab == 0) vm.tab = 1;
+                    if (vel > 250 && vm.tab == 1) vm.tab = 0;
+                  },
+                  child: RefreshIndicator(
+                    onRefresh: () async {
+                      final vehicleSvc = context.read<VehicleService>();
+                      await customers.refresh();
+                      await vehicleSvc.refresh();
+                    },
+                    child: ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: EdgeInsets.fromLTRB(context.screenHPadding, 0,
+                          context.screenHPadding, AppSpacing.xl),
+                      children: [
+                        if (customers.loading && vm.isEmpty)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 80),
+                            child: Center(child: CircularProgressIndicator()),
+                          )
+                        else if (vm.isEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 40),
+                            child: EmptyState(
+                              icon: Icons.people_outline,
+                              title: vm.tab == 0
+                                  ? 'No customers with a vehicle'
+                                  : 'No customers without a vehicle',
+                              subtitle: 'Tap “+” to add a customer.',
+                              ctaLabel: 'Add customer',
+                              onCta: () => _openCreate(context),
+                            ),
+                          )
+                        else ...[
                           for (final cust in vm.pageItems)
                             Padding(
                               padding:
@@ -152,7 +172,10 @@ class _CustomersListView extends StatelessWidget {
                               ],
                             ),
                         ],
-                      ),
+                      ],
+                    ),
+                  ),
+                ),
               ),
             ],
           ),

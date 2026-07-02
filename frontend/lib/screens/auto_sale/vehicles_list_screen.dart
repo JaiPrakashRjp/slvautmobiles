@@ -113,29 +113,49 @@ class _VehiclesListView extends StatelessWidget {
                 ),
               ),
               Expanded(
-                child: vehicles.loading && vm.isEmpty
-                    ? const Center(child: CircularProgressIndicator())
-                    : vm.isEmpty
-                    ? EmptyState(
-                        title: vm.tab == 0
-                            ? 'No sold vehicles'
-                            : 'No unsold vehicles',
-                        subtitle: 'Tap “Create” to add an auto-rickshaw.',
-                        ctaLabel: 'Create vehicle',
-                        onCta: () => _openCreate(context),
-                      )
-                    : ListView(
-                        padding: EdgeInsets.fromLTRB(context.screenHPadding, 0,
-                            context.screenHPadding, AppSpacing.xl),
-                        children: [
+                child: GestureDetector(
+                  onHorizontalDragEnd: (d) {
+                    final vel = d.primaryVelocity ?? 0;
+                    if (vel < -250 && vm.tab == 0) vm.tab = 1; // swipe left → next
+                    if (vel > 250 && vm.tab == 1) vm.tab = 0; // swipe right → prev
+                  },
+                  child: RefreshIndicator(
+                    onRefresh: () => vehicles.refresh(),
+                    child: ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: EdgeInsets.fromLTRB(context.screenHPadding, 0,
+                          context.screenHPadding, AppSpacing.xl),
+                      children: [
+                        if (vehicles.loading && vm.isEmpty)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 80),
+                            child: Center(child: CircularProgressIndicator()),
+                          )
+                        else if (vm.isEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 40),
+                            child: EmptyState(
+                              title: vm.tab == 0
+                                  ? 'No sold vehicles'
+                                  : 'No unsold vehicles',
+                              subtitle: 'Tap “Create” to add an auto-rickshaw.',
+                              ctaLabel: 'Create vehicle',
+                              onCta: () => _openCreate(context),
+                            ),
+                          )
+                        else ...[
                           for (final v in vm.pageItems)
                             Padding(
-                              padding: const EdgeInsets.only(bottom: AppSpacing.lg),
+                              padding:
+                                  const EdgeInsets.only(bottom: AppSpacing.lg),
                               child: _VehicleCard(vehicle: v, vm: vm),
                             ),
                           if (vm.totalPages > 1) _Pager(vm: vm),
                         ],
-                      ),
+                      ],
+                    ),
+                  ),
+                ),
               ),
             ],
           ),

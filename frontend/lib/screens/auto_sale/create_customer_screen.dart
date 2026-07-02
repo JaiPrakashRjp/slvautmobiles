@@ -54,6 +54,20 @@ class _CreateCustomerView extends StatefulWidget {
 class _CreateCustomerViewState extends State<_CreateCustomerView> {
   final _formKey = GlobalKey<FormState>();
   bool _submitting = false;
+  bool _photoUploading = false;
+
+  // Cache the existing-photo bytes so the edit screen doesn't refetch on every
+  // rebuild (faster load). Invalidated after a new photo is uploaded.
+  int? _photoDocId;
+  Future<Uint8List>? _photoFuture;
+
+  Future<Uint8List> _photoBytes(CustomerService customers, int docId) {
+    if (_photoDocId != docId || _photoFuture == null) {
+      _photoDocId = docId;
+      _photoFuture = customers.documentBytes(docId);
+    }
+    return _photoFuture!;
+  }
 
   // Photo is handled separately at the TOP of the form (profile photo).
   static const _docTypes = [
@@ -89,16 +103,22 @@ class _CreateCustomerViewState extends State<_CreateCustomerView> {
   /// edit mode uploads it live.
   Future<void> _setPhoto(CreateCustomerViewModel vm, PickedDoc? p) async {
     if (p == null) return;
-    if (vm.isEditing) {
-      final customers = context.read<CustomerService>();
-      final messenger = ScaffoldMessenger.of(context);
-      try {
-        await customers.uploadDocument(vm.existingId!, 'photo', p);
-      } catch (e) {
-        messenger.showSnackBar(SnackBar(content: Text('Upload failed: $e')));
-      }
-    } else {
-      vm.setDocument(KycDocType.photo, p);
+    if (!vm.isEditing) {
+      vm.setDocument(KycDocType.photo, p); // held for upload-on-submit
+      return;
+    }
+    // Edit mode: upload live, with a spinner + a "saved" confirmation.
+    final customers = context.read<CustomerService>();
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _photoUploading = true);
+    try {
+      await customers.uploadDocument(vm.existingId!, 'photo', p);
+      _photoDocId = null; // invalidate cache → the new photo reloads
+      messenger.showSnackBar(const SnackBar(content: Text('Photo saved.')));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Upload failed: $e')));
+    } finally {
+      if (mounted) setState(() => _photoUploading = false);
     }
   }
 
@@ -139,8 +159,7 @@ class _CreateCustomerViewState extends State<_CreateCustomerView> {
                 width: 110,
                 height: 110,
                 child: FutureBuilder<Uint8List>(
-                  future:
-                      context.read<CustomerService>().documentBytes(ref.id),
+                  future: _photoBytes(context.read<CustomerService>(), ref.id),
                   builder: (ctx, snap) =>
                       (snap.hasData && snap.data!.isNotEmpty)
                           ? Image.memory(snap.data!, fit: BoxFit.cover)
@@ -155,18 +174,37 @@ class _CreateCustomerViewState extends State<_CreateCustomerView> {
     return Center(
       child: Column(
         children: [
-          avatar,
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              avatar,
+              if (_photoUploading)
+                Container(
+                  width: 110,
+                  height: 110,
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.black45,
+                  ),
+                  child: const Center(child: CircularProgressIndicator()),
+                ),
+            ],
+          ),
           const SizedBox(height: AppSpacing.xs),
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               TextButton.icon(
-                onPressed: () async => _setPhoto(vm, await pickPhotoDoc()),
+                onPressed: _photoUploading
+                    ? null
+                    : () async => _setPhoto(vm, await pickPhotoDoc()),
                 icon: const Icon(Icons.camera_alt_outlined, size: 18),
                 label: const Text('Camera'),
               ),
               TextButton.icon(
-                onPressed: () async => _setPhoto(vm, await pickFileDoc()),
+                onPressed: _photoUploading
+                    ? null
+                    : () async => _setPhoto(vm, await pickFileDoc()),
                 icon: const Icon(Icons.upload_outlined, size: 18),
                 label: const Text('Upload'),
               ),
