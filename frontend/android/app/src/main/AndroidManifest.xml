@@ -47,5 +47,24 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
+        <!-- url_launcher needs these declared on Android 11+ (API 30+), otherwise
+             launchUrl() for a web link (the "Download update" APK URL) and the
+             WhatsApp/SMS/tel deep links silently fail to resolve a handler. -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="https"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="http"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="tel"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="sms"/>
+        </intent>
     </queries>
 </manifest>

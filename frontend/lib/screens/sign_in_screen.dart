@@ -30,15 +30,37 @@ class SignInScreen extends StatelessWidget {
   }
 }
 
-class _SignInView extends StatelessWidget {
+class _SignInView extends StatefulWidget {
   const _SignInView();
 
-  Future<void> _onSubmit(BuildContext context) async {
+  @override
+  State<_SignInView> createState() => _SignInViewState();
+}
+
+class _SignInViewState extends State<_SignInView> {
+  // Non-null once a newer published build is detected. While set, the login
+  // form is hidden and only the update gate is shown (sign-in is blocked).
+  AppUpdateInfo? _update;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkForUpdate();
+  }
+
+  Future<void> _checkForUpdate() async {
+    final info = await AppVersionService().check();
+    if (mounted && info != null && info.updateAvailable) {
+      setState(() => _update = info);
+    }
+  }
+
+  Future<void> _onSubmit() async {
     final vm = context.read<SignInViewModel>();
     final feed = context.read<NotificationFeed>();
     final sales = context.read<SaleService>();
     final ok = await vm.submit();
-    if (ok && context.mounted) {
+    if (ok && mounted) {
       unawaited(feed.refresh());
       unawaited(sales.refresh());
       Navigator.of(context).pushReplacement(
@@ -51,6 +73,7 @@ class _SignInView extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.colors;
     final vm = context.watch<SignInViewModel>();
+    final update = _update;
 
     return Scaffold(
       backgroundColor: c.bgCanvas,
@@ -72,57 +95,11 @@ class _SignInView extends StatelessWidget {
                   fit: BoxFit.contain,
                 ),
                 const SizedBox(height: AppSpacing.xxl),
-                const _UpdateBanner(),
-                Text('Sign in', style: AppTextStyles.pageTitle.copyWith(color: c.textMain)),
-                const SizedBox(height: AppSpacing.sm),
-                Text(
-                  'Sign in to continue',
-                  style: AppTextStyles.body.copyWith(color: c.textSub),
-                ),
-                const SizedBox(height: AppSpacing.xxl),
-                AppTextField(
-                  label: 'Email',
-                  hint: 'Enter your email',
-                  controller: vm.emailController,
-                  keyboardType: TextInputType.emailAddress,
-                  textInputAction: TextInputAction.next,
-                ),
-                const SizedBox(height: AppSpacing.lg),
-                AppTextField(
-                  label: 'Password',
-                  hint: 'Enter your password',
-                  controller: vm.passwordController,
-                  obscureText: vm.obscure,
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                      vm.obscure ? Icons.visibility_off : Icons.visibility,
-                      color: c.textSub,
-                      size: 20,
-                    ),
-                    onPressed: vm.toggleObscure,
-                  ),
-                ),
-                if (vm.error != null) ...[
-                  const SizedBox(height: AppSpacing.md),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      vm.error!,
-                      style: AppTextStyles.caption.copyWith(color: c.danger),
-                    ),
-                  ),
-                ],
-                const SizedBox(height: AppSpacing.xxl),
-                _SignInButton(
-                  loading: vm.loading,
-                  onPressed: () => _onSubmit(context),
-                ),
-                const SizedBox(height: AppSpacing.lg),
-                Text(
-                  "Don't have an account? Contact Super admin",
-                  textAlign: TextAlign.center,
-                  style: AppTextStyles.body.copyWith(color: c.textSub),
-                ),
+                // Update available → block sign-in, show only the download gate.
+                if (update != null)
+                  _UpdateGate(info: update)
+                else
+                  ..._signInForm(c, vm),
                 const SizedBox(height: AppSpacing.xxl),
                 Text('v1.0.0',
                     style: AppTextStyles.caption.copyWith(color: c.textSub)),
@@ -133,36 +110,78 @@ class _SignInView extends StatelessWidget {
       ),
     );
   }
+
+  List<Widget> _signInForm(AppColors c, SignInViewModel vm) {
+    return [
+      Text('Sign in',
+          style: AppTextStyles.pageTitle.copyWith(color: c.textMain)),
+      const SizedBox(height: AppSpacing.sm),
+      Text(
+        'Sign in to continue',
+        style: AppTextStyles.body.copyWith(color: c.textSub),
+      ),
+      const SizedBox(height: AppSpacing.xxl),
+      AppTextField(
+        label: 'Email',
+        hint: 'Enter your email',
+        controller: vm.emailController,
+        keyboardType: TextInputType.emailAddress,
+        textInputAction: TextInputAction.next,
+      ),
+      const SizedBox(height: AppSpacing.lg),
+      AppTextField(
+        label: 'Password',
+        hint: 'Enter your password',
+        controller: vm.passwordController,
+        obscureText: vm.obscure,
+        suffixIcon: IconButton(
+          icon: Icon(
+            vm.obscure ? Icons.visibility_off : Icons.visibility,
+            color: c.textSub,
+            size: 20,
+          ),
+          onPressed: vm.toggleObscure,
+        ),
+      ),
+      if (vm.error != null) ...[
+        const SizedBox(height: AppSpacing.md),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Text(
+            vm.error!,
+            style: AppTextStyles.caption.copyWith(color: c.danger),
+          ),
+        ),
+      ],
+      const SizedBox(height: AppSpacing.xxl),
+      _SignInButton(
+        loading: vm.loading,
+        onPressed: _onSubmit,
+      ),
+      const SizedBox(height: AppSpacing.lg),
+      Text(
+        "Don't have an account? Contact Super admin",
+        textAlign: TextAlign.center,
+        style: AppTextStyles.body.copyWith(color: c.textSub),
+      ),
+    ];
+  }
 }
 
-/// Checks for a newer published APK and, if found, shows a download card so the
-/// user can update their sideloaded app. Silent when up to date / offline.
-class _UpdateBanner extends StatefulWidget {
-  const _UpdateBanner();
+/// Blocking update card shown on the login screen when a newer build exists.
+/// Sign-in is hidden while this is up, so the user must update first.
+class _UpdateGate extends StatefulWidget {
+  const _UpdateGate({required this.info});
+
+  final AppUpdateInfo info;
 
   @override
-  State<_UpdateBanner> createState() => _UpdateBannerState();
+  State<_UpdateGate> createState() => _UpdateGateState();
 }
 
-class _UpdateBannerState extends State<_UpdateBanner> {
-  AppUpdateInfo? _info;
-
-  @override
-  void initState() {
-    super.initState();
-    _check();
-  }
-
-  Future<void> _check() async {
-    final info = await AppVersionService().check();
-    if (mounted && info != null && info.updateAvailable) {
-      setState(() => _info = info);
-    }
-  }
-
+class _UpdateGateState extends State<_UpdateGate> {
   Future<void> _download() async {
-    final url = _info?.downloadUrl;
-    if (url == null) return;
+    final url = widget.info.downloadUrl;
     final messenger = ScaffoldMessenger.of(context);
     final uri = Uri.parse(url);
     try {
@@ -179,11 +198,9 @@ class _UpdateBannerState extends State<_UpdateBanner> {
 
   @override
   Widget build(BuildContext context) {
-    final info = _info;
-    if (info == null) return const SizedBox.shrink();
     final c = context.colors;
+    final info = widget.info;
     return Container(
-      margin: const EdgeInsets.only(bottom: AppSpacing.xl),
       padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
         color: c.primary.withValues(alpha: 0.06),
@@ -215,6 +232,11 @@ class _UpdateBannerState extends State<_UpdateBanner> {
             Text(info.notes,
                 style: AppTextStyles.caption.copyWith(color: c.textSub)),
           ],
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            'Please update to the latest version to continue.',
+            style: AppTextStyles.caption.copyWith(color: c.textSub),
+          ),
           const SizedBox(height: AppSpacing.md),
           SizedBox(
             width: double.infinity,
