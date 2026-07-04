@@ -163,9 +163,17 @@ class _UpdateBannerState extends State<_UpdateBanner> {
   Future<void> _download() async {
     final url = _info?.downloadUrl;
     if (url == null) return;
+    final messenger = ScaffoldMessenger.of(context);
     final uri = Uri.parse(url);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    try {
+      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!ok && mounted) {
+        messenger.showSnackBar(SnackBar(content: Text('Could not open $url')));
+      }
+    } catch (e) {
+      if (mounted) {
+        messenger.showSnackBar(SnackBar(content: Text('Download failed: $e')));
+      }
     }
   }
 
