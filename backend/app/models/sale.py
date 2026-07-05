@@ -86,6 +86,10 @@ class Sale(Base):
     confirmed_at: Mapped[datetime | None] = mapped_column()
     rejection_reason: Mapped[str | None] = mapped_column(Text)
     unsell_reason: Mapped[str | None] = mapped_column(Text)
+    # seizure (repossession): set when the vehicle is seized from this customer.
+    seized_at: Mapped[datetime | None] = mapped_column()
+    seized_by: Mapped[int | None] = mapped_column(BigInteger)
+    seize_reason: Mapped[str | None] = mapped_column(Text)
     remarks: Mapped[str | None] = mapped_column(Text)
 
     installments: Mapped[list["SaleInstallment"]] = relationship(  # noqa: F821

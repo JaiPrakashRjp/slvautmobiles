@@ -166,6 +166,16 @@ def cancel_sale(
     return SaleService.cancel(db, sale_id, reason, current_user.id)
 
 
+@router.post("/{sale_id}/seize", response_model=SaleOut)
+def seize_sale(
+    sale_id: int,
+    reason: str = Query(..., min_length=1),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_super_admin),
+):
+    return SaleService.seize(db, sale_id, reason, current_user.id)
+
+
 @router.delete("/{sale_id}", status_code=204)
 def delete_sale(
     sale_id: int,

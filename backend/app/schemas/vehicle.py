@@ -96,6 +96,7 @@ class VehicleOut(VehicleBase):
     module_id: int
     inventory_status: InventoryStatus
     sale_status: SaleStatus
+    is_seized: bool = False
     next_service_due_date: date | None = None
     assigned_to_customer_id: int | None = None
     status: EntityStatus

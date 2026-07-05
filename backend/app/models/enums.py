@@ -76,6 +76,7 @@ class SaleLifecycle(str, enum.Enum):
     active = "active"
     closed = "closed"
     cancelled = "cancelled"
+    seized = "seized"
 
 
 class InstallmentStatus(str, enum.Enum):

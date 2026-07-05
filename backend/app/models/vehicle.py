@@ -98,6 +98,9 @@ class Vehicle(Base):
     assigned_to_customer_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("customers.id")
     )
+    # current-state flag: true while seized (and not yet re-sold). The seizure
+    # history itself lives on the seized `sales` row, so it survives a re-sale.
+    is_seized: Mapped[bool] = mapped_column(nullable=False, server_default="false")
 
     # role-gate / audit
     status: Mapped[EntityStatus] = mapped_column(

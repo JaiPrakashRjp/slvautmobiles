@@ -7,7 +7,7 @@ raised for the super admins.
 from __future__ import annotations
 
 import calendar
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
@@ -132,11 +132,13 @@ class SaleService:
         # NOTE: installment schedule is intentionally not built here yet — the
         # monthly/EMI flow is being revisited alongside WhatsApp reminders.
 
-        # mark the vehicle sold + assigned
+        # mark the vehicle sold + assigned; clear any prior seizure flag (a
+        # re-sold vehicle is no longer "seized" — the history stays on the old sale).
         vehicle = db.get(Vehicle, data.vehicle_id)
         if vehicle is not None:
             vehicle.sale_status = SaleStatus.sold
             vehicle.assigned_to_customer_id = data.customer_id
+            vehicle.is_seized = False
 
         if actor_role != "super_admin":
             NotificationService.create_verification(
@@ -235,9 +237,22 @@ class SaleService:
         db.commit()
         return SaleService.get(db, sale_id)
 
+    # A sale can only be reversed ("unsold") within this window of being created.
+    UNSELL_WINDOW = timedelta(hours=2)
+
     @staticmethod
     def cancel(db: Session, sale_id: int, reason: str, by_user_id: int) -> "Sale":
         sale = SaleService.get(db, sale_id)
+        # Enforce the 2-hour unsell window (applies to everyone, incl. super admin).
+        # created_at is stored as naive UTC, so treat it as UTC when comparing.
+        created = sale.created_at
+        if created.tzinfo is None:
+            created = created.replace(tzinfo=timezone.utc)
+        if datetime.now(timezone.utc) - created > SaleService.UNSELL_WINDOW:
+            raise HTTPException(
+                status_code=403,
+                detail="This sale can no longer be unsold — the 2-hour window has passed.",
+            )
         sale.sale_status = SaleLifecycle.cancelled
         sale.unsell_reason = reason
         # Reset vehicle back to not-sold and unassign the customer.
@@ -245,6 +260,31 @@ class SaleService:
         if vehicle is not None:
             vehicle.sale_status = SaleStatus.not_sold
             vehicle.assigned_to_customer_id = None
+        db.commit()
+        return SaleService.get(db, sale_id)
+
+    @staticmethod
+    def seize(db: Session, sale_id: int, reason: str, by_user_id: int) -> "Sale":
+        """Repossess the vehicle from a defaulting customer. Unlike unsell there
+        is no time limit. The sale row is kept as history (status -> seized); the
+        vehicle is freed (not_sold + is_seized flag) so it can be re-sold."""
+        sale = SaleService.get(db, sale_id)
+        if sale.sale_status != SaleLifecycle.active:
+            raise HTTPException(
+                status_code=400,
+                detail="Only an active sale can be seized.",
+            )
+        sale.sale_status = SaleLifecycle.seized
+        sale.seized_at = datetime.now(timezone.utc)
+        sale.seized_by = by_user_id
+        sale.seize_reason = reason
+        # Free the vehicle for re-sale, but flag it as currently seized. The
+        # seized sale row (with its customer + payments) remains the history.
+        vehicle = db.get(Vehicle, sale.vehicle_id)
+        if vehicle is not None:
+            vehicle.sale_status = SaleStatus.not_sold
+            vehicle.assigned_to_customer_id = None
+            vehicle.is_seized = True
         db.commit()
         return SaleService.get(db, sale_id)
 

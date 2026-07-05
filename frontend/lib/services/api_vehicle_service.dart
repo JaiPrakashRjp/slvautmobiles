@@ -325,6 +325,7 @@ class ApiVehicleService extends VehicleService {
       inventoryStatus: InventoryStatus.fromWire(
           (j['inventory_status'] as String?) ?? 'available'),
       saleStatus: SaleStatus.fromWire(j['sale_status'] as String?),
+      isSeized: (j['is_seized'] as bool?) ?? false,
       nextServiceDueDate: _parseDate(j['next_service_due_date']),
       createdBy: j['created_by']?.toString() ?? '',
       createdAt: _parseDate(j['created_at']) ?? DateTime.now(),

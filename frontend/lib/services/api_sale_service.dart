@@ -29,9 +29,17 @@ class ApiSaleService extends SaleService {
 
   @override
   Sale? forVehicle(String vehicleId) => _cache
-      .where((s) => s.vehicleId == vehicleId && s.saleStatus != 'cancelled')
+      .where((s) =>
+          s.vehicleId == vehicleId &&
+          s.saleStatus != 'cancelled' &&
+          s.saleStatus != 'seized')
       .cast<Sale?>()
       .firstOrNull;
+
+  @override
+  List<Sale> seizedForVehicle(String vehicleId) => _cache
+      .where((s) => s.vehicleId == vehicleId && s.saleStatus == 'seized')
+      .toList();
 
   @override
   List<Sale> forCustomer(String customerId) =>
@@ -239,6 +247,19 @@ class ApiSaleService extends SaleService {
   }
 
   @override
+  Future<void> seize(String saleId, String reason, String byUserId) async {
+    final numId = int.tryParse(saleId) ?? 0;
+    // by_user_id comes from the Bearer token server-side.
+    final j = await _api.post('/sales/$numId/seize', query: {'reason': reason});
+    final updated = _fromJson(j as Map<String, dynamic>);
+    final idx = _cache.indexWhere((s) => s.id == saleId);
+    if (idx != -1) {
+      _cache[idx] = updated;
+    }
+    notifyListeners();
+  }
+
+  @override
   void confirm(String id, String byUserId) {
     final numId = int.tryParse(id) ?? 0;
     // by_user_id comes from the Bearer token server-side.
@@ -314,11 +335,14 @@ class ApiSaleService extends SaleService {
       payments: payments,
       saleStatus: (j['sale_status'] as String?) ?? 'active',
       createdBy: (j['created_by'] as int? ?? 0).toString(),
-      createdAt:
-          DateTime.tryParse((j['created_at'] as String?) ?? '') ?? DateTime.now(),
+      createdAt: _parseUtc(j['created_at'] as String?),
       // SaleOut uses "status" (not "entity_status") for the gated entity status
       status: EntityStatus.fromWire((j['status'] as String?) ?? 'active'),
       unsellReason: j['unsell_reason'] as String?,
+      seizedAt: j['seized_at'] == null
+          ? null
+          : DateTime.tryParse(j['seized_at'] as String),
+      seizeReason: j['seize_reason'] as String?,
       remarks: j['remarks'] as String?,
     );
   }
@@ -359,4 +383,14 @@ class ApiSaleService extends SaleService {
 
   static DateTime? _parseDate(String? s) =>
       s == null ? null : DateTime.tryParse(s);
+
+  /// Parses a backend timestamp as a UTC instant. The API sends naive UTC
+  /// (no timezone suffix), so append 'Z' when none is present — otherwise
+  /// DateTime would read it as device-local time and elapsed-time math (e.g. the
+  /// 2-hour unsell window) would be off by the device's UTC offset.
+  static DateTime _parseUtc(String? s) {
+    if (s == null || s.isEmpty) return DateTime.now().toUtc();
+    final hasZone = s.endsWith('Z') || RegExp(r'[+-]\d\d:?\d\d$').hasMatch(s);
+    return DateTime.parse(hasZone ? s : '${s}Z');
+  }
 }

@@ -40,6 +40,8 @@ class Sale with GatedEntity {
     this.confirmedAt,
     this.rejectionReason,
     this.unsellReason,
+    this.seizedAt,
+    this.seizeReason,
   })  : installments = installments ?? [],
         payments = payments ?? [];
 
@@ -100,6 +102,19 @@ class Sale with GatedEntity {
   @override
   String? rejectionReason;
   String? unsellReason;
+
+  // Seizure (repossession) audit — set on a seized sale (kept as history).
+  DateTime? seizedAt;
+  String? seizeReason;
+
+  /// A sale can be reversed ("unsold") only within this window after creation.
+  static const unsellWindow = Duration(hours: 2);
+
+  /// Whether the 2-hour unsell window is still open. [createdAt] is a UTC
+  /// instant, so compare against the current UTC time (the server and phone can
+  /// be in different time zones). Mirrors the backend's own check.
+  bool get canUnsell =>
+      DateTime.now().toUtc().difference(createdAt.toUtc()) < unsellWindow;
 
   DepositType get depositType =>
       mode == PaymentMode.full ? DepositType.fullCash : DepositType.downPayment;

@@ -80,6 +80,13 @@ abstract class SaleService extends ChangeNotifier {
   /// Cancel a sale (unsell): saves the reason, resets vehicle to not-sold.
   Future<void> cancel(String saleId, String reason, String byUserId);
 
+  /// Seize (repossess) the vehicle: marks the sale `seized` (kept as history),
+  /// frees the vehicle, and flags it `is_seized`. No time limit.
+  Future<void> seize(String saleId, String reason, String byUserId);
+
+  /// Seized sales for a vehicle (its repossession history), newest first.
+  List<Sale> seizedForVehicle(String vehicleId);
+
   void confirm(String id, String byUserId);
   void reject(String id, String reason, String byUserId);
   void delete(String id);
@@ -164,7 +171,10 @@ class MockSaleService extends SaleService {
 
   @override
   Sale? forVehicle(String vehicleId) => _sales
-      .where((s) => s.vehicleId == vehicleId && s.saleStatus != 'cancelled')
+      .where((s) =>
+          s.vehicleId == vehicleId &&
+          s.saleStatus != 'cancelled' &&
+          s.saleStatus != 'seized')
       .cast<Sale?>()
       .firstOrNull;
 
@@ -352,6 +362,21 @@ class MockSaleService extends SaleService {
     _vehicles.release(s.vehicleId);
     notifyListeners();
   }
+
+  @override
+  Future<void> seize(String saleId, String reason, String byUserId) async {
+    final s = byId(saleId);
+    if (s == null) return;
+    s.saleStatus = 'seized';
+    s.unsellReason = reason;
+    _vehicles.release(s.vehicleId);
+    notifyListeners();
+  }
+
+  @override
+  List<Sale> seizedForVehicle(String vehicleId) => _sales
+      .where((s) => s.vehicleId == vehicleId && s.saleStatus == 'seized')
+      .toList();
 
   @override
   void confirm(String id, String byUserId) {

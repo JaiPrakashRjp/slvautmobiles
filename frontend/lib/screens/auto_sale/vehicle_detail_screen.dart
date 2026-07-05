@@ -5,6 +5,7 @@ import '../../controllers/auth_controller.dart';
 import '../../models/doc_ref.dart';
 import '../../models/enums.dart';
 import '../../models/picked_doc.dart';
+import '../../models/sale.dart';
 import '../../models/vehicle.dart';
 import '../../services/customer_service.dart';
 import '../../services/financer_service.dart';
@@ -111,6 +112,67 @@ class VehicleDetailScreen extends StatelessWidget {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Sale cancelled. Vehicle is now available.')),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Failed: $e')));
+    }
+  }
+
+  /// Seize: repossess the vehicle from a defaulting customer. Keeps the sale as
+  /// history (status seized) and frees the vehicle to re-sell. No time limit.
+  Future<void> _seize(BuildContext context, SaleService sales,
+      VehicleService vehicles, String saleId, String byUserId) async {
+    final reasonCtrl = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Seize vehicle'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+                'Repossess this vehicle from the customer? The sale and its '
+                'payment history are kept as a record, and the vehicle becomes '
+                'available to re-sell.'),
+            const SizedBox(height: 12),
+            TextField(
+              controller: reasonCtrl,
+              autofocus: true,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                hintText: 'Reason for seizure…',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              if (reasonCtrl.text.trim().isEmpty) return;
+              Navigator.pop(ctx, true);
+            },
+            child: const Text('Confirm seize',
+                style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    final reason = reasonCtrl.text.trim();
+    try {
+      await sales.seize(saleId, reason, byUserId);
+      await vehicles.refresh();
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Vehicle seized. It is now available to re-sell.')),
       );
     } catch (e) {
       if (!context.mounted) return;
@@ -250,11 +312,13 @@ class VehicleDetailScreen extends StatelessWidget {
                   ),
                 ),
               ],
-              // Unsell: only when sold + active sale + has modify rights
+              // Unsell: only when sold + active sale + has modify rights, and
+              // only within 2 hours of the sale being created (see Sale.canUnsell).
               if (canModify &&
                   vehicle.saleStatus == SaleStatus.sold &&
                   sale != null &&
-                  sale.saleStatus == 'active') ...[
+                  sale.saleStatus == 'active' &&
+                  sale.canUnsell) ...[
                 const SizedBox(height: AppSpacing.md),
                 _UnsellButton(
                   onTap: () => _unsell(
@@ -266,6 +330,41 @@ class VehicleDetailScreen extends StatelessWidget {
                   ),
                 ),
               ],
+              // Seize: sold + active sale + modify rights. No time limit
+              // (repossession happens whenever the customer defaults).
+              if (canModify &&
+                  vehicle.saleStatus == SaleStatus.sold &&
+                  sale != null &&
+                  sale.saleStatus == 'active') ...[
+                const SizedBox(height: AppSpacing.md),
+                _SeizeButton(
+                  onTap: () => _seize(
+                    context,
+                    sales,
+                    vehicles,
+                    sale.id,
+                    auth.currentUser?.id ?? '',
+                  ),
+                ),
+              ],
+              // Seizure history: previous customer(s) this vehicle was seized
+              // from. Tap to see the full (read-only) sale + payment history.
+              ...(() {
+                final seized = sales.seizedForVehicle(vehicle.id);
+                if (seized.isEmpty) return const <Widget>[];
+                return [
+                  const SizedBox(height: AppSpacing.lg),
+                  _SeizedHistorySection(
+                    seized: seized,
+                    customers: customers,
+                    onOpen: (s) => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => SaleDetailScreen(saleId: s.id),
+                      ),
+                    ),
+                  ),
+                ];
+              })(),
               const SizedBox(height: AppSpacing.lg),
               RoleGateActions(
                 status: vehicle.status,
@@ -430,6 +529,118 @@ class _UnsellButton extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Danger-toned seize (repossess) button.
+class _SeizeButton extends StatelessWidget {
+  const _SeizeButton({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.lg, vertical: AppSpacing.md),
+        decoration: BoxDecoration(
+          color: c.danger.withValues(alpha: 0.07),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: c.danger.withValues(alpha: 0.4)),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.gavel_rounded, color: c.danger, size: 18),
+            const SizedBox(width: AppSpacing.sm),
+            Text('Seize vehicle',
+                style: AppTextStyles.bodyStrong.copyWith(color: c.danger)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Seizure history for a vehicle: each previous customer it was seized from.
+/// Tapping a row opens the full (read-only) sale + payment history.
+class _SeizedHistorySection extends StatelessWidget {
+  const _SeizedHistorySection({
+    required this.seized,
+    required this.customers,
+    required this.onOpen,
+  });
+
+  final List<Sale> seized;
+  final CustomerService customers;
+  final void Function(Sale) onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.gavel_rounded, color: c.textSub, size: 18),
+            const SizedBox(width: AppSpacing.sm),
+            Text('Seizure history',
+                style: AppTextStyles.bodyStrong.copyWith(color: c.textMain)),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        for (final s in seized) ...[
+          GestureDetector(
+            onTap: () => onOpen(s),
+            child: Container(
+              padding: const EdgeInsets.all(AppSpacing.md),
+              margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+              decoration: BoxDecoration(
+                color: c.bgSurface,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: c.borderColor),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          customers.byId(s.customerId)?.fullName ??
+                              'Previous customer',
+                          style: AppTextStyles.bodyStrong
+                              .copyWith(color: c.textMain),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          s.seizedAt != null
+                              ? 'Seized ${Formatters.date(s.seizedAt!)}'
+                              : 'Seized',
+                          style: AppTextStyles.caption.copyWith(color: c.textSub),
+                        ),
+                        if (s.seizeReason != null && s.seizeReason!.isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Text(s.seizeReason!,
+                              style: AppTextStyles.caption
+                                  .copyWith(color: c.textSub)),
+                        ],
+                      ],
+                    ),
+                  ),
+                  const StatusPill(label: 'Seized', variant: PillVariant.danger),
+                  const SizedBox(width: AppSpacing.sm),
+                  Icon(Icons.chevron_right, color: c.textSub, size: 20),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ],
     );
   }
 }

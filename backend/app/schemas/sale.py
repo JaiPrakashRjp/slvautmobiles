@@ -120,6 +120,9 @@ class SaleOut(BaseModel):
     confirmed_at: datetime | None = None
     rejection_reason: str | None = None
     unsell_reason: str | None = None
+    seized_at: datetime | None = None
+    seized_by: int | None = None
+    seize_reason: str | None = None
     remarks: str | None = None
     installments: list[InstallmentOut] = []
     payments: list[PaymentOut] = []

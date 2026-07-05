@@ -33,6 +33,7 @@ class Vehicle with GatedEntity {
     this.remarks,
     this.inventoryStatus = InventoryStatus.available,
     this.saleStatus = SaleStatus.notSold,
+    this.isSeized = false,
     this.nextServiceDueDate,
     required this.createdBy,
     required this.createdAt,
@@ -89,6 +90,10 @@ class Vehicle with GatedEntity {
   int? financerId;
   InventoryStatus inventoryStatus;
   SaleStatus saleStatus;
+
+  /// Current-state flag: true while the vehicle is seized (and not yet re-sold).
+  /// The seizure history itself lives on the seized sale record.
+  bool isSeized;
 
   /// Documents already stored on the backend (for download / replace / delete).
   List<DocRef> uploadedDocs;
