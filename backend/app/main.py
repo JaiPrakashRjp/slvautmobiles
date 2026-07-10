@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.controllers.auth_controller import router as auth_router
 from app.controllers.customer_controller import router as customers_router
+from app.controllers.device_controller import router as devices_router
 from app.controllers.financer_controller import router as financers_router
 from app.controllers.notification_controller import router as notifications_router
 from app.controllers.sale_controller import router as sales_router
@@ -36,6 +37,7 @@ app.include_router(customers_router)
 app.include_router(sales_router)
 app.include_router(notifications_router)
 app.include_router(financers_router)
+app.include_router(devices_router)
 app.include_router(sale_financers_router)
 app.include_router(whatsapp_router)
 app.include_router(search_router)

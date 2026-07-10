@@ -45,5 +45,16 @@ class Settings:
     def whatsapp_enabled(self) -> bool:
         return bool(self.WHATSAPP_TOKEN and self.WHATSAPP_PHONE_NUMBER_ID)
 
+    # ── Firebase (FCM push) ──────────────────────────────────────────────────
+    # Path to the Admin SDK service-account JSON (git-ignored). Relative paths
+    # resolve from the backend working dir; set an absolute path on the server.
+    FIREBASE_CREDENTIALS_FILE: str = os.getenv(
+        "FIREBASE_CREDENTIALS_FILE", "firebase-service-account.json"
+    )
+
+    @property
+    def fcm_enabled(self) -> bool:
+        return os.path.exists(self.FIREBASE_CREDENTIALS_FILE)
+
 
 settings = Settings()

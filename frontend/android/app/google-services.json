@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "496859785600",
+    "project_id": "slv-auto",
+    "storage_bucket": "slv-auto.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:496859785600:android:1c22daee8ec9a91349b965",
+        "android_client_info": {
+          "package_name": "com.slvauto.slv_auto_consultant"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB3q-4_7Dx74mLqpcCIfMAXXWH62axEcgA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

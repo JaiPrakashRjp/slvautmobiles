@@ -1,6 +1,7 @@
 """Model layer. Importing here registers all tables on Base.metadata."""
 from app.models.customer import Customer
 from app.models.customer_document import CustomerDocument
+from app.models.device_token import DeviceToken
 from app.models.module import Module
 from app.models.notification import Notification
 from app.models.reminder_log import ReminderLog
@@ -31,4 +32,5 @@ __all__ = [
     "SalePaymentDocument",
     "ReminderLog",
     "Notification",
+    "DeviceToken",
 ]

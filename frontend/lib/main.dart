@@ -1,3 +1,5 @@
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:intl/intl.dart';
@@ -7,6 +9,7 @@ import 'controllers/auth_controller.dart';
 import 'controllers/theme_controller.dart';
 import 'screens/splash_screen.dart';
 import 'services/local_push_service.dart';
+import 'services/push_service.dart';
 import 'utils/navigator_key.dart';
 import 'services/api_customer_service.dart';
 import 'services/api_financer_service.dart';
@@ -35,6 +38,15 @@ Future<void> main() async {
   Intl.defaultLocale = 'en_IN';
   await initializeDateFormatting('en_IN');
   await LocalPushService.init();
+  // FCM push (reaches the app even when closed). Wrapped so platforms without
+  // Firebase config (e.g. web/desktop review builds) still launch normally.
+  try {
+    await Firebase.initializeApp();
+    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+    await PushService.init();
+  } catch (_) {
+    // Firebase not available on this platform — skip push, app runs fine.
+  }
   final themeController = ThemeController();
   await themeController.load();
   runApp(SlvApp(themeController: themeController));

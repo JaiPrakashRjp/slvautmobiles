@@ -4,3 +4,8 @@ env/
 __pycache__/
 *.pyc
 .env
+
+# Firebase Admin SDK service account — grants FULL admin access. NEVER commit.
+firebase-service-account.json
+*firebase-adminsdk*.json
+*serviceAccount*.json

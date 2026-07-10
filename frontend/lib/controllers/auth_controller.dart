@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../models/app_user.dart';
 import '../models/enums.dart';
 import '../services/api_client.dart';
+import '../services/push_service.dart';
 
 /// Holds the current signed-in user and exposes role helpers used by the
 /// role-gate everywhere. Backed by the FastAPI `/auth/login` endpoint
@@ -35,6 +38,8 @@ class AuthController extends ChangeNotifier {
       ApiClient.authToken = json['access_token'] as String?;
       _current = _userFromJson(json['user'] as Map<String, dynamic>);
       notifyListeners();
+      // Register this device for push now that we're authenticated.
+      unawaited(PushService.registerToken());
       return true;
     } on ApiException {
       return false;
@@ -43,8 +48,11 @@ class AuthController extends ChangeNotifier {
 
   void signOut() {
     _current = null;
-    ApiClient.authToken = null;
     notifyListeners();
+    // Unregister this device (needs the token to still be set), then clear it.
+    unawaited(
+      PushService.unregister().whenComplete(() => ApiClient.authToken = null),
+    );
   }
 
   AppUser _userFromJson(Map<String, dynamic> j) {

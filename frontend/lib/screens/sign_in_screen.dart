@@ -184,8 +184,15 @@ class _UpdateGateState extends State<_UpdateGate> {
     final url = widget.info.downloadUrl;
     final messenger = ScaffoldMessenger.of(context);
     final uri = Uri.parse(url);
+    messenger.showSnackBar(const SnackBar(content: Text('Opening download…')));
     try {
-      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      // Try the external browser/download-manager first; if the device won't
+      // resolve a handler that way (some ROMs block it for direct file links),
+      // fall back to the platform default.
+      var ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!ok) {
+        ok = await launchUrl(uri, mode: LaunchMode.platformDefault);
+      }
       if (!ok && mounted) {
         messenger.showSnackBar(SnackBar(content: Text('Could not open $url')));
       }
