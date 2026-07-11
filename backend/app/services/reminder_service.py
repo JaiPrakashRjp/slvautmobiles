@@ -8,7 +8,7 @@
 
 Every WhatsApp attempt (sent or failed) is logged to reminder_logs, idempotently
 (keyed on installment + recipient + due_date + phone), so a customer is reminded
-only once per due date. Meant to be run daily at 4:30 PM (see app/jobs/run_reminders.py).
+only once per due date. Meant to be run daily at 4:45 PM (see app/jobs/run_reminders.py).
 """
 from __future__ import annotations
 
