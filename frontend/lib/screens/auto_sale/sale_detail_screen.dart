@@ -106,6 +106,9 @@ class _SaleDetailViewState extends State<_SaleDetailView> {
   Future<void> _setReminder(BuildContext context, SaleDetailViewModel vm) async {
     DateTime date = DateTime.now().add(const Duration(days: 5));
     final amountCtrl = TextEditingController();
+    // A reminder/collection can't be for more than what's still owed.
+    final remaining = vm.sale?.remainingAmount ?? 0;
+    String? error;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -116,8 +119,12 @@ class _SaleDetailViewState extends State<_SaleDetailView> {
               controller: amountCtrl,
               keyboardType: TextInputType.number,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              decoration:
-                  const InputDecoration(labelText: 'Amount', prefixText: '₹ '),
+              decoration: InputDecoration(
+                labelText: 'Amount',
+                prefixText: '₹ ',
+                helperText: remaining > 0 ? 'Remaining: ₹$remaining' : null,
+                errorText: error,
+              ),
             ),
             const SizedBox(height: 12),
             Row(children: [
@@ -141,7 +148,18 @@ class _SaleDetailViewState extends State<_SaleDetailView> {
                 onPressed: () => Navigator.pop(ctx, false),
                 child: const Text('Cancel')),
             TextButton(
-                onPressed: () => Navigator.pop(ctx, true),
+                onPressed: () {
+                  final amt = int.tryParse(amountCtrl.text.trim()) ?? 0;
+                  if (amt <= 0) {
+                    setLocal(() => error = 'Enter an amount');
+                    return;
+                  }
+                  if (remaining > 0 && amt > remaining) {
+                    setLocal(() => error = 'Cannot exceed remaining ₹$remaining');
+                    return;
+                  }
+                  Navigator.pop(ctx, true);
+                },
                 child: const Text('Set')),
           ],
         ),
