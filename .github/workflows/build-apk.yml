@@ -40,6 +40,27 @@ jobs:
         working-directory: frontend
         run: flutter pub get
 
+      - name: Set up release signing
+        working-directory: frontend/android
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "No ANDROID_KEYSTORE_BASE64 secret — release will be debug-signed."
+            exit 0
+          fi
+          echo "$KEYSTORE_B64" | base64 -d > app/slv-release.p12
+          cat > key.properties <<EOF
+          storeFile=slv-release.p12
+          storePassword=$KS_PASS
+          keyAlias=$KEY_ALIAS
+          keyPassword=$KEY_PASS
+          EOF
+          echo "Release signing configured (persistent keystore)."
+
       - name: Build release APK
         working-directory: frontend
         run: |
