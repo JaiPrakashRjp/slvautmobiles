@@ -1,8 +1,8 @@
 """Daily reminder job — WhatsApp customers + notify staff for installments due.
 
-Run by cron at 8 AM IST (= 02:30 UTC on the server):
+Run by cron at 3 PM IST (= 09:30 UTC on the server):
 
-    30 2 * * * cd /opt/slv-dev/backend && /opt/slv-dev/venv/bin/python -m app.jobs.run_reminders >> /var/log/slv-reminders.log 2>&1
+    30 9 * * * cd /opt/slv-dev/backend && /opt/slv-dev/venv/bin/python -m app.jobs.run_reminders >> /var/log/slv-reminders.log 2>&1
 
 Idempotent — safe to run more than once a day (a customer is reminded only once
 per installment due date).
