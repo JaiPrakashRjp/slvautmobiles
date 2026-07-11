@@ -257,24 +257,31 @@ class _CreateCustomerViewState extends State<_CreateCustomerView> {
       return;
     }
 
-    setState(() => _submitting = true);
-    try {
-      final result = await vm.submit();
-      if (!mounted) return;
-      Navigator.of(context).pop();
+    _submitting = true;
+    final editing = vm.isEditing;
+    // Optimistic UI: fire the save (it reads the form fields synchronously now),
+    // close the screen immediately, and report the outcome via the root
+    // messenger. The record + document uploads finish on the app-level service
+    // in the background, so the app feels instant even when the server is slow.
+    final messenger = ScaffoldMessenger.of(context);
+    final future = vm.submit();
+    Navigator.of(context).pop();
+    messenger.showSnackBar(SnackBar(
+      content: Text(editing ? 'Saving…' : 'Creating…'),
+      duration: const Duration(seconds: 1),
+    ));
+    future.then((result) {
       final base = result.pending
           ? 'Submitted. Awaiting Super admin confirmation.'
-          : (vm.isEditing ? 'Customer updated.' : 'Customer created.');
+          : (editing ? 'Customer updated.' : 'Customer created.');
       final msg = result.failedDocs.isEmpty
           ? base
           : '$base Some documents failed to upload: '
               '${result.failedDocs.join(', ')}.';
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _submitting = false);
-      _showError('Could not save: $e');
-    }
+      messenger.showSnackBar(SnackBar(content: Text(msg)));
+    }).catchError((Object e) {
+      messenger.showSnackBar(SnackBar(content: Text('Could not save: $e')));
+    });
   }
 
   @override
