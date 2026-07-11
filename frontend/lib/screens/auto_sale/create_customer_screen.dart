@@ -424,6 +424,7 @@ class _CreateCustomerViewState extends State<_CreateCustomerView> {
                 const SizedBox(height: AppSpacing.xxl),
                 PrimaryButton(
                     label: vm.isEditing ? 'Save' : 'Create',
+                    loading: _submitting,
                     onPressed: () => _submit(vm)),
               ],
             ),

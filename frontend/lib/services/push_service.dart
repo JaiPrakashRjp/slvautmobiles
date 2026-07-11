@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 
+import '../screens/auto_sale/sale_detail_screen.dart';
 import '../screens/users/pending_approvals_screen.dart';
 import '../utils/navigator_key.dart';
 import 'api_client.dart';
@@ -31,12 +32,16 @@ class PushService {
     FirebaseMessaging.onMessage.listen((msg) {
       final n = msg.notification;
       if (n == null) return;
+      final type = msg.data['type'] as String?;
       LocalPushService.show(
         id: msg.messageId?.hashCode ??
             DateTime.now().millisecondsSinceEpoch ~/ 1000,
         title: n.title ?? 'Notification',
         body: n.body ?? '',
-        payload: msg.data['type'] as String?,
+        // Carry the sale id for reminder taps so the tap opens that sale.
+        payload: type == 'reminder'
+            ? 'reminder:${msg.data['entity_id'] ?? ''}'
+            : type,
       );
     });
 
@@ -82,7 +87,15 @@ class PushService {
 
   static void _route(RemoteMessage message) {
     // Route by push type; extend as more types are added.
-    if (message.data['type'] == 'verification') {
+    final type = message.data['type'];
+    if (type == 'reminder') {
+      final saleId = (message.data['entity_id'] ?? '').toString();
+      if (saleId.isNotEmpty) {
+        navigatorKey.currentState?.push(
+          MaterialPageRoute(builder: (_) => SaleDetailScreen(saleId: saleId)),
+        );
+      }
+    } else if (type == 'verification') {
       navigatorKey.currentState?.push(
         MaterialPageRoute(builder: (_) => const PendingApprovalsScreen()),
       );

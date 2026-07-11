@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 
@@ -105,13 +106,16 @@ class ApiClient {
     _decode(res);
   }
 
-  /// Fetches raw bytes (e.g. a document) for in-app preview.
+  /// Fetches raw bytes (e.g. a document) for in-app preview, disk-cached.
+  ///
+  /// Document bytes are immutable (the download endpoints send a long
+  /// Cache-Control), so we cache the file to disk keyed by URL — the first view
+  /// downloads it, every later view (preview/share, this session or the next)
+  /// is instant with no network call.
   Future<Uint8List> getBytes(String path) async {
-    final res = await _client.get(_uri(path), headers: _headers());
-    if (res.statusCode < 200 || res.statusCode >= 300) {
-      throw ApiException(res.statusCode, 'Failed to load document');
-    }
-    return res.bodyBytes;
+    final url = _uri(path).toString();
+    final file = await DefaultCacheManager().getSingleFile(url);
+    return file.readAsBytes();
   }
 
   /// Multipart POST for file uploads: [fields] are form text fields and a single

@@ -118,12 +118,14 @@ class SaleDetailViewModel extends ChangeNotifier {
       _run(() => _sales.cancelReminder(_saleId, installmentId, reason));
 
   Future<void> submitPayment(String installmentId, int amount,
-          Uint8List screenshot, String filename, String? mimeType) =>
+          Uint8List screenshot, String filename, String? mimeType,
+          {DateTime? paidOn}) =>
       _run(() => _sales.submitPayment(_saleId, installmentId,
           amount: amount,
           screenshot: screenshot,
           filename: filename,
-          mimeType: mimeType));
+          mimeType: mimeType,
+          paidOn: paidOn));
 
   Future<void> approvePayment(String paymentId) =>
       _run(() => _sales.approvePayment(_saleId, paymentId));

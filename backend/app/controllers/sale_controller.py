@@ -4,6 +4,8 @@ The acting user (id + role) comes from the Bearer token via get_current_user,
 not from client params. Approvals (confirm/reject/cancel) require the Super
 Admin; recording payments only needs an authenticated user.
 """
+from datetime import date
+
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
@@ -83,6 +85,7 @@ def cancel_reminder(
 async def submit_installment_payment(
     installment_id: int,
     amount: float = Form(...),
+    paid_on: date | None = Form(None),  # date the payment was actually made
     screenshot: UploadFile | None = File(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -99,7 +102,7 @@ async def submit_installment_payment(
             }
     return SaleService.submit_payment(
         db, installment_id, amount=amount, actor_role=current_user.role.name,
-        recorded_by=current_user.id, screenshot=shot,
+        recorded_by=current_user.id, paid_on=paid_on, screenshot=shot,
     )
 
 
@@ -125,7 +128,11 @@ def decline_payment(
 @router.get("/payments/documents/{doc_id}")
 def payment_screenshot(doc_id: int, db: Session = Depends(get_db)):
     doc = SaleService.payment_document(db, doc_id)
-    return Response(content=doc.content, media_type=doc.mime_type)
+    return Response(
+        content=doc.content,
+        media_type=doc.mime_type,
+        headers={"Cache-Control": "public, max-age=31536000, immutable"},
+    )
 
 
 @router.post("/{sale_id}/payoff", response_model=SaleOut)

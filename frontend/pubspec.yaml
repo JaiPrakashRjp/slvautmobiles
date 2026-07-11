@@ -18,6 +18,8 @@ dependencies:
   google_fonts: ^6.2.1
   intl: ^0.19.0              # Indian number/date formatting (₹1,80,000, dd MMM yyyy)
   image_picker: ^1.1.2       # KYC document upload (Aadhaar/DL/PAN/photo)
+  cached_network_image: ^3.4.1 # disk-cache profile pics/documents (load once)
+  flutter_cache_manager: ^3.4.1 # disk-cache document bytes (preview/share)
   file_picker: ^8.0.0        # Document upload (pdf/png/heic/jpg/jpeg)
   url_launcher: ^6.3.0       # WhatsApp / SMS / phone deep links
   pdf: ^3.11.0               # Invoice + NOC generation

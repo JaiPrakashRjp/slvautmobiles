@@ -67,3 +67,42 @@ class NotificationService:
                 "entity_id": entity_id,
             },
         )
+
+    @staticmethod
+    def create_reminder(
+        db: Session,
+        *,
+        sale_id: int,
+        installment_id: int,
+        title: str,
+        message: str = "",
+    ) -> None:
+        """Notify all staff (admins + super admins) that an installment is due —
+        in-app + FCM push (reaches closed phones). Tapping opens the sale so they
+        can call the customer and record the payment. Best-effort push.
+        """
+        staff_ids = [u.id for u in UserDAO.active_staff(db)]
+        for uid in staff_ids:
+            NotificationDAO.add(
+                db,
+                Notification(
+                    recipient_user_id=uid,
+                    type=NotificationType.info,
+                    title=title,
+                    message=message,
+                    entity_type=NotificationEntity.sale,
+                    entity_id=sale_id,
+                ),
+            )
+        tokens = DeviceTokenDAO.tokens_for_users(db, staff_ids)
+        FcmService.send(
+            tokens,
+            title=title,
+            body=message or "Tap to take the call",
+            data={
+                "type": "reminder",
+                "entity_type": "sale",
+                "entity_id": sale_id,
+                "installment_id": installment_id,
+            },
+        )

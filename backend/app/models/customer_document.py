@@ -36,7 +36,11 @@ class CustomerDocument(Base):
     file_name: Mapped[str] = mapped_column(Text, nullable=False)
     mime_type: Mapped[str] = mapped_column(Text, nullable=False)
     size_bytes: Mapped[int | None] = mapped_column(BigInteger)
-    content: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)  # BYTEA
+    # deferred: skip the blob on list/detail queries (metadata only); load it
+    # lazily only when the document is downloaded. Keeps responses fast.
+    content: Mapped[bytes] = mapped_column(
+        LargeBinary, nullable=False, deferred=True
+    )  # BYTEA
     uploaded_at: Mapped[datetime] = mapped_column(server_default=func.now(), nullable=False)
 
     customer: Mapped["Customer"] = relationship(back_populates="documents")  # noqa: F821

@@ -165,6 +165,7 @@ class _SaleDetailViewState extends State<_SaleDetailView> {
       BuildContext context, SaleDetailViewModel vm, Installment inst) async {
     final amountCtrl = TextEditingController(text: '${inst.amount}');
     _PickedShot? shot;
+    DateTime paidOn = DateTime.now(); // date the payment was actually made
     final messenger = ScaffoldMessenger.of(context);
     final ok = await showDialog<bool>(
       context: context,
@@ -201,6 +202,25 @@ class _SaleDetailViewState extends State<_SaleDetailView> {
                 label: const Text('Screenshot'),
               ),
             ]),
+            const SizedBox(height: 12),
+            Row(children: [
+              Expanded(
+                child: Text('Paid on: ${Formatters.date(paidOn)}'),
+              ),
+              TextButton.icon(
+                onPressed: () async {
+                  final picked = await showDatePicker(
+                    context: ctx,
+                    initialDate: paidOn,
+                    firstDate: DateTime(2020),
+                    lastDate: DateTime.now(),
+                  );
+                  if (picked != null) setLocal(() => paidOn = picked);
+                },
+                icon: const Icon(Icons.event_outlined, size: 18),
+                label: const Text('Date'),
+              ),
+            ]),
           ]),
           actions: [
             TextButton(
@@ -227,7 +247,8 @@ class _SaleDetailViewState extends State<_SaleDetailView> {
     }
     await _act(
       context,
-      () => vm.submitPayment(inst.id, amount, shot!.bytes, shot!.name, shot!.mime),
+      () => vm.submitPayment(inst.id, amount, shot!.bytes, shot!.name, shot!.mime,
+          paidOn: paidOn),
       vm.isSuperAdmin ? 'Payment recorded.' : 'Payment submitted for approval.',
     );
   }

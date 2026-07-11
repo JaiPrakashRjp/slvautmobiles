@@ -196,11 +196,15 @@ class ApiSaleService extends SaleService {
       {required int amount,
       required Uint8List screenshot,
       required String filename,
-      String? mimeType}) async {
+      String? mimeType,
+      DateTime? paidOn}) async {
     final id = int.tryParse(installmentId) ?? 0;
     final j = await _api.postMultipart(
       '/sales/installments/$id/pay',
-      fields: {'amount': '$amount'},
+      fields: {
+        'amount': '$amount',
+        if (paidOn != null) 'paid_on': _dateStr(paidOn),
+      },
       fileField: 'screenshot',
       filename: filename,
       bytes: screenshot,

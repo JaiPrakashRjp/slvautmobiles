@@ -115,7 +115,12 @@ def download_document(doc_id: int, db: Session = Depends(get_db)):
     return Response(
         content=doc.content,
         media_type=doc.mime_type,
-        headers={"Content-Disposition": f'inline; filename="{doc.file_name}"'},
+        headers={
+            "Content-Disposition": f'inline; filename="{doc.file_name}"',
+            # A document's bytes never change, so let clients cache it forever
+            # instead of re-downloading the blob on every view.
+            "Cache-Control": "public, max-age=31536000, immutable",
+        },
     )
 
 

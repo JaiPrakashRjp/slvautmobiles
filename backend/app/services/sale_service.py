@@ -366,9 +366,15 @@ class SaleService:
         return SaleService.get(db, inst.sale_id)
 
     @staticmethod
-    def _apply_paid(db: Session, inst: SaleInstallment, sale: Sale, amount) -> None:
+    def _apply_paid(
+        db: Session,
+        inst: SaleInstallment,
+        sale: Sale,
+        amount,
+        paid_on: date | None = None,
+    ) -> None:
         inst.status = InstallmentStatus.paid
-        inst.paid_date = date.today()
+        inst.paid_date = paid_on or date.today()
         sale.remaining_amount = round(float(sale.remaining_amount) - float(amount), 2)
         if sale.remaining_amount <= 0:
             sale.remaining_amount = 0
@@ -383,6 +389,7 @@ class SaleService:
         amount,
         actor_role: str,
         recorded_by: int,
+        paid_on: date | None = None,
         screenshot: dict | None = None,
     ) -> Sale:
         """Record an installment payment. Super-admin → applied immediately;
@@ -405,6 +412,10 @@ class SaleService:
             recorded_by=recorded_by,
             status=EntityStatus.active if is_super else EntityStatus.pending_confirmation,
         )
+        # The user-entered payment date (when it was actually paid) is stored on
+        # the payment so it survives the pending→approval path; defaults to now.
+        if paid_on is not None:
+            payment.paid_at = datetime(paid_on.year, paid_on.month, paid_on.day)
         if is_super:
             payment.confirmed_by = recorded_by
             payment.confirmed_at = datetime.now(timezone.utc)
@@ -423,7 +434,7 @@ class SaleService:
             )
 
         if is_super:
-            SaleService._apply_paid(db, inst, sale, amount)
+            SaleService._apply_paid(db, inst, sale, amount, paid_on=paid_on)
         else:
             NotificationService.create_verification(
                 db,
@@ -452,7 +463,13 @@ class SaleService:
                 else None
             )
             if inst is not None and inst.status != InstallmentStatus.paid:
-                SaleService._apply_paid(db, inst, sale, payment.amount)
+                SaleService._apply_paid(
+                    db,
+                    inst,
+                    sale,
+                    payment.amount,
+                    paid_on=payment.paid_at.date() if payment.paid_at else None,
+                )
             db.commit()
         return SaleService.get(db, payment.sale_id)
 

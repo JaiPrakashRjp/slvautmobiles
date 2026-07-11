@@ -58,12 +58,14 @@ abstract class SaleService extends ChangeNotifier {
   /// Call made, no payment — defer (balance unchanged).
   Future<void> cancelReminder(String saleId, String installmentId, String reason);
 
-  /// Record an installment payment with a proof screenshot.
+  /// Record an installment payment with a proof screenshot and the date it was
+  /// actually paid.
   Future<void> submitPayment(String saleId, String installmentId,
       {required int amount,
       required Uint8List screenshot,
       required String filename,
-      String? mimeType});
+      String? mimeType,
+      DateTime? paidOn});
 
   /// Super-admin: approve a pending payment (balance reduces).
   Future<void> approvePayment(String saleId, String paymentId);
@@ -329,11 +331,12 @@ class MockSaleService extends SaleService {
       {required int amount,
       required Uint8List screenshot,
       required String filename,
-      String? mimeType}) async {
+      String? mimeType,
+      DateTime? paidOn}) async {
     final inst = _inst(saleId, installmentId);
     if (inst != null) {
       inst.status = 'paid';
-      inst.paidDate = DateTime.now();
+      inst.paidDate = paidOn ?? DateTime.now();
       notifyListeners();
     }
   }

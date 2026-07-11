@@ -366,6 +366,7 @@ class _CreateVehicleViewState extends State<_CreateVehicleView> {
                   const SizedBox(height: AppSpacing.xxl),
                   PrimaryButton(
                       label: vm.isEditing ? 'Save' : 'Create',
+                      loading: _submitting,
                       onPressed: () => _submit(vm)),
                 ],
               ],

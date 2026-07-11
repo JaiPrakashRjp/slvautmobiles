@@ -36,7 +36,12 @@ class VehicleDocument(Base):
     file_name: Mapped[str] = mapped_column(Text, nullable=False)
     mime_type: Mapped[str] = mapped_column(Text, nullable=False)
     size_bytes: Mapped[int | None] = mapped_column(BigInteger)
-    content: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)  # BYTEA
+    # deferred: the blob is NOT loaded on list/detail queries (which only need
+    # metadata) — only when a document is actually downloaded. Keeps those
+    # responses fast instead of pulling every file's binary out of Postgres.
+    content: Mapped[bytes] = mapped_column(
+        LargeBinary, nullable=False, deferred=True
+    )  # BYTEA
     uploaded_at: Mapped[datetime] = mapped_column(server_default=func.now(), nullable=False)
 
     vehicle: Mapped["Vehicle"] = relationship(back_populates="documents")  # noqa: F821

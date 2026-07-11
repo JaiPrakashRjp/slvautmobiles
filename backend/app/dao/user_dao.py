@@ -45,6 +45,17 @@ class UserDAO:
         return list(db.scalars(stmt).all())
 
     @staticmethod
+    def active_staff(db: Session) -> list[User]:
+        """All active staff (admins + super admins) — reminder push recipients."""
+        from app.models.enums import AccountStatus, EntityStatus
+
+        stmt = UserDAO._with_relations(select(User)).where(
+            User.status == EntityStatus.active,
+            User.account_status == AccountStatus.active,
+        )
+        return list(db.scalars(stmt).all())
+
+    @staticmethod
     def add(db: Session, user: User) -> User:
         db.add(user)
         db.flush()

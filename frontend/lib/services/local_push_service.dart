@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
+import '../screens/auto_sale/sale_detail_screen.dart';
 import '../screens/sign_in_screen.dart';
 import '../screens/users/pending_approvals_screen.dart';
 import '../utils/navigator_key.dart';
@@ -25,11 +26,20 @@ void onBackgroundNotificationTap(NotificationResponse response) {
 /// Routes a notification tap by its payload: update notifications go to the
 /// login screen; everything else (approvals) goes to the review queue.
 void _routeForTap(NotificationResponse response) {
-  if (response.payload == kUpdatePayload) {
+  final payload = response.payload;
+  if (payload == kUpdatePayload) {
     navigatorKey.currentState?.pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const SignInScreen()),
       (route) => false,
     );
+  } else if (payload != null && payload.startsWith('reminder:')) {
+    // Reminder tap → open that sale so staff can call + record the payment.
+    final saleId = payload.substring('reminder:'.length);
+    if (saleId.isNotEmpty) {
+      navigatorKey.currentState?.push(
+        MaterialPageRoute(builder: (_) => SaleDetailScreen(saleId: saleId)),
+      );
+    }
   } else {
     _openPendingApprovals();
   }

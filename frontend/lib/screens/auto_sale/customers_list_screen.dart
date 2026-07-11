@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -230,7 +231,8 @@ class _CustomerCard extends StatelessWidget {
             backgroundColor: c.bgSurface,
             backgroundImage: photoRef == null
                 ? null
-                : NetworkImage(customers.documentUrl(photoRef.id)),
+                // Disk-cached: the photo downloads once, then loads instantly.
+                : CachedNetworkImageProvider(customers.documentUrl(photoRef.id)),
             child: photoRef == null
                 ? Icon(Icons.person_outline, color: c.textSub)
                 : null,

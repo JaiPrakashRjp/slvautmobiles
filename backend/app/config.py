@@ -40,6 +40,9 @@ class Settings:
     WHATSAPP_TOKEN: str = os.getenv("WHATSAPP_TOKEN", "")
     WHATSAPP_PHONE_NUMBER_ID: str = os.getenv("WHATSAPP_PHONE_NUMBER_ID", "")
     WHATSAPP_BUSINESS_ACCOUNT_ID: str = os.getenv("WHATSAPP_BUSINESS_ACCOUNT_ID", "")
+    # Approved template used for installment reminders (body vars: name, amount, date).
+    WHATSAPP_REMINDER_TEMPLATE: str = os.getenv("WHATSAPP_REMINDER_TEMPLATE", "payment_reminder")
+    WHATSAPP_REMINDER_LANG: str = os.getenv("WHATSAPP_REMINDER_LANG", "en_US")
 
     @property
     def whatsapp_enabled(self) -> bool:
