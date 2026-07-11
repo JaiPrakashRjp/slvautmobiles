@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -41,11 +42,19 @@ class _SignInViewState extends State<_SignInView> {
   // Non-null once a newer published build is detected. While set, the login
   // form is hidden and only the update gate is shown (sign-in is blocked).
   AppUpdateInfo? _update;
+  // The real installed app version, shown at the bottom of the login screen.
+  String _version = '';
 
   @override
   void initState() {
     super.initState();
     _checkForUpdate();
+    _loadVersion();
+  }
+
+  Future<void> _loadVersion() async {
+    final info = await PackageInfo.fromPlatform();
+    if (mounted) setState(() => _version = info.version);
   }
 
   Future<void> _checkForUpdate() async {
@@ -101,7 +110,7 @@ class _SignInViewState extends State<_SignInView> {
                 else
                   ..._signInForm(c, vm),
                 const SizedBox(height: AppSpacing.xxl),
-                Text('v1.0.0',
+                Text(_version.isEmpty ? '' : 'v$_version',
                     style: AppTextStyles.caption.copyWith(color: c.textSub)),
               ],
             ),
