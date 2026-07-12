@@ -7,6 +7,8 @@ class SalePayment {
     required this.status,
     this.documentIds = const [],
     this.rejectionReason,
+    this.paidAt,
+    this.kind,
   });
 
   final String id;
@@ -18,7 +20,17 @@ class SalePayment {
   final List<int> documentIds; // proof screenshot ids
   final String? rejectionReason;
 
+  /// When the payment was actually made (from the backend).
+  final DateTime? paidAt;
+
+  /// 'installment' | 'advance' | 'early_payoff'. A manual payment is 'advance'
+  /// and has no [installmentId].
+  final String? kind;
+
   bool get isPending => status == 'pending_confirmation';
   bool get isApproved => status == 'active';
   bool get isRejected => status == 'rejected';
+
+  /// A standalone (manual) payment — recorded directly, not against a reminder.
+  bool get isManual => installmentId == null;
 }

@@ -208,7 +208,7 @@ class _GlobalSearchBarState extends State<_GlobalSearchBar> {
           onChanged: _onChanged,
           textInputAction: TextInputAction.search,
           decoration: InputDecoration(
-            hintText: 'Search vehicle no, name or phone…',
+            hintText: 'Search chassis, vehicle no, name or phone…',
             prefixIcon: const Icon(Icons.search),
             suffixIcon: _ctrl.text.isEmpty
                 ? null

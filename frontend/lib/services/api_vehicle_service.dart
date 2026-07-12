@@ -59,8 +59,9 @@ class ApiVehicleService extends VehicleService {
       _vehicles.where((v) => v.saleStatus == SaleStatus.notSold).toList();
 
   @override
-  List<Vehicle> available() =>
-      _vehicles.where((v) => !v.isAssigned && v.isActive).toList();
+  List<Vehicle> available() => _vehicles
+      .where((v) => !v.isAssigned && v.isActive && !v.isSeized)
+      .toList();
 
   @override
   Vehicle? byId(String id) =>
@@ -179,9 +180,11 @@ class ApiVehicleService extends VehicleService {
     if (v == null) return;
     Gate.confirm(v, byUserId: byUserId); // optimistic local update
     notifyListeners();
-    // by_user_id comes from the Bearer token server-side.
+    // by_user_id comes from the Bearer token server-side. Re-pull the server's
+    // authoritative version so any details finalised on confirm show immediately.
     unawaited(_api
         .post('/vehicles/$id/confirm')
+        .then((_) => refresh())
         .catchError((_) => null));
   }
 
@@ -189,11 +192,13 @@ class ApiVehicleService extends VehicleService {
   void reject(String id, String reason, String byUserId) {
     final v = byId(id);
     if (v == null) return;
-    Gate.reject(v, reason: reason, byUserId: byUserId);
+    Gate.reject(v, reason: reason, byUserId: byUserId); // optimistic
     notifyListeners();
     // reason stays a query param; by_user_id comes from the Bearer token.
     unawaited(_api.post('/vehicles/$id/reject',
-        query: {'reason': reason}).catchError((_) => null));
+        query: {'reason': reason})
+        .then((_) => refresh())
+        .catchError((_) => null));
   }
 
   @override

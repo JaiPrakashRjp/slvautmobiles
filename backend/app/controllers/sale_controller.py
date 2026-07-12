@@ -106,6 +106,33 @@ async def submit_installment_payment(
     )
 
 
+@router.post("/{sale_id}/pay", response_model=SaleOut)
+async def submit_manual_payment(
+    sale_id: int,
+    amount: float = Form(...),
+    paid_on: date | None = Form(None),  # date the payment was actually made
+    screenshot: UploadFile | None = File(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Record a standalone (manual) payment against a sale — not tied to a
+    reminder/installment. Shows up in the sale's payment history."""
+    shot = None
+    if screenshot is not None:
+        content = await screenshot.read()
+        if content:
+            shot = {
+                "file_name": screenshot.filename or "screenshot",
+                "mime_type": screenshot.content_type or "application/octet-stream",
+                "size_bytes": len(content),
+                "content": content,
+            }
+    return SaleService.submit_manual_payment(
+        db, sale_id, amount=amount, actor_role=current_user.role.name,
+        recorded_by=current_user.id, paid_on=paid_on, screenshot=shot,
+    )
+
+
 @router.post("/payments/{payment_id}/approve", response_model=SaleOut)
 def approve_payment(
     payment_id: int,
@@ -178,9 +205,51 @@ def seize_sale(
     sale_id: int,
     reason: str = Query(..., min_length=1),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    # Super admin → immediate; admin → pending super-admin approval.
+    return SaleService.seize(
+        db, sale_id, reason, current_user.id, current_user.role.name
+    )
+
+
+@router.post("/{sale_id}/seize/approve", response_model=SaleOut)
+def approve_seize(
+    sale_id: int,
+    db: Session = Depends(get_db),
     current_user: User = Depends(require_super_admin),
 ):
-    return SaleService.seize(db, sale_id, reason, current_user.id)
+    return SaleService.approve_seize(db, sale_id, by_user_id=current_user.id)
+
+
+@router.post("/{sale_id}/seize/reject", response_model=SaleOut)
+def reject_seize(
+    sale_id: int,
+    reason: str = Query(..., min_length=1),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_super_admin),
+):
+    return SaleService.reject_seize(db, sale_id, reason, by_user_id=current_user.id)
+
+
+@router.post("/{sale_id}/seize/cancel", response_model=SaleOut)
+def cancel_seize(
+    sale_id: int,
+    remarks: str = Query(..., min_length=1),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return SaleService.cancel_seize(db, sale_id, remarks, by_user_id=current_user.id)
+
+
+@router.post("/{sale_id}/seize/confirm", response_model=SaleOut)
+def confirm_seize(
+    sale_id: int,
+    remarks: str = Query(..., min_length=1),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return SaleService.confirm_seize(db, sale_id, remarks, by_user_id=current_user.id)
 
 
 @router.delete("/{sale_id}", status_code=204)

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../controllers/auth_controller.dart';
 import '../../models/doc_ref.dart';
@@ -60,6 +61,35 @@ class VehicleDetailScreen extends StatelessWidget {
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text('Delete failed: $e')));
     }
+  }
+
+  /// Fetch the document bytes and hand them to the OS share sheet
+  /// (WhatsApp / email / Drive …).
+  Future<void> _shareDoc(ScaffoldMessengerState messenger,
+      VehicleService vehicles, DocRef ref, String label) async {
+    try {
+      final bytes = await vehicles.documentBytes(ref.id);
+      if (bytes.isEmpty) {
+        messenger.showSnackBar(
+            const SnackBar(content: Text('Nothing to share.')));
+        return;
+      }
+      final name = ref.fileName.isEmpty ? 'document' : ref.fileName;
+      await Share.shareXFiles(
+        [XFile.fromData(bytes, name: name, mimeType: _mimeFor(name))],
+        subject: label,
+      );
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Share failed: $e')));
+    }
+  }
+
+  static String _mimeFor(String fileName) {
+    final f = fileName.toLowerCase();
+    if (f.endsWith('.pdf')) return 'application/pdf';
+    if (f.endsWith('.png')) return 'image/png';
+    if (f.endsWith('.heic')) return 'image/heic';
+    return 'image/jpeg';
   }
 
   /// Unsell: ask for a reason then cancel the active sale and reset the vehicle.
@@ -171,9 +201,87 @@ class VehicleDetailScreen extends StatelessWidget {
       await sales.seize(saleId, reason, byUserId);
       await vehicles.refresh();
       if (!context.mounted) return;
+      final pending = sales.byId(saleId)?.isSeizePending ?? false;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Vehicle seized. It is now available to re-sell.')),
+        SnackBar(
+            content: Text(pending
+                ? 'Seize requested — awaiting super-admin approval.'
+                : 'Vehicle seized.')),
       );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Failed: $e')));
+    }
+  }
+
+  /// Small remarks-prompt dialog; returns the trimmed text, or null if cancelled
+  /// or left empty.
+  Future<String?> _askRemarks(
+      BuildContext context, String title, String hint) async {
+    final ctrl = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          maxLines: 3,
+          decoration: InputDecoration(
+              hintText: hint, border: const OutlineInputBorder()),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          TextButton(
+              onPressed: () {
+                if (ctrl.text.trim().isEmpty) return;
+                Navigator.pop(ctx, true);
+              },
+              child: const Text('Save')),
+        ],
+      ),
+    );
+    final text = ctrl.text.trim();
+    ctrl.dispose();
+    return (ok == true && text.isNotEmpty) ? text : null;
+  }
+
+  /// Cancel an active seizure — the vehicle goes back to the same customer.
+  Future<void> _cancelSeize(BuildContext context, SaleService sales,
+      VehicleService vehicles, String saleId) async {
+    final remarks = await _askRemarks(context, 'Cancel seizure',
+        'The vehicle returns to the customer. Add remarks…');
+    if (remarks == null || !context.mounted) return;
+    try {
+      await sales.cancelSeize(saleId, remarks);
+      await vehicles.refresh();
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content:
+              Text('Seizure cancelled — vehicle returned to the customer.')));
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Failed: $e')));
+    }
+  }
+
+  /// Confirm (finalise) an active seizure — the vehicle becomes a normal free
+  /// vehicle; the seized sale stays as history.
+  Future<void> _confirmSeize(BuildContext context, SaleService sales,
+      VehicleService vehicles, String saleId) async {
+    final remarks = await _askRemarks(context, 'Confirm seizure',
+        'Finalise the seizure. The vehicle becomes available. Add remarks…');
+    if (remarks == null || !context.mounted) return;
+    try {
+      await sales.confirmSeize(saleId, remarks);
+      await vehicles.refresh();
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Seizure confirmed.')));
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)
@@ -313,7 +421,7 @@ class VehicleDetailScreen extends StatelessWidget {
                 ),
               ],
               // Unsell: only when sold + active sale + has modify rights, and
-              // only within 2 hours of the sale being created (see Sale.canUnsell).
+              // only within 1 day of the sale being created (see Sale.canUnsell).
               if (canModify &&
                   vehicle.saleStatus == SaleStatus.sold &&
                   sale != null &&
@@ -357,11 +465,16 @@ class VehicleDetailScreen extends StatelessWidget {
                   _SeizedHistorySection(
                     seized: seized,
                     customers: customers,
+                    canManage: canModify,
                     onOpen: (s) => Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (_) => SaleDetailScreen(saleId: s.id),
                       ),
                     ),
+                    onCancelSeize: (s) =>
+                        _cancelSeize(context, sales, vehicles, s.id),
+                    onConfirmSeize: (s) =>
+                        _confirmSeize(context, sales, vehicles, s.id),
                   ),
                 ];
               })(),
@@ -489,6 +602,9 @@ class VehicleDetailScreen extends StatelessWidget {
                       loader: () => vehicles.documentBytes(ref.id),
                     ),
                   )),
+          onShare: ref == null
+              ? null
+              : () => _shareDoc(messenger, vehicles, ref, label),
           onDelete: ref == null ? null : () => _delete(messenger, vehicles, ref.id),
         ),
       );
@@ -572,11 +688,17 @@ class _SeizedHistorySection extends StatelessWidget {
     required this.seized,
     required this.customers,
     required this.onOpen,
+    required this.canManage,
+    required this.onCancelSeize,
+    required this.onConfirmSeize,
   });
 
   final List<Sale> seized;
   final CustomerService customers;
   final void Function(Sale) onOpen;
+  final bool canManage;
+  final void Function(Sale) onCancelSeize;
+  final void Function(Sale) onConfirmSeize;
 
   @override
   Widget build(BuildContext context) {
@@ -594,49 +716,91 @@ class _SeizedHistorySection extends StatelessWidget {
         ),
         const SizedBox(height: AppSpacing.sm),
         for (final s in seized) ...[
-          GestureDetector(
-            onTap: () => onOpen(s),
-            child: Container(
-              padding: const EdgeInsets.all(AppSpacing.md),
-              margin: const EdgeInsets.only(bottom: AppSpacing.sm),
-              decoration: BoxDecoration(
-                color: c.bgSurface,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: c.borderColor),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          customers.byId(s.customerId)?.fullName ??
-                              'Previous customer',
-                          style: AppTextStyles.bodyStrong
-                              .copyWith(color: c.textMain),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          s.seizedAt != null
-                              ? 'Seized ${Formatters.date(s.seizedAt!)}'
-                              : 'Seized',
-                          style: AppTextStyles.caption.copyWith(color: c.textSub),
-                        ),
-                        if (s.seizeReason != null && s.seizeReason!.isNotEmpty) ...[
+          Container(
+            padding: const EdgeInsets.all(AppSpacing.md),
+            margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+            decoration: BoxDecoration(
+              color: c.bgSurface,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: c.borderColor),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            customers.byId(s.customerId)?.fullName ??
+                                'Previous customer',
+                            style: AppTextStyles.bodyStrong
+                                .copyWith(color: c.textMain),
+                          ),
                           const SizedBox(height: 2),
-                          Text(s.seizeReason!,
-                              style: AppTextStyles.caption
-                                  .copyWith(color: c.textSub)),
+                          Text(
+                            s.seizedAt != null
+                                ? 'Seized ${Formatters.date(s.seizedAt!)}'
+                                : 'Seized',
+                            style: AppTextStyles.caption
+                                .copyWith(color: c.textSub),
+                          ),
+                          if (s.seizeReason != null &&
+                              s.seizeReason!.isNotEmpty) ...[
+                            const SizedBox(height: 2),
+                            Text(s.seizeReason!,
+                                style: AppTextStyles.caption
+                                    .copyWith(color: c.textSub)),
+                          ],
+                          if (s.isSeizeConfirmed &&
+                              (s.seizeConfirmRemarks?.isNotEmpty ?? false)) ...[
+                            const SizedBox(height: 2),
+                            Text('Confirmed: ${s.seizeConfirmRemarks}',
+                                style: AppTextStyles.caption
+                                    .copyWith(color: c.textSub)),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
+                    StatusPill(
+                        label: s.isSeizeConfirmed ? 'Confirmed' : 'Seized',
+                        variant: s.isSeizeConfirmed
+                            ? PillVariant.neutral
+                            : PillVariant.danger),
+                    const SizedBox(width: AppSpacing.sm),
+                    // Eye — view the full customer + payment history.
+                    IconButton(
+                      icon: const Icon(Icons.visibility_outlined, size: 20),
+                      tooltip: 'View all details',
+                      visualDensity: VisualDensity.compact,
+                      onPressed: () => onOpen(s),
+                    ),
+                  ],
+                ),
+                // Active seize → Cancel (return to customer) / Confirm (finalise).
+                if (s.isSeizeActive && canManage) ...[
+                  const SizedBox(height: AppSpacing.sm),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => onCancelSeize(s),
+                          child: const Text('Cancel seize'),
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                      Expanded(
+                        child: FilledButton(
+                          onPressed: () => onConfirmSeize(s),
+                          child: const Text('Confirm seize'),
+                        ),
+                      ),
+                    ],
                   ),
-                  const StatusPill(label: 'Seized', variant: PillVariant.danger),
-                  const SizedBox(width: AppSpacing.sm),
-                  Icon(Icons.chevron_right, color: c.textSub, size: 20),
                 ],
-              ),
+              ],
             ),
           ),
         ],

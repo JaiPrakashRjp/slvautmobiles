@@ -67,6 +67,16 @@ abstract class SaleService extends ChangeNotifier {
       String? mimeType,
       DateTime? paidOn});
 
+  /// Record a standalone (manual) payment against the sale — not tied to any
+  /// reminder/installment. Reduces the balance; admin-recorded ones wait for
+  /// super-admin approval like installment payments.
+  Future<void> submitManualPayment(String saleId,
+      {required int amount,
+      required Uint8List screenshot,
+      required String filename,
+      String? mimeType,
+      DateTime? paidOn});
+
   /// Super-admin: approve a pending payment (balance reduces).
   Future<void> approvePayment(String saleId, String paymentId);
 
@@ -82,9 +92,23 @@ abstract class SaleService extends ChangeNotifier {
   /// Cancel a sale (unsell): saves the reason, resets vehicle to not-sold.
   Future<void> cancel(String saleId, String reason, String byUserId);
 
-  /// Seize (repossess) the vehicle: marks the sale `seized` (kept as history),
-  /// frees the vehicle, and flags it `is_seized`. No time limit.
+  /// Seize (repossess) the vehicle: a super admin's seize applies at once; an
+  /// admin's is held pending until a super admin approves it.
   Future<void> seize(String saleId, String reason, String byUserId);
+
+  /// Cancel an active seize (any time): the vehicle goes back to the same
+  /// customer and the sale reactivates.
+  Future<void> cancelSeize(String saleId, String remarks);
+
+  /// Finalise an active seize: the vehicle becomes a plain free vehicle (badge
+  /// cleared); the seized sale stays as history.
+  Future<void> confirmSeize(String saleId, String remarks);
+
+  /// Super admin: approve an admin's pending seize (it now takes effect).
+  Future<void> approveSeize(String saleId);
+
+  /// Super admin: reject an admin's pending seize (nothing changes).
+  Future<void> rejectSeize(String saleId, String reason);
 
   /// Seized sales for a vehicle (its repossession history), newest first.
   List<Sale> seizedForVehicle(String vehicleId);
@@ -342,6 +366,21 @@ class MockSaleService extends SaleService {
   }
 
   @override
+  Future<void> submitManualPayment(String saleId,
+      {required int amount,
+      required Uint8List screenshot,
+      required String filename,
+      String? mimeType,
+      DateTime? paidOn}) async {
+    final s = byId(saleId);
+    if (s != null) {
+      s.remainingAmount =
+          (s.remainingAmount - amount).clamp(0, 1 << 31).toInt();
+      notifyListeners();
+    }
+  }
+
+  @override
   Future<void> approvePayment(String saleId, String paymentId) async =>
       notifyListeners();
 
@@ -371,8 +410,58 @@ class MockSaleService extends SaleService {
     final s = byId(saleId);
     if (s == null) return;
     s.saleStatus = 'seized';
-    s.unsellReason = reason;
+    s.seizeStage = 'seized';
+    s.seizeReason = reason;
+    s.seizedAt = DateTime.now();
     _vehicles.release(s.vehicleId);
+    _vehicles.byId(s.vehicleId)?.isSeized = true;
+    notifyListeners();
+  }
+
+  @override
+  Future<void> cancelSeize(String saleId, String remarks) async {
+    final s = byId(saleId);
+    if (s == null) return;
+    s.saleStatus = 'active';
+    s.seizeStage = null;
+    s.seizeCancelRemarks = remarks;
+    s.seizedAt = null;
+    s.seizeReason = null;
+    _vehicles.assignTo(s.vehicleId, s.customerId, InventoryStatus.sold);
+    _vehicles.byId(s.vehicleId)?.isSeized = false;
+    notifyListeners();
+  }
+
+  @override
+  Future<void> confirmSeize(String saleId, String remarks) async {
+    final s = byId(saleId);
+    if (s == null) return;
+    s.seizeStage = 'confirmed';
+    s.seizeConfirmRemarks = remarks;
+    s.seizeConfirmedAt = DateTime.now();
+    _vehicles.byId(s.vehicleId)?.isSeized = false;
+    notifyListeners();
+  }
+
+  @override
+  Future<void> approveSeize(String saleId) async {
+    final s = byId(saleId);
+    if (s == null) return;
+    s.saleStatus = 'seized';
+    s.seizeStage = 'seized';
+    _vehicles.release(s.vehicleId);
+    _vehicles.byId(s.vehicleId)?.isSeized = true;
+    notifyListeners();
+  }
+
+  @override
+  Future<void> rejectSeize(String saleId, String reason) async {
+    final s = byId(saleId);
+    if (s == null) return;
+    s.seizeStage = null;
+    s.seizeCancelRemarks = reason;
+    s.seizedAt = null;
+    s.seizeReason = null;
     notifyListeners();
   }
 

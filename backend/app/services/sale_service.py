@@ -238,12 +238,12 @@ class SaleService:
         return SaleService.get(db, sale_id)
 
     # A sale can only be reversed ("unsold") within this window of being created.
-    UNSELL_WINDOW = timedelta(hours=2)
+    UNSELL_WINDOW = timedelta(days=1)
 
     @staticmethod
     def cancel(db: Session, sale_id: int, reason: str, by_user_id: int) -> "Sale":
         sale = SaleService.get(db, sale_id)
-        # Enforce the 2-hour unsell window (applies to everyone, incl. super admin).
+        # Enforce the 1-day unsell window (applies to everyone, incl. super admin).
         # created_at is stored as naive UTC, so treat it as UTC when comparing.
         created = sale.created_at
         if created.tzinfo is None:
@@ -251,7 +251,7 @@ class SaleService:
         if datetime.now(timezone.utc) - created > SaleService.UNSELL_WINDOW:
             raise HTTPException(
                 status_code=403,
-                detail="This sale can no longer be unsold — the 2-hour window has passed.",
+                detail="This sale can no longer be unsold — the 1-day window has passed.",
             )
         sale.sale_status = SaleLifecycle.cancelled
         sale.unsell_reason = reason
@@ -264,27 +264,117 @@ class SaleService:
         return SaleService.get(db, sale_id)
 
     @staticmethod
-    def seize(db: Session, sale_id: int, reason: str, by_user_id: int) -> "Sale":
-        """Repossess the vehicle from a defaulting customer. Unlike unsell there
-        is no time limit. The sale row is kept as history (status -> seized); the
-        vehicle is freed (not_sold + is_seized flag) so it can be re-sold."""
+    def _apply_seize(sale: "Sale", vehicle) -> None:
+        """Put a sale into the active-seized stage: the sale is frozen as history
+        and the vehicle is freed but flagged seized (the 'Seized' badge stage)."""
+        sale.sale_status = SaleLifecycle.seized
+        sale.seize_stage = "seized"
+        if vehicle is not None:
+            vehicle.sale_status = SaleStatus.not_sold
+            vehicle.assigned_to_customer_id = None
+            vehicle.is_seized = True
+
+    @staticmethod
+    def seize(
+        db: Session, sale_id: int, reason: str, by_user_id: int, actor_role: str
+    ) -> "Sale":
+        """Repossess the vehicle from a defaulting customer. A super admin's seize
+        takes effect immediately; an admin's seize is held 'pending' and a
+        verification notification goes to the super admins to approve or reject."""
         sale = SaleService.get(db, sale_id)
         if sale.sale_status != SaleLifecycle.active:
             raise HTTPException(
                 status_code=400,
                 detail="Only an active sale can be seized.",
             )
-        sale.sale_status = SaleLifecycle.seized
         sale.seized_at = datetime.now(timezone.utc)
         sale.seized_by = by_user_id
         sale.seize_reason = reason
-        # Free the vehicle for re-sale, but flag it as currently seized. The
-        # seized sale row (with its customer + payments) remains the history.
+        vehicle = db.get(Vehicle, sale.vehicle_id)
+        if actor_role == "super_admin":
+            SaleService._apply_seize(sale, vehicle)
+        else:
+            sale.seize_stage = "pending"
+            NotificationService.create_verification(
+                db,
+                entity_type=NotificationEntity.sale,
+                entity_id=sale.id,
+                title="Vehicle seize needs approval",
+                message=(
+                    f"Seize of {sale.invoice_no} by an admin awaits verification. "
+                    f"Reason: {reason}"
+                ),
+            )
+        db.commit()
+        return SaleService.get(db, sale_id)
+
+    @staticmethod
+    def approve_seize(db: Session, sale_id: int, *, by_user_id: int) -> "Sale":
+        """Super admin approves an admin's pending seize — it now takes effect."""
+        sale = SaleService.get(db, sale_id)
+        if sale.seize_stage != "pending":
+            raise HTTPException(status_code=400, detail="No pending seize to approve.")
+        vehicle = db.get(Vehicle, sale.vehicle_id)
+        SaleService._apply_seize(sale, vehicle)
+        db.commit()
+        return SaleService.get(db, sale_id)
+
+    @staticmethod
+    def reject_seize(
+        db: Session, sale_id: int, reason: str, *, by_user_id: int
+    ) -> "Sale":
+        """Super admin rejects an admin's pending seize — nothing changes; the
+        vehicle stays sold to the same customer."""
+        sale = SaleService.get(db, sale_id)
+        if sale.seize_stage != "pending":
+            raise HTTPException(status_code=400, detail="No pending seize to reject.")
+        sale.seize_stage = None
+        sale.seized_at = None
+        sale.seized_by = None
+        sale.seize_reason = None
+        sale.seize_cancel_remarks = reason
+        db.commit()
+        return SaleService.get(db, sale_id)
+
+    @staticmethod
+    def cancel_seize(
+        db: Session, sale_id: int, remarks: str, *, by_user_id: int
+    ) -> "Sale":
+        """Cancel an active seize (no time limit): give the vehicle back to the
+        same customer and reactivate the sale."""
+        sale = SaleService.get(db, sale_id)
+        if sale.seize_stage != "seized":
+            raise HTTPException(status_code=400, detail="No active seize to cancel.")
+        sale.sale_status = SaleLifecycle.active
+        sale.seize_stage = None
+        sale.seize_cancel_remarks = remarks
+        sale.seized_at = None
+        sale.seized_by = None
+        sale.seize_reason = None
         vehicle = db.get(Vehicle, sale.vehicle_id)
         if vehicle is not None:
-            vehicle.sale_status = SaleStatus.not_sold
-            vehicle.assigned_to_customer_id = None
-            vehicle.is_seized = True
+            vehicle.sale_status = SaleStatus.sold
+            vehicle.assigned_to_customer_id = sale.customer_id
+            vehicle.is_seized = False
+        db.commit()
+        return SaleService.get(db, sale_id)
+
+    @staticmethod
+    def confirm_seize(
+        db: Session, sale_id: int, remarks: str, *, by_user_id: int
+    ) -> "Sale":
+        """Finalise an active seize: the vehicle becomes a plain available vehicle
+        (badge cleared); the seized sale stays as history."""
+        sale = SaleService.get(db, sale_id)
+        if sale.seize_stage != "seized":
+            raise HTTPException(status_code=400, detail="No active seize to confirm.")
+        sale.seize_stage = "confirmed"
+        sale.seize_confirmed_at = datetime.now(timezone.utc)
+        sale.seize_confirmed_by = by_user_id
+        sale.seize_confirm_remarks = remarks
+        vehicle = db.get(Vehicle, sale.vehicle_id)
+        if vehicle is not None:
+            vehicle.is_seized = False  # badge cleared — now a normal free vehicle
         db.commit()
         return SaleService.get(db, sale_id)
 
@@ -447,6 +537,75 @@ class SaleService:
         return SaleService.get(db, inst.sale_id)
 
     @staticmethod
+    def _reduce_balance(sale: Sale, amount) -> None:
+        """Subtract a received amount from the outstanding balance and auto-close
+        the sale once it is fully paid. Used by manual (non-installment) payments."""
+        sale.remaining_amount = round(float(sale.remaining_amount) - float(amount), 2)
+        if sale.remaining_amount <= 0:
+            sale.remaining_amount = 0
+            sale.sale_status = SaleLifecycle.closed
+            sale.closed_at = datetime.now(timezone.utc)
+
+    @staticmethod
+    def submit_manual_payment(
+        db: Session,
+        sale_id: int,
+        *,
+        amount,
+        actor_role: str,
+        recorded_by: int,
+        paid_on: date | None = None,
+        screenshot: dict | None = None,
+    ) -> Sale:
+        """Record a standalone (manual) payment against a sale — not tied to any
+        installment/reminder. Super-admin → applied to the balance immediately;
+        admin → held pending_confirmation until a super admin approves."""
+        sale = SaleService.get(db, sale_id)
+        if sale.status != EntityStatus.active:
+            raise HTTPException(status_code=403, detail="Sale is not active")
+
+        is_super = actor_role == "super_admin"
+        payment = SalePayment(
+            sale_id=sale.id,
+            installment_id=None,
+            amount=amount,
+            kind=PaymentKind.advance,
+            recorded_by=recorded_by,
+            status=EntityStatus.active if is_super else EntityStatus.pending_confirmation,
+        )
+        if paid_on is not None:
+            payment.paid_at = datetime(paid_on.year, paid_on.month, paid_on.day)
+        if is_super:
+            payment.confirmed_by = recorded_by
+            payment.confirmed_at = datetime.now(timezone.utc)
+        SaleDAO.add_payment(db, payment)  # flush → payment.id
+
+        if screenshot is not None:
+            db.add(
+                SalePaymentDocument(
+                    payment_id=payment.id,
+                    file_name=screenshot["file_name"],
+                    mime_type=screenshot["mime_type"],
+                    size_bytes=screenshot.get("size_bytes"),
+                    content=screenshot["content"],
+                    uploaded_by=recorded_by,
+                )
+            )
+
+        if is_super:
+            SaleService._reduce_balance(sale, amount)
+        else:
+            NotificationService.create_verification(
+                db,
+                entity_type=NotificationEntity.sale,
+                entity_id=sale.id,
+                title="Manual payment needs approval",
+                message=f"A ₹{float(amount):,.0f} manual payment for {sale.invoice_no} awaits verification.",
+            )
+        db.commit()
+        return SaleService.get(db, sale_id)
+
+    @staticmethod
     def approve_payment(db: Session, payment_id: int, *, by_user_id: int) -> Sale:
         payment = db.get(SalePayment, payment_id)
         if payment is None:
@@ -470,6 +629,9 @@ class SaleService:
                     payment.amount,
                     paid_on=payment.paid_at.date() if payment.paid_at else None,
                 )
+            elif payment.installment_id is None:
+                # Manual payment (no installment) — apply straight to the balance.
+                SaleService._reduce_balance(sale, payment.amount)
             db.commit()
         return SaleService.get(db, payment.sale_id)
 

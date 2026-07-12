@@ -264,7 +264,7 @@ class _AssignSaleView extends StatelessWidget {
               if (vm.total > 0 && vm.downPayment > 0)
                 _ModeHint(
                   isFullCash: vm.isFullCash,
-                  remaining: (vm.total - vm.downPayment).clamp(0, 1 << 31),
+                  remaining: vm.remaining,
                   c: c,
                 ),
 
@@ -275,8 +275,8 @@ class _AssignSaleView extends StatelessWidget {
                   _money(label: 'HP amount (loan)', controller: vm.hpAmountController),
                   const SizedBox(height: AppSpacing.md),
                 ],
-                _money(
-                    label: 'Remaining amount', controller: vm.remainingController),
+                // Remaining is derived: Total − HP − Down payment (read-only).
+                _RemainingCard(amount: vm.remaining, c: c),
               ],
               const SizedBox(height: AppSpacing.lg),
 
@@ -392,6 +392,35 @@ class _TotalCard extends StatelessWidget {
           const Spacer(),
           Text(Formatters.currency(amount),
               style: AppTextStyles.h2.copyWith(color: c.primary)),
+        ],
+      ),
+    );
+  }
+}
+
+/// Read-only card showing the derived installment balance (Total − HP − Down).
+class _RemainingCard extends StatelessWidget {
+  const _RemainingCard({required this.amount, required this.c});
+  final int amount;
+  final AppColors c;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.lg, vertical: AppSpacing.md),
+      decoration: BoxDecoration(
+        color: c.bgContainer,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: c.borderColor),
+      ),
+      child: Row(
+        children: [
+          Text('Remaining (installments)',
+              style: AppTextStyles.label.copyWith(color: c.textSub)),
+          const Spacer(),
+          Text(Formatters.currency(amount),
+              style: AppTextStyles.h2.copyWith(color: c.textMain)),
         ],
       ),
     );

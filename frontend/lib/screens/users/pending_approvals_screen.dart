@@ -6,6 +6,7 @@ import '../../services/customer_service.dart';
 import '../../services/loan_service.dart';
 import '../../services/rental_service.dart';
 import '../../services/sale_service.dart';
+import '../../services/user_service.dart';
 import '../../services/vehicle_service.dart';
 import '../../theme/app_colors.dart';
 import '../../utils/app_spacing.dart';
@@ -17,6 +18,9 @@ import '../../widgets/confirmation_dialog.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/primary_button.dart';
 import '../../widgets/secondary_button.dart';
+import '../auto_sale/customer_detail_screen.dart';
+import '../auto_sale/sale_detail_screen.dart';
+import '../auto_sale/vehicle_detail_screen.dart';
 
 /// A single pending action awaiting Super Admin confirmation.
 class _PendingItem {
@@ -27,6 +31,7 @@ class _PendingItem {
     required this.createdAt,
     required this.onApprove,
     required this.onReject,
+    this.onView,
   });
 
   final String type;
@@ -35,6 +40,9 @@ class _PendingItem {
   final DateTime createdAt;
   final VoidCallback onApprove;
   final void Function(String reason) onReject;
+
+  /// Opens the full detail screen so the reviewer can verify before deciding.
+  final VoidCallback? onView;
 }
 
 /// Super Admin review queue — spec 5.5. Aggregates pending items from every
@@ -52,11 +60,16 @@ class PendingApprovalsScreen extends StatelessWidget {
     final sales = context.watch<SaleService>();
     final rentals = context.watch<RentalService>();
     final loans = context.watch<LoanService>();
+    final users = context.read<UserService>();
 
     String custName(String id) =>
         customers.byId(id)?.fullName ??
         rentals.renterById(id)?.fullName ??
         'customer';
+
+    // Resolve the creating admin's name; fall back to the raw id if unknown.
+    String addedBy(String createdBy) =>
+        'Added by ${users.byId(createdBy)?.name ?? createdBy}';
 
     final items = <_PendingItem>[];
 
@@ -64,30 +77,58 @@ class PendingApprovalsScreen extends StatelessWidget {
       items.add(_PendingItem(
         type: 'Vehicle',
         title: 'Vehicle ${v.regNo}',
-        subtitle: 'Added by ${v.createdBy}',
+        subtitle: addedBy(v.createdBy),
         createdAt: v.createdAt,
         onApprove: () => vehicles.confirm(v.id, actorId),
         onReject: (r) => vehicles.reject(v.id, r, actorId),
+        onView: () => Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => VehicleDetailScreen(vehicleId: v.id),
+        )),
       ));
     }
     for (final cust in customers.all().where((c) => c.isPending)) {
       items.add(_PendingItem(
         type: 'Customer',
         title: 'Customer ${cust.fullName}',
-        subtitle: 'Added by ${cust.createdBy}',
+        subtitle: addedBy(cust.createdBy),
         createdAt: cust.createdAt,
         onApprove: () => customers.confirm(cust.id, actorId),
         onReject: (r) => customers.reject(cust.id, r, actorId),
+        onView: () => Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => CustomerDetailScreen(customerId: cust.id),
+        )),
       ));
     }
     for (final s in sales.all().where((s) => s.isPending)) {
       items.add(_PendingItem(
         type: 'Sale',
         title: 'Sale to ${custName(s.customerId)}',
-        subtitle: 'Added by ${s.createdBy}',
+        subtitle: addedBy(s.createdBy),
         createdAt: s.createdAt,
         onApprove: () => sales.confirm(s.id, actorId),
         onReject: (r) => sales.reject(s.id, r, actorId),
+        onView: () => Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => SaleDetailScreen(saleId: s.id),
+        )),
+      ));
+    }
+    // Pending vehicle seizes requested by an admin.
+    for (final s in sales.all().where((s) => s.isSeizePending)) {
+      items.add(_PendingItem(
+        type: 'Seize',
+        title: 'Seize · ${custName(s.customerId)}',
+        subtitle: s.seizedBy != null
+            ? 'Requested by ${users.byId(s.seizedBy!)?.name ?? s.seizedBy}'
+            : 'Seize requested',
+        createdAt: s.seizedAt ?? s.createdAt,
+        onApprove: () async {
+          await sales.approveSeize(s.id);
+          await vehicles.refresh();
+        },
+        onReject: (r) => sales.rejectSeize(s.id, r),
+        onView: () => Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => SaleDetailScreen(saleId: s.id),
+        )),
       ));
     }
     for (final r in rentals.pendingRentals()) {
@@ -160,14 +201,26 @@ class _PendingCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-            decoration: BoxDecoration(
-              color: c.primaryContainer,
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Text(item.type,
-                style: AppTextStyles.caption.copyWith(color: c.primary)),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: c.primaryContainer,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(item.type,
+                    style: AppTextStyles.caption.copyWith(color: c.primary)),
+              ),
+              const Spacer(),
+              if (item.onView != null)
+                IconButton(
+                  icon: const Icon(Icons.visibility_outlined),
+                  tooltip: 'View full details',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: item.onView,
+                ),
+            ],
           ),
           const SizedBox(height: AppSpacing.sm),
           Text(item.title,

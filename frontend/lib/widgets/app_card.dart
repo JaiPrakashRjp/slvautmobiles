@@ -16,6 +16,7 @@ class AppCard extends StatelessWidget {
     this.border = false,
     this.selected = false,
     this.accentLeft = false,
+    this.accentColor,
   });
 
   final Widget child;
@@ -27,8 +28,12 @@ class AppCard extends StatelessWidget {
   /// Draws a thicker navy border (used for the selected module card etc.).
   final bool selected;
 
-  /// Draws a thick navy stripe down the left edge (mockups 14–18).
+  /// Draws a thick stripe down the left edge (mockups 14–18). Navy by default;
+  /// pass [accentColor] to tint it (e.g. red for a rejected record).
   final bool accentLeft;
+
+  /// Colour of the [accentLeft] stripe. Defaults to the primary (navy).
+  final Color? accentColor;
 
   @override
   Widget build(BuildContext context) {
@@ -48,7 +53,9 @@ class AppCard extends StatelessWidget {
               border: selected
                   ? Border.all(color: c.primary, width: 2)
                   : accentLeft
-                      ? Border(left: BorderSide(color: c.primary, width: 4))
+                      ? Border(
+                          left: BorderSide(
+                              color: accentColor ?? c.primary, width: 4))
                       : border
                           ? Border.all(color: c.borderColor)
                           : null,

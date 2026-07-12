@@ -41,7 +41,12 @@ class Sale with GatedEntity {
     this.rejectionReason,
     this.unsellReason,
     this.seizedAt,
+    this.seizedBy,
     this.seizeReason,
+    this.seizeStage,
+    this.seizeConfirmedAt,
+    this.seizeConfirmRemarks,
+    this.seizeCancelRemarks,
   })  : installments = installments ?? [],
         payments = payments ?? [];
 
@@ -105,12 +110,29 @@ class Sale with GatedEntity {
 
   // Seizure (repossession) audit — set on a seized sale (kept as history).
   DateTime? seizedAt;
+  String? seizedBy;
   String? seizeReason;
 
-  /// A sale can be reversed ("unsold") only within this window after creation.
-  static const unsellWindow = Duration(hours: 2);
+  /// Seize lifecycle: null | 'pending' (admin requested, awaiting super admin) |
+  /// 'seized' (active — badge shown, cancel/confirm available) | 'confirmed'.
+  String? seizeStage;
+  DateTime? seizeConfirmedAt;
+  String? seizeConfirmRemarks;
+  String? seizeCancelRemarks;
 
-  /// Whether the 2-hour unsell window is still open. [createdAt] is a UTC
+  /// Admin requested a seize that a super admin hasn't approved yet.
+  bool get isSeizePending => seizeStage == 'pending';
+
+  /// Seize is active — the 'Seized' badge stage (can be cancelled or confirmed).
+  bool get isSeizeActive => seizeStage == 'seized';
+
+  /// Seize has been finalised (badge cleared; vehicle is a plain free vehicle).
+  bool get isSeizeConfirmed => seizeStage == 'confirmed';
+
+  /// A sale can be reversed ("unsold") only within this window after creation.
+  static const unsellWindow = Duration(days: 1);
+
+  /// Whether the 1-day unsell window is still open. [createdAt] is a UTC
   /// instant, so compare against the current UTC time (the server and phone can
   /// be in different time zones). Mirrors the backend's own check.
   bool get canUnsell =>

@@ -155,11 +155,13 @@ class ApiCustomerService extends CustomerService {
   void confirm(String id, String byUserId) {
     final c = byId(id);
     if (c == null) return;
-    Gate.confirm(c, byUserId: byUserId);
+    Gate.confirm(c, byUserId: byUserId); // optimistic local update
     notifyListeners();
-    // by_user_id comes from the Bearer token server-side.
+    // by_user_id comes from the Bearer token server-side. Re-pull the server's
+    // authoritative version so any details finalised on confirm show immediately.
     _api
         .post('/customers/$id/confirm')
+        .then((_) => refresh())
         .catchError((_) => null);
   }
 
@@ -167,11 +169,13 @@ class ApiCustomerService extends CustomerService {
   void reject(String id, String reason, String byUserId) {
     final c = byId(id);
     if (c == null) return;
-    Gate.reject(c, reason: reason, byUserId: byUserId);
+    Gate.reject(c, reason: reason, byUserId: byUserId); // optimistic
     notifyListeners();
     // reason stays a query param; by_user_id comes from the Bearer token.
     _api.post('/customers/$id/reject',
-        query: {'reason': reason}).catchError((_) => null);
+            query: {'reason': reason})
+        .then((_) => refresh())
+        .catchError((_) => null);
   }
 
   // ── helpers ────────────────────────────────────────────────────────────────

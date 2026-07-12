@@ -90,6 +90,13 @@ class Sale(Base):
     seized_at: Mapped[datetime | None] = mapped_column()
     seized_by: Mapped[int | None] = mapped_column(BigInteger)
     seize_reason: Mapped[str | None] = mapped_column(Text)
+    # seize lifecycle: NULL | 'pending' (admin requested, awaiting super admin) |
+    # 'seized' (active — badge shown, cancel/confirm available) | 'confirmed'.
+    seize_stage: Mapped[str | None] = mapped_column(Text)
+    seize_confirmed_at: Mapped[datetime | None] = mapped_column()
+    seize_confirmed_by: Mapped[int | None] = mapped_column(BigInteger)
+    seize_confirm_remarks: Mapped[str | None] = mapped_column(Text)
+    seize_cancel_remarks: Mapped[str | None] = mapped_column(Text)
     remarks: Mapped[str | None] = mapped_column(Text)
 
     installments: Mapped[list["SaleInstallment"]] = relationship(  # noqa: F821

@@ -209,6 +209,39 @@ class _CustomerCard extends StatelessWidget {
     ));
   }
 
+  /// Tap the avatar → enlarged, zoomable photo in a dialog. Tap the image (or
+  /// outside) to close.
+  void _showPhoto(BuildContext context, String url) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(24),
+        child: GestureDetector(
+          onTap: () => Navigator.pop(ctx),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: InteractiveViewer(
+              child: CachedNetworkImage(
+                imageUrl: url,
+                fit: BoxFit.contain,
+                placeholder: (_, __) => const SizedBox(
+                  height: 240,
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+                errorWidget: (_, __, ___) => const SizedBox(
+                  height: 240,
+                  child: Center(
+                      child: Icon(Icons.broken_image_outlined, size: 48)),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
@@ -222,20 +255,29 @@ class _CustomerCard extends StatelessWidget {
         .firstOrNull;
     return AppCard(
       onTap: () => _open(context),
+      accentLeft: customer.isRejected,
+      accentColor: customer.isRejected ? c.danger : null,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // ── Photo ─────────────────────────────────────────────────
-          CircleAvatar(
-            radius: 22,
-            backgroundColor: c.bgSurface,
-            backgroundImage: photoRef == null
+          // ── Photo (tap to enlarge) ────────────────────────────────
+          GestureDetector(
+            onTap: photoRef == null
                 ? null
-                // Disk-cached: the photo downloads once, then loads instantly.
-                : CachedNetworkImageProvider(customers.documentUrl(photoRef.id)),
-            child: photoRef == null
-                ? Icon(Icons.person_outline, color: c.textSub)
-                : null,
+                : () =>
+                    _showPhoto(context, customers.documentUrl(photoRef.id)),
+            child: CircleAvatar(
+              radius: 22,
+              backgroundColor: c.bgSurface,
+              backgroundImage: photoRef == null
+                  ? null
+                  // Disk-cached: downloads once, then loads instantly.
+                  : CachedNetworkImageProvider(
+                      customers.documentUrl(photoRef.id)),
+              child: photoRef == null
+                  ? Icon(Icons.person_outline, color: c.textSub)
+                  : null,
+            ),
           ),
           const SizedBox(width: AppSpacing.md),
           // ── Content ───────────────────────────────────────────────
@@ -254,6 +296,12 @@ class _CustomerCard extends StatelessWidget {
                 const SizedBox(height: AppSpacing.xs),
                 Text(Formatters.phone(customer.phone),
                     style: AppTextStyles.caption.copyWith(color: c.textSub)),
+                if (customer.isRejected &&
+                    (customer.rejectionReason?.isNotEmpty ?? false)) ...[
+                  const SizedBox(height: AppSpacing.xs),
+                  Text('Rejected: ${customer.rejectionReason}',
+                      style: AppTextStyles.caption.copyWith(color: c.danger)),
+                ],
               ],
             ),
           ),

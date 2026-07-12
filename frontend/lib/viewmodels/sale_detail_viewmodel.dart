@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import '../controllers/auth_controller.dart';
 import '../models/customer.dart';
+import '../models/picked_doc.dart';
 import '../models/reminder_log.dart';
 import '../models/sale.dart';
 import '../models/vehicle.dart';
@@ -108,19 +109,39 @@ class SaleDetailViewModel extends ChangeNotifier {
     }
   }
 
-  Future<void> addReminder(DateTime dueDate, int amount) =>
-      _run(() => _sales.addReminder(_saleId, dueDate: dueDate, amount: amount));
+  Future<void> addReminder(DateTime dueDate, int amount) => _run(() async {
+        await _sales.addReminder(_saleId, dueDate: dueDate, amount: amount);
+        // Re-pull the reminder log so the new entry shows immediately (the sale
+        // itself is already updated by the service) — no re-login needed.
+        await loadReminders();
+      });
 
-  Future<void> takeCall(String installmentId) =>
-      _run(() => _sales.takeCall(_saleId, installmentId));
+  Future<void> takeCall(String installmentId) => _run(() async {
+        await _sales.takeCall(_saleId, installmentId);
+        // Re-pull the reminder log so the updated state shows immediately.
+        await loadReminders();
+      });
 
   Future<void> cancelReminder(String installmentId, String reason) =>
-      _run(() => _sales.cancelReminder(_saleId, installmentId, reason));
+      _run(() async {
+        await _sales.cancelReminder(_saleId, installmentId, reason);
+        // Re-pull the reminder log so the cancellation shows immediately.
+        await loadReminders();
+      });
 
   Future<void> submitPayment(String installmentId, int amount,
           Uint8List screenshot, String filename, String? mimeType,
           {DateTime? paidOn}) =>
       _run(() => _sales.submitPayment(_saleId, installmentId,
+          amount: amount,
+          screenshot: screenshot,
+          filename: filename,
+          mimeType: mimeType,
+          paidOn: paidOn));
+
+  Future<void> submitManualPayment(int amount, Uint8List screenshot,
+          String filename, String? mimeType, {DateTime? paidOn}) =>
+      _run(() => _sales.submitManualPayment(_saleId,
           amount: amount,
           screenshot: screenshot,
           filename: filename,
@@ -133,7 +154,48 @@ class SaleDetailViewModel extends ChangeNotifier {
   Future<void> declinePayment(String paymentId, String reason) =>
       _run(() => _sales.declinePayment(_saleId, paymentId, reason));
 
+  /// Super admin approves an admin's pending seize (it then takes effect and
+  /// frees the vehicle).
+  Future<void> approveSeize() => _run(() async {
+        await _sales.approveSeize(_saleId);
+        await _vehicles.refresh();
+      });
+
+  /// Super admin rejects an admin's pending seize (nothing changes).
+  Future<void> rejectSeize(String reason) =>
+      _run(() => _sales.rejectSeize(_saleId, reason));
+
   String screenshotUrl(int docId) => _sales.screenshotUrl(docId);
   Future<Uint8List> screenshotBytes(int docId) =>
       _sales.screenshotBytes(docId);
+
+  // ── Vehicle papers (reg no + RC/permit/insurance, managed from the sale) ──
+  /// Update the sale's vehicle: reg number and/or the RC/permit/insurance flags.
+  Future<void> updateVehicle({
+    String? regNo,
+    bool? rc,
+    bool? permit,
+    bool? insurance,
+  }) =>
+      _run(() async {
+        final v = vehicle;
+        if (v == null) return;
+        await _vehicles.update(v.id,
+            regNo: regNo, rc: rc, permit: permit, insurance: insurance);
+      });
+
+  /// Upload an RC / permit / insurance document onto the sale's vehicle.
+  Future<void> uploadVehicleDoc(String docTypeWire, PickedDoc doc) =>
+      _run(() async {
+        final v = vehicle;
+        if (v == null) return;
+        await _vehicles.uploadDocument(v.id, docTypeWire, doc);
+      });
+
+  /// Absolute URL of a vehicle document (to open/preview).
+  String vehicleDocUrl(int docId) => _vehicles.documentUrl(docId);
+
+  /// Raw bytes of a vehicle document (for the in-app preview + share sheet).
+  Future<Uint8List> vehicleDocBytes(int docId) =>
+      _vehicles.documentBytes(docId);
 }

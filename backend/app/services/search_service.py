@@ -35,7 +35,10 @@ class SearchService:
             name = f"{c.first_name} {c.last_name}".strip()
             # Every vehicle sold to this customer (via their sales; skip cancelled).
             veh_rows = db.execute(
-                select(Vehicle.id, Vehicle.reg_no, Vehicle.model, Sale.sale_status)
+                select(
+                    Vehicle.id, Vehicle.reg_no, Vehicle.chassis_no,
+                    Vehicle.model, Sale.sale_status,
+                )
                 .join(Sale, Sale.vehicle_id == Vehicle.id)
                 .where(
                     Sale.customer_id == c.id,
@@ -46,9 +49,9 @@ class SearchService:
             veh = [
                 SearchVehicle(
                     id=r.id,
-                    label=r.reg_no or r.model or f"Vehicle #{r.id}",
+                    label=r.chassis_no or r.reg_no or r.model or f"Vehicle #{r.id}",
                     subtitle=" · ".join(
-                        p for p in (r.model, r.sale_status.value if r.sale_status else None) if p
+                        p for p in (r.reg_no, r.model, r.sale_status.value if r.sale_status else None) if p
                     ),
                 )
                 for r in veh_rows
@@ -75,10 +78,11 @@ class SearchService:
             .limit(limit)
         ).all()
         for v in vehicles:
-            label = v.reg_no or v.model or f"Vehicle #{v.id}"
+            label = v.chassis_no or v.reg_no or v.model or f"Vehicle #{v.id}"
+            subtitle = " · ".join(p for p in (v.reg_no, v.model) if p)
             results.append(
                 SearchResult(
-                    kind="vehicle", id=v.id, label=label, subtitle=v.model or ""
+                    kind="vehicle", id=v.id, label=label, subtitle=subtitle
                 )
             )
 

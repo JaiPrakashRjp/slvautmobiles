@@ -461,38 +461,6 @@ class _CreateVehicleViewState extends State<_CreateVehicleView> {
         textInputAction: TextInputAction.next,
         maxLines: 3,
       ),
-      const SizedBox(height: AppSpacing.lg),
-      const _SectionLabel('RC / Permit'),
-      const SizedBox(height: AppSpacing.xs),
-      Text('Tick if available, then take a photo or upload the document.',
-          style: AppTextStyles.caption.copyWith(color: context.colors.textSub)),
-      const SizedBox(height: AppSpacing.sm),
-      ..._docFlagRow(
-        context,
-        vm,
-        label: 'RC',
-        value: vm.rc,
-        onChanged: (v) => vm.rc = v,
-        docType: VehicleDocType.rc,
-      ),
-      const SizedBox(height: AppSpacing.md),
-      ..._docFlagRow(
-        context,
-        vm,
-        label: 'Permit',
-        value: vm.permit,
-        onChanged: (v) => vm.permit = v,
-        docType: VehicleDocType.permit,
-      ),
-      const SizedBox(height: AppSpacing.md),
-      ..._docFlagRow(
-        context,
-        vm,
-        label: 'Insurance',
-        value: vm.insurance,
-        onChanged: (v) => vm.insurance = v,
-        docType: VehicleDocType.insurance,
-      ),
     ];
   }
 
@@ -508,43 +476,6 @@ class _CreateVehicleViewState extends State<_CreateVehicleView> {
         placeholder: 'Amba / Acetec / Khivraj',
         value: vm.showroom?.label,
         onTap: () => _pickShowroom(vm),
-      ),
-    ];
-  }
-
-  /// One RC/Permit row: a checkbox + a camera/upload tile. Shown for both hands.
-  List<Widget> _docFlagRow(
-    BuildContext context,
-    CreateVehicleViewModel vm, {
-    required String label,
-    required bool value,
-    required ValueChanged<bool> onChanged,
-    required VehicleDocType docType,
-  }) {
-    final c = context.colors;
-    return [
-      InkWell(
-        onTap: () => onChanged(!value),
-        borderRadius: BorderRadius.circular(8),
-        child: Row(
-          children: [
-            Checkbox(
-              value: value,
-              activeColor: c.primary,
-              onChanged: (v) => onChanged(v ?? false),
-            ),
-            const SizedBox(width: AppSpacing.xs),
-            Text(label, style: AppTextStyles.body.copyWith(color: c.textMain)),
-          ],
-        ),
-      ),
-      const SizedBox(height: AppSpacing.xs),
-      DocUploadTile(
-        label: '$label document',
-        fileName: vm.documents[docType]?.name,
-        onTakePhoto: () => _takePhotoInto((doc) => vm.setDocument(docType, doc)),
-        onUpload: () => _uploadFileInto((doc) => vm.setDocument(docType, doc)),
-        onRemove: () => vm.removeDocument(docType),
       ),
     ];
   }

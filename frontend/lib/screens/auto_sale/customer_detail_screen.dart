@@ -47,7 +47,7 @@ class CustomerDetailScreen extends StatelessWidget {
 
     final customerSales = sales
         .forCustomer(customerId)
-        .where((s) => s.saleStatus != 'cancelled')
+        .where((s) => s.saleStatus != 'cancelled' && !s.isRejected)
         .toList();
 
     final canModify =

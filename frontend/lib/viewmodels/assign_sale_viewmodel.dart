@@ -57,7 +57,6 @@ class AssignSaleViewModel extends ChangeNotifier {
   final otherExpensesController = TextEditingController();
   final downPaymentController = TextEditingController();
   final hpAmountController = TextEditingController();
-  final remainingController = TextEditingController();
   final whatsappController = TextEditingController();
   final remarksController = TextEditingController();
 
@@ -68,6 +67,8 @@ class AssignSaleViewModel extends ChangeNotifier {
     documentChargesController,
     otherExpensesController,
     downPaymentController,
+    // HP changes the derived remaining, so recompute live too.
+    hpAmountController,
   ];
 
   String? _vehicleId;
@@ -103,7 +104,15 @@ class AssignSaleViewModel extends ChangeNotifier {
   int get otherExpenses => _parse(otherExpensesController);
   int get downPayment => _parse(downPaymentController);
   int get hpAmount => _parse(hpAmountController);
-  int get remainingTyped => _parse(remainingController);
+
+  /// HP (loan) amount actually applied — only a super admin's positive entry
+  /// counts (the field is hidden for admins and ignored by the backend).
+  int get hpEffective => (isSuperAdmin && hpAmount > 0) ? hpAmount : 0;
+
+  /// Amount the customer repays in installments, derived (not typed):
+  /// Remaining = Total − HP − Down payment.
+  int get remaining =>
+      (total - hpEffective - downPayment).clamp(0, 1 << 31);
 
   /// Total = sum of the five price components.
   int get total =>
@@ -166,9 +175,8 @@ class AssignSaleViewModel extends ChangeNotifier {
         documentCharges: documentCharges,
         otherExpenses: otherExpenses,
         downPayment: downPayment,
-        remainingAmount: showLoanFields ? remainingTyped : 0,
-        hpAmount:
-            (showLoanFields && isSuperAdmin && hpAmount > 0) ? hpAmount : null,
+        remainingAmount: showLoanFields ? remaining : 0,
+        hpAmount: (showLoanFields && hpEffective > 0) ? hpEffective : null,
         remarks: remarksController.text.trim().isEmpty
             ? null
             : remarksController.text.trim(),
@@ -194,7 +202,6 @@ class AssignSaleViewModel extends ChangeNotifier {
     otherExpensesController.dispose();
     downPaymentController.dispose();
     hpAmountController.dispose();
-    remainingController.dispose();
     whatsappController.dispose();
     remarksController.dispose();
     super.dispose();

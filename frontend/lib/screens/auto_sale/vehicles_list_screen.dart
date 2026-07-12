@@ -98,7 +98,7 @@ class _VehiclesListView extends StatelessWidget {
                           vm.search(t.length >= 4 ? t : '');
                         },
                         decoration: InputDecoration(
-                          hintText: 'Search reg no / model…',
+                          hintText: 'Search chassis / reg no / model…',
                           prefixIcon: const Icon(Icons.search, size: 20),
                           isDense: true,
                           border: OutlineInputBorder(
@@ -237,6 +237,8 @@ class _VehicleCard extends StatelessWidget {
         vehicle.saleStatus == SaleStatus.notSold;
     return AppCard(
       onTap: () => _openDetail(context),
+      accentLeft: vehicle.isRejected,
+      accentColor: vehicle.isRejected ? c.danger : null,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
@@ -247,15 +249,28 @@ class _VehicleCard extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    Text(vehicle.displayLabel,
+                    Text(
+                        (vehicle.chassisNo?.isNotEmpty ?? false)
+                            ? vehicle.chassisNo!
+                            : vehicle.displayLabel,
                         style: AppTextStyles.h2.copyWith(color: c.textMain)),
                     const SizedBox(width: AppSpacing.sm),
-                    StatusPill.forEntity(vehicle.status),
+                    if (vehicle.isSeized)
+                      const StatusPill(
+                          label: 'Seized', variant: PillVariant.danger)
+                    else
+                      StatusPill.forEntity(vehicle.status),
                   ],
                 ),
                 const SizedBox(height: AppSpacing.xs),
                 Text(vehicle.type.label,
                     style: AppTextStyles.body.copyWith(color: c.textSub)),
+                if (vehicle.isRejected &&
+                    (vehicle.rejectionReason?.isNotEmpty ?? false)) ...[
+                  const SizedBox(height: AppSpacing.xs),
+                  Text('Rejected: ${vehicle.rejectionReason}',
+                      style: AppTextStyles.caption.copyWith(color: c.danger)),
+                ],
               ],
             ),
           ),

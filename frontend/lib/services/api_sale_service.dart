@@ -214,6 +214,28 @@ class ApiSaleService extends SaleService {
   }
 
   @override
+  Future<void> submitManualPayment(String saleId,
+      {required int amount,
+      required Uint8List screenshot,
+      required String filename,
+      String? mimeType,
+      DateTime? paidOn}) async {
+    final id = int.tryParse(saleId) ?? 0;
+    final j = await _api.postMultipart(
+      '/sales/$id/pay',
+      fields: {
+        'amount': '$amount',
+        if (paidOn != null) 'paid_on': _dateStr(paidOn),
+      },
+      fileField: 'screenshot',
+      filename: filename,
+      bytes: screenshot,
+      mimeType: mimeType,
+    );
+    _replace(_fromJson(j as Map<String, dynamic>));
+  }
+
+  @override
   Future<void> approvePayment(String saleId, String paymentId) async {
     final id = int.tryParse(paymentId) ?? 0;
     final j = await _api.post('/sales/payments/$id/approve');
@@ -253,43 +275,73 @@ class ApiSaleService extends SaleService {
   @override
   Future<void> seize(String saleId, String reason, String byUserId) async {
     final numId = int.tryParse(saleId) ?? 0;
-    // by_user_id comes from the Bearer token server-side.
+    // by_user_id + actor_role come from the Bearer token server-side.
     final j = await _api.post('/sales/$numId/seize', query: {'reason': reason});
-    final updated = _fromJson(j as Map<String, dynamic>);
-    final idx = _cache.indexWhere((s) => s.id == saleId);
-    if (idx != -1) {
-      _cache[idx] = updated;
-    }
-    notifyListeners();
+    _replace(_fromJson(j as Map<String, dynamic>));
+  }
+
+  @override
+  Future<void> cancelSeize(String saleId, String remarks) async {
+    final numId = int.tryParse(saleId) ?? 0;
+    final j =
+        await _api.post('/sales/$numId/seize/cancel', query: {'remarks': remarks});
+    _replace(_fromJson(j as Map<String, dynamic>));
+  }
+
+  @override
+  Future<void> confirmSeize(String saleId, String remarks) async {
+    final numId = int.tryParse(saleId) ?? 0;
+    final j = await _api
+        .post('/sales/$numId/seize/confirm', query: {'remarks': remarks});
+    _replace(_fromJson(j as Map<String, dynamic>));
+  }
+
+  @override
+  Future<void> approveSeize(String saleId) async {
+    final numId = int.tryParse(saleId) ?? 0;
+    final j = await _api.post('/sales/$numId/seize/approve');
+    _replace(_fromJson(j as Map<String, dynamic>));
+  }
+
+  @override
+  Future<void> rejectSeize(String saleId, String reason) async {
+    final numId = int.tryParse(saleId) ?? 0;
+    final j =
+        await _api.post('/sales/$numId/seize/reject', query: {'reason': reason});
+    _replace(_fromJson(j as Map<String, dynamic>));
   }
 
   @override
   void confirm(String id, String byUserId) {
     final numId = int.tryParse(id) ?? 0;
-    // by_user_id comes from the Bearer token server-side.
-    unawaited(_api
-        .post('/sales/$numId/confirm')
-        .catchError((_) => null));
     final sale = byId(id);
     if (sale != null) {
-      Gate.confirm(sale, byUserId: byUserId);
+      Gate.confirm(sale, byUserId: byUserId); // optimistic local update
       notifyListeners();
     }
+    // by_user_id comes from the Bearer token server-side. Re-pull the server's
+    // authoritative version so details finalised on confirm (e.g. the generated
+    // installment schedule) show immediately — no re-login needed.
+    unawaited(_api
+        .post('/sales/$numId/confirm')
+        .then((_) => refresh())
+        .catchError((_) => null));
   }
 
   @override
   void reject(String id, String reason, String byUserId) {
     final numId = int.tryParse(id) ?? 0;
-    // reason stays a query param; by_user_id comes from the Bearer token.
-    unawaited(_api.post('/sales/$numId/reject',
-        query: {'reason': reason})
-        .catchError((_) => null));
     final sale = byId(id);
     if (sale != null) {
-      Gate.reject(sale, reason: reason, byUserId: byUserId);
+      Gate.reject(sale, reason: reason, byUserId: byUserId); // optimistic
       sale.saleStatus = 'rejected';
       notifyListeners();
     }
+    // reason stays a query param; by_user_id comes from the Bearer token.
+    unawaited(_api.post('/sales/$numId/reject',
+        query: {'reason': reason})
+        .then((_) => refresh())
+        .catchError((_) => null));
   }
 
   @override
@@ -346,7 +398,14 @@ class ApiSaleService extends SaleService {
       seizedAt: j['seized_at'] == null
           ? null
           : DateTime.tryParse(j['seized_at'] as String),
+      seizedBy: (j['seized_by'] as int?)?.toString(),
       seizeReason: j['seize_reason'] as String?,
+      seizeStage: j['seize_stage'] as String?,
+      seizeConfirmedAt: j['seize_confirmed_at'] == null
+          ? null
+          : DateTime.tryParse(j['seize_confirmed_at'] as String),
+      seizeConfirmRemarks: j['seize_confirm_remarks'] as String?,
+      seizeCancelRemarks: j['seize_cancel_remarks'] as String?,
       remarks: j['remarks'] as String?,
     );
   }
@@ -377,6 +436,8 @@ class ApiSaleService extends SaleService {
       documentIds:
           ((j['document_ids'] as List?) ?? []).map((e) => e as int).toList(),
       rejectionReason: j['rejection_reason'] as String?,
+      paidAt: _parseUtc(j['paid_at'] as String?),
+      kind: j['kind'] as String?,
     );
   }
 
@@ -391,7 +452,7 @@ class ApiSaleService extends SaleService {
   /// Parses a backend timestamp as a UTC instant. The API sends naive UTC
   /// (no timezone suffix), so append 'Z' when none is present — otherwise
   /// DateTime would read it as device-local time and elapsed-time math (e.g. the
-  /// 2-hour unsell window) would be off by the device's UTC offset.
+  /// 1-day unsell window) would be off by the device's UTC offset.
   static DateTime _parseUtc(String? s) {
     if (s == null || s.isEmpty) return DateTime.now().toUtc();
     final hasZone = s.endsWith('Z') || RegExp(r'[+-]\d\d:?\d\d$').hasMatch(s);

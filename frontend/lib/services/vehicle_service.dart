@@ -162,7 +162,7 @@ class MockVehicleService extends VehicleService {
 
   @override
   List<Vehicle> available() => _vehicles
-      .where((v) => !v.isAssigned && v.isActive)
+      .where((v) => !v.isAssigned && v.isActive && !v.isSeized)
       .toList();
 
   @override

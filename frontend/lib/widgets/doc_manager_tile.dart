@@ -17,6 +17,7 @@ class DocManagerTile extends StatelessWidget {
     required this.onTakePhoto,
     required this.onUpload,
     this.onDownload,
+    this.onShare,
     this.onDelete,
     this.busy = false,
   });
@@ -26,6 +27,7 @@ class DocManagerTile extends StatelessWidget {
   final VoidCallback onTakePhoto;
   final VoidCallback onUpload;
   final VoidCallback? onDownload;
+  final VoidCallback? onShare;
   final VoidCallback? onDelete;
   final bool busy;
 
@@ -76,6 +78,12 @@ class DocManagerTile extends StatelessWidget {
                 icon: Icons.visibility_outlined,
                 tooltip: 'View',
                 onTap: onDownload!,
+              ),
+            if (attached && onShare != null)
+              _ActionIcon(
+                icon: Icons.share_outlined,
+                tooltip: 'Share',
+                onTap: onShare!,
               ),
             _ActionIcon(
               icon: Icons.upload_outlined,

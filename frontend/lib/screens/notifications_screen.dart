@@ -5,6 +5,7 @@ import '../models/enums.dart';
 import '../services/api_notification_service.dart';
 import '../services/customer_service.dart';
 import '../services/sale_service.dart';
+import '../services/user_service.dart';
 import '../services/vehicle_service.dart';
 import '../theme/app_colors.dart';
 import '../utils/app_spacing.dart';
@@ -84,6 +85,22 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     return null;
   }
 
+  /// Name of the admin who submitted the record this approval request refers to,
+  /// resolved from the entity's creator. Null for non-approval notifications
+  /// (e.g. reminders) or when the creator can't be resolved.
+  String? _submittedBy(BuildContext context, NotificationItem n) {
+    if (n.type != 'verification_request' || n.entityId == null) return null;
+    final id = n.entityId.toString();
+    final createdBy = switch (n.entityType) {
+      'vehicle' => context.read<VehicleService>().byId(id)?.createdBy,
+      'customer' => context.read<CustomerService>().byId(id)?.createdBy,
+      'sale' => context.read<SaleService>().byId(id)?.createdBy,
+      _ => null,
+    };
+    if (createdBy == null) return null;
+    return context.read<UserService>().byId(createdBy)?.name;
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
@@ -114,6 +131,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               child: _NotificationCard(
                 n: n,
                 entityStatus: _entityStatus(context, n),
+                submittedBy: _submittedBy(context, n),
                 onTap: () => _onTap(context, n),
               ),
             ),
@@ -148,19 +166,23 @@ class _NotificationCard extends StatelessWidget {
     required this.n,
     required this.onTap,
     this.entityStatus,
+    this.submittedBy,
   });
 
   final NotificationItem n;
   final EntityStatus? entityStatus;
+  final String? submittedBy;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
 
-    // Outcome pill based on current entity status.
+    // Outcome pill based on current entity status — ONLY for approval requests.
+    // Reminder / info notifications must not show an approval outcome (they
+    // point at an already-active sale and would misleadingly read "Approved").
     Widget? outcomePill;
-    if (entityStatus != null) {
+    if (n.type == 'verification_request' && entityStatus != null) {
       outcomePill = switch (entityStatus!) {
         EntityStatus.active => _OutcomePill(
             label: 'Approved',
@@ -204,9 +226,10 @@ class _NotificationCard extends StatelessWidget {
                           style: AppTextStyles.bodyStrong
                               .copyWith(color: c.textMain)),
                     ),
-                    if (outcomePill != null) ...[
+                    // Top-right: which admin submitted this record for approval.
+                    if (submittedBy != null && submittedBy!.isNotEmpty) ...[
                       const SizedBox(width: AppSpacing.sm),
-                      outcomePill,
+                      _AdminChip(name: submittedBy!),
                     ],
                   ],
                 ),
@@ -217,12 +240,50 @@ class _NotificationCard extends StatelessWidget {
                           AppTextStyles.caption.copyWith(color: c.textSub)),
                 ],
                 const SizedBox(height: 4),
-                Text(Formatters.date(n.createdAt),
-                    style:
-                        AppTextStyles.caption.copyWith(color: c.textSub)),
+                Row(
+                  children: [
+                    Text(Formatters.date(n.createdAt),
+                        style:
+                            AppTextStyles.caption.copyWith(color: c.textSub)),
+                    if (outcomePill != null) ...[
+                      const Spacer(),
+                      outcomePill,
+                    ],
+                  ],
+                ),
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Small top-right chip naming the admin who submitted a record for approval.
+class _AdminChip extends StatelessWidget {
+  const _AdminChip({required this.name});
+
+  final String name;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: c.primaryContainer,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: c.primary.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.person_outline, size: 12, color: c.primary),
+          const SizedBox(width: 4),
+          Text(name,
+              style: TextStyle(
+                  fontSize: 11, fontWeight: FontWeight.w600, color: c.primary)),
         ],
       ),
     );
