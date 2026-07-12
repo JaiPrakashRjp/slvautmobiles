@@ -188,6 +188,12 @@ class _GlobalSearchBarState extends State<_GlobalSearchBar> {
     Navigator.of(context).push(route);
   }
 
+  void _openVehicle(int id) {
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => VehicleDetailScreen(vehicleId: '$id'),
+    ));
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
@@ -254,6 +260,21 @@ class _GlobalSearchBarState extends State<_GlobalSearchBar> {
                     ),
                     onTap: () => _open(_results[i]),
                   ),
+                  // A customer's vehicles listed beneath them (tap → vehicle).
+                  for (final v in _results[i].vehicles)
+                    ListTile(
+                      dense: true,
+                      contentPadding:
+                          const EdgeInsets.only(left: 40, right: 16),
+                      leading: Icon(Icons.directions_car_outlined,
+                          color: c.textSub, size: 18),
+                      title: Text(v.label,
+                          style:
+                              AppTextStyles.body.copyWith(color: c.textMain)),
+                      subtitle:
+                          v.subtitle.isEmpty ? null : Text(v.subtitle),
+                      onTap: () => _openVehicle(v.id),
+                    ),
                   if (i != _results.length - 1)
                     Divider(height: 1, color: c.borderColor),
                 ],

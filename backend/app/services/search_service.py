@@ -3,8 +3,10 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.models.customer import Customer
+from app.models.enums import SaleLifecycle
+from app.models.sale import Sale
 from app.models.vehicle import Vehicle
-from app.schemas.search import SearchResult
+from app.schemas.search import SearchResult, SearchVehicle
 
 
 class SearchService:
@@ -31,9 +33,31 @@ class SearchService:
         ).all()
         for c in customers:
             name = f"{c.first_name} {c.last_name}".strip()
+            # Every vehicle sold to this customer (via their sales; skip cancelled).
+            veh_rows = db.execute(
+                select(Vehicle.id, Vehicle.reg_no, Vehicle.model, Sale.sale_status)
+                .join(Sale, Sale.vehicle_id == Vehicle.id)
+                .where(
+                    Sale.customer_id == c.id,
+                    Sale.sale_status != SaleLifecycle.cancelled,
+                )
+                .order_by(Sale.created_at.desc())
+            ).all()
+            veh = [
+                SearchVehicle(
+                    id=r.id,
+                    label=r.reg_no or r.model or f"Vehicle #{r.id}",
+                    subtitle=" · ".join(
+                        p for p in (r.model, r.sale_status.value if r.sale_status else None) if p
+                    ),
+                )
+                for r in veh_rows
+            ]
+            count = len(veh)
+            subtitle = c.phone if count == 0 else f"{c.phone} · {count} vehicle{'s' if count != 1 else ''}"
             results.append(
                 SearchResult(
-                    kind="customer", id=c.id, label=name, subtitle=c.phone
+                    kind="customer", id=c.id, label=name, subtitle=subtitle, vehicles=veh
                 )
             )
 

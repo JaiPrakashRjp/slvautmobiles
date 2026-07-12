@@ -14,7 +14,6 @@ import '../../widgets/app_card.dart';
 import '../../widgets/primary_button.dart';
 import '../../widgets/role_gate_actions.dart';
 import '../../widgets/role_gate_banner.dart';
-import '../../widgets/secondary_button.dart';
 import '../../widgets/status_pill.dart';
 import '../document_preview_screen.dart';
 import 'assign_sale_screen.dart';
@@ -50,10 +49,6 @@ class CustomerDetailScreen extends StatelessWidget {
         .forCustomer(customerId)
         .where((s) => s.saleStatus != 'cancelled')
         .toList();
-    final activeSale = customerSales.isEmpty ? null : customerSales.first;
-    final vehicle = activeSale == null
-        ? null
-        : vehicles.byId(activeSale.vehicleId);
 
     final canModify =
         auth.isSuperAdmin || customer.createdBy == auth.currentUser?.id;
@@ -185,76 +180,68 @@ class CustomerDetailScreen extends StatelessWidget {
                 ),
               ],
 
-              // ── Assigned vehicle / sale ───────────────────────────────────
+              // ── Vehicles & sales (a customer can have several) ────────────
               const SizedBox(height: AppSpacing.lg),
-              Text('Vehicle & sale',
+              Text('Vehicles & sales',
                   style: AppTextStyles.label.copyWith(color: c.textSub)),
               const SizedBox(height: AppSpacing.sm),
 
-              if (activeSale == null)
+              if (customerSales.isEmpty)
                 AppCard(
-                  child: Text('No active sale.',
+                  child: Text('No sales yet.',
                       style: AppTextStyles.body.copyWith(color: c.textSub)),
                 )
               else
-                AppCard(
-                  accentLeft: true,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _Row(
-                          label: 'Vehicle',
-                          value: vehicle?.regNo ?? '—',
-                          c: c),
-                      _Row(
-                          label: 'Deposit',
-                          value: activeSale.depositType.label,
-                          c: c),
-                      if (activeSale.saleDate != null)
-                        _Row(
-                            label: 'Sale date',
-                            value: Formatters.date(activeSale.saleDate!),
-                            c: c),
-                      if (activeSale.salePrice != null)
-                        _Row(
-                            label: 'Total price',
-                            value: Formatters.currency(activeSale.salePrice!),
-                            c: c),
-                      _Row(
-                          label: 'Sale status',
-                          value: activeSale.saleStatus,
-                          c: c),
-                      if (activeSale.unsellReason != null &&
-                          activeSale.unsellReason!.isNotEmpty)
-                        _Row(
-                            label: 'Unsell reason',
-                            value: activeSale.unsellReason!,
-                            c: c),
-                    ],
-                  ),
-                ),
-
-              const SizedBox(height: AppSpacing.lg),
-
-              // ── Action buttons ────────────────────────────────────────────
-              if (activeSale != null)
-                SecondaryButton(
-                  label: 'View sale detail',
-                  icon: Icons.receipt_long_outlined,
-                  onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => SaleDetailScreen(saleId: activeSale.id),
+                for (final sale in customerSales) ...[
+                  AppCard(
+                    accentLeft: true,
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => SaleDetailScreen(saleId: sale.id),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                vehicles.byId(sale.vehicleId)?.regNo ?? 'Vehicle',
+                                style: AppTextStyles.bodyStrong
+                                    .copyWith(color: c.textMain),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                [
+                                  sale.saleStatus,
+                                  if (sale.salePrice != null)
+                                    Formatters.currency(sale.salePrice!),
+                                ].join(' · '),
+                                style: AppTextStyles.caption
+                                    .copyWith(color: c.textSub),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Icon(Icons.chevron_right, color: c.textSub),
+                      ],
                     ),
                   ),
-                )
-              else if (customer.isActive && canModify)
+                  const SizedBox(height: AppSpacing.sm),
+                ],
+
+              const SizedBox(height: AppSpacing.sm),
+              // Sell a vehicle to this customer (works for the 1st and additional).
+              if (customer.isActive && canModify)
                 PrimaryButton(
-                  label: 'Assign vehicle & sale',
+                  label: customerSales.isEmpty
+                      ? 'Assign vehicle & sale'
+                      : 'Sell another vehicle',
                   icon: Icons.sell_outlined,
                   onPressed: () => Navigator.of(context).push(
                     MaterialPageRoute(
-                      builder: (_) =>
-                          AssignSaleScreen(customerId: customerId),
+                      builder: (_) => AssignSaleScreen(customerId: customerId),
                     ),
                   ),
                 ),
