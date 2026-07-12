@@ -1,4 +1,4 @@
-name: Build APK
+name: Build APK & Deploy Backend
 
 on:
   push:
@@ -95,3 +95,49 @@ jobs:
         with:
           files: frontend/build/app/outputs/flutter-apk/app-release.apk
           name: SLV Auto ${{ github.ref_name }}
+
+  # ── Deploy the backend ONLY AFTER the APK is published. This flips
+  #    LATEST_VERSION, which drives the in-app update card — so the card can
+  #    never appear before the matching latest.apk is on the server. Skipped on
+  #    tag pushes (those just build + create a release). ──
+  deploy:
+    needs: build
+    if: github.ref_name == 'main' || github.ref_name == 'dev'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Resolve environment
+        id: env
+        run: |
+          if [ "${{ github.ref_name }}" = "main" ]; then
+            echo "dir=/opt/slv"         >> $GITHUB_OUTPUT
+            echo "service=slv-api"      >> $GITHUB_OUTPUT
+            echo "branch=main"          >> $GITHUB_OUTPUT
+          else
+            echo "dir=/opt/slv-dev"     >> $GITHUB_OUTPUT
+            echo "service=slv-api-dev"  >> $GITHUB_OUTPUT
+            echo "branch=dev"           >> $GITHUB_OUTPUT
+          fi
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            set -e
+            cd ${{ steps.env.outputs.dir }}
+
+            git pull origin ${{ steps.env.outputs.branch }}
+
+            source venv/bin/activate
+            pip install -r backend/requirements.txt
+
+            cd backend
+            alembic upgrade head
+            cd ..
+
+            systemctl restart ${{ steps.env.outputs.service }}
+
+            echo "Deployed branch=${{ steps.env.outputs.branch }} → ${{ steps.env.outputs.dir }}"
