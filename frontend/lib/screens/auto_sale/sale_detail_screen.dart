@@ -21,7 +21,6 @@ import '../../utils/formatters.dart';
 import '../../utils/responsive.dart';
 import '../../viewmodels/sale_detail_viewmodel.dart';
 import '../../widgets/app_card.dart';
-import '../../widgets/primary_button.dart';
 import '../../widgets/role_gate_banner.dart';
 import '../../widgets/secondary_button.dart';
 import '../../widgets/status_pill.dart';
@@ -414,38 +413,6 @@ class _SaleDetailViewState extends State<_SaleDetailView> {
     );
   }
 
-  Future<void> _onPayOff(BuildContext context, SaleDetailViewModel vm) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Pay off remaining'),
-        content: const Text(
-            'Mark all remaining installments as paid and close this sale?'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel')),
-          TextButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Pay off')),
-        ],
-      ),
-    );
-    if (confirmed != true || !context.mounted) return;
-    try {
-      await vm.payOff();
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Sale closed — all installments settled.')),
-      );
-    } catch (e) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed: $e')),
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
@@ -571,13 +538,6 @@ class _SaleDetailViewState extends State<_SaleDetailView> {
 
                     // ── Pay off / payoff receipt ─────────────────────────────
                     if (sale.mode == PaymentMode.installments) ...[
-                      if (vm.hasUnpaid && !vm.isClosed && vm.canModify)
-                        PrimaryButton(
-                          label: vm.payingOff ? 'Processing…' : 'Pay off remaining',
-                          icon: Icons.payments_outlined,
-                          onPressed:
-                              vm.payingOff ? null : () => _onPayOff(context, vm),
-                        ),
                       if (vm.isClosed && vm.customer != null && vm.vehicle != null)
                         SecondaryButton(
                           label: 'Download payoff receipt',
