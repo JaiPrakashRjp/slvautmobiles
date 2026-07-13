@@ -5,7 +5,6 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
 import '../models/customer.dart';
-import '../models/enums.dart';
 import '../models/installment.dart';
 import '../models/loan.dart';
 import '../models/sale.dart';
@@ -49,11 +48,56 @@ class RealPdfService implements PdfService {
   static const PdfColor _textMain= PdfColor.fromInt(0xFF0F1A33);
   static const PdfColor _divLine = PdfColor.fromInt(0xFFDDDAD3); // card divider
 
+  // ── Business details (printed on the sale invoice) ───────────────────────────
+  static const String _bizPhone = '8494992727';
+  static const String _bizGstin = '29ETVPM6588PIZZ';
+  static const String _bizState = 'Karnataka';
+  static const String _branch1 =
+      'No 84, 5th Cross, near Om Shakthi Temple, Hanumagiri Nagar, Bangalore 560061';
+  static const String _branch2 =
+      '30, 18th Main Rd, Munireddy Layout, Padmanabhanagar, Bengaluru, Karnataka 560061';
+
   // ── Helpers ────────────────────────────────────────────────────────────────
 
   /// PDF-safe currency — built-in fonts lack the ₹ glyph.
   static String _curr(num amount) =>
       'Rs. ${NumberFormat('#,##,###', 'en_IN').format(amount.round())}';
+
+  static const _ones = [
+    '', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine',
+    'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen',
+    'Seventeen', 'Eighteen', 'Nineteen'
+  ];
+  static const _tens = [
+    '', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty',
+    'Ninety'
+  ];
+
+  static String _twoDigit(int n) => n < 20
+      ? _ones[n]
+      : '${_tens[n ~/ 10]}${n % 10 != 0 ? ' ${_ones[n % 10]}' : ''}';
+
+  /// Indian-system rupees in words, e.g. 291500 → "Two Lakh Ninety One Thousand
+  /// Five Hundred Rupees only".
+  static String _amountInWords(int amount) {
+    if (amount <= 0) return 'Zero Rupees only';
+    var n = amount;
+    final parts = <String>[];
+    final crore = n ~/ 10000000;
+    n %= 10000000;
+    final lakh = n ~/ 100000;
+    n %= 100000;
+    final thousand = n ~/ 1000;
+    n %= 1000;
+    final hundred = n ~/ 100;
+    n %= 100;
+    if (crore > 0) parts.add('${_twoDigit(crore)} Crore');
+    if (lakh > 0) parts.add('${_twoDigit(lakh)} Lakh');
+    if (thousand > 0) parts.add('${_twoDigit(thousand)} Thousand');
+    if (hundred > 0) parts.add('${_ones[hundred]} Hundred');
+    if (n > 0) parts.add(_twoDigit(n));
+    return '${parts.join(' ')} Rupees only';
+  }
 
   Future<pw.ImageProvider?> _loadLogo() async {
     try {
@@ -233,7 +277,8 @@ class RealPdfService implements PdfService {
     required Vehicle vehicle,
   }) async {
     final logo = await _loadLogo();
-    final isInstallment = sale.mode == PaymentMode.installments;
+    final total = (sale.salePrice ?? sale.collected).round();
+    final branch = vehicle.branch?.label ?? customer.branch?.label;
     final doc = pw.Document();
     doc.addPage(pw.Page(
       pageFormat: PdfPageFormat.a4,
@@ -241,27 +286,60 @@ class RealPdfService implements PdfService {
       build: (_) => pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.stretch,
         children: [
-          _header('Sale Invoice', logo, ref: sale.invoiceNo),
+          _invoiceHeader(logo),
+          pw.Container(
+            color: _gold,
+            alignment: pw.Alignment.center,
+            padding: const pw.EdgeInsets.symmetric(vertical: 4),
+            child: pw.Text('SALE INVOICE',
+                style: pw.TextStyle(
+                    fontSize: 9,
+                    fontWeight: pw.FontWeight.bold,
+                    color: _navy,
+                    letterSpacing: 2)),
+          ),
           pw.Expanded(
             child: pw.Container(
               color: _bgWarm,
-              padding: const pw.EdgeInsets.fromLTRB(28, 16, 28, 24),
+              padding: const pw.EdgeInsets.fromLTRB(28, 14, 28, 20),
               child: pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.stretch,
                 children: [
-                  _label('CUSTOMER'),
-                  _card([
-                    _row('Name', customer.fullName),
-                    _row('Mobile', Formatters.phone(customer.phone)),
-                    if (customer.address.isNotEmpty)
-                      _row('Address', customer.address),
-                  ]),
-
-                  _label('VEHICLE'),
-                  _card([
-                    _row('Reg. no.', vehicle.regNo),
-                    _row('Type', vehicle.type.label),
-                  ]),
+                  // Bill To  |  Invoice details
+                  pw.Row(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Expanded(
+                        child: pw.Column(
+                          crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+                          children: [
+                            _label('BILL TO'),
+                            _card([
+                              _row('Name', customer.fullName),
+                              _row('Contact no.',
+                                  Formatters.phone(customer.phone)),
+                            ]),
+                          ],
+                        ),
+                      ),
+                      pw.SizedBox(width: 12),
+                      pw.Expanded(
+                        child: pw.Column(
+                          crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+                          children: [
+                            _label('INVOICE DETAILS'),
+                            _card([
+                              if (sale.invoiceNo != null)
+                                _row('Invoice no.', sale.invoiceNo!),
+                              if (sale.saleDate != null)
+                                _row('Date', Formatters.date(sale.saleDate!)),
+                              if (branch != null) _row('Branch', branch),
+                            ]),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
 
                   _label('PAYMENT'),
                   _card([
@@ -270,21 +348,37 @@ class RealPdfService implements PdfService {
                       _row('Sale date', Formatters.date(sale.saleDate!)),
                     if (sale.salePrice != null)
                       _row('Total price', _curr(sale.salePrice!)),
-                    if (isInstallment) ...[
-                      _row('Advance received', _curr(sale.advance)),
-                      _row('Monthly instalment', _curr(sale.monthly)),
-                      _row('Total instalments', '${sale.totalInstallments}'),
-                      _row('Paid so far',
-                          '${sale.paidCount} of ${sale.totalInstallments}'),
-                      if (sale.outstanding > 0)
-                        _row('Outstanding', _curr(sale.outstanding),
-                            accent: true),
-                    ],
+                    _row('Advance received', _curr(sale.advance)),
+                  ]),
+                  // Balance drops as installments are paid.
+                  _totalBar('BALANCE', _curr(sale.remainingAmount)),
+
+                  _label('AMOUNT IN WORDS'),
+                  _card([
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 9),
+                      child: pw.Text(_amountInWords(total),
+                          style: pw.TextStyle(
+                              fontSize: 10,
+                              fontWeight: pw.FontWeight.bold,
+                              color: _textMain)),
+                    ),
                   ]),
 
-                  _totalBar('TOTAL COLLECTED', _curr(sale.collected)),
+                  _label('TERMS AND CONDITIONS'),
+                  _card([
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 9),
+                      child: pw.Text('Thank you for doing business with us.',
+                          style: const pw.TextStyle(
+                              fontSize: 9, color: PdfColors.grey700)),
+                    ),
+                  ]),
+
                   pw.Spacer(),
-                  _footer(),
+                  _branchFooter(),
                 ],
               ),
             ),
@@ -293,6 +387,97 @@ class RealPdfService implements PdfService {
       ),
     ));
     await Printing.layoutPdf(onLayout: (_) => doc.save());
+  }
+
+  /// Invoice header: logo on the left, business details (name / phone / GSTIN /
+  /// state) on the right.
+  pw.Widget _invoiceHeader(pw.ImageProvider? logo) {
+    return pw.Container(
+      color: _navy,
+      padding: const pw.EdgeInsets.fromLTRB(28, 18, 28, 16),
+      child: pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: pw.CrossAxisAlignment.center,
+        children: [
+          logo != null
+              ? pw.Image(logo, width: 68, height: 68, fit: pw.BoxFit.contain)
+              : pw.SizedBox(width: 68, height: 68),
+          pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.end,
+            children: [
+              pw.Text('SLV AUTO CONSULTANT',
+                  style: pw.TextStyle(
+                      fontSize: 16,
+                      fontWeight: pw.FontWeight.bold,
+                      color: PdfColors.white)),
+              pw.SizedBox(height: 4),
+              pw.Text('Phone no.: $_bizPhone',
+                  style: pw.TextStyle(
+                      fontSize: 9, color: PdfColors.white.shade(0.85))),
+              pw.Text('GSTIN: $_bizGstin',
+                  style: pw.TextStyle(
+                      fontSize: 9, color: PdfColors.white.shade(0.85))),
+              pw.Text('State: $_bizState',
+                  style: pw.TextStyle(
+                      fontSize: 9, color: PdfColors.white.shade(0.85))),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Both branch addresses, above a navy rule — no signature block.
+  pw.Widget _branchFooter() {
+    pw.Widget line(String tag, String addr) => pw.Padding(
+          padding: const pw.EdgeInsets.only(bottom: 4),
+          child: pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Container(
+                margin: const pw.EdgeInsets.only(top: 1),
+                padding:
+                    const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: pw.BoxDecoration(
+                  color: _cream,
+                  borderRadius: pw.BorderRadius.circular(4),
+                  border: pw.Border.all(color: _gold, width: 0.5),
+                ),
+                child: pw.Text(tag,
+                    style: pw.TextStyle(
+                        fontSize: 8,
+                        fontWeight: pw.FontWeight.bold,
+                        color: _navy)),
+              ),
+              pw.SizedBox(width: 8),
+              pw.Expanded(
+                child: pw.Text(addr,
+                    style: const pw.TextStyle(
+                        fontSize: 9, color: PdfColors.grey700, lineSpacing: 2)),
+              ),
+            ],
+          ),
+        );
+    return pw.Container(
+      padding: const pw.EdgeInsets.only(top: 12),
+      decoration: const pw.BoxDecoration(
+        border: pw.Border(top: pw.BorderSide(color: _navy, width: 1.5)),
+      ),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Text('BRANCH ADDRESSES',
+              style: pw.TextStyle(
+                  fontSize: 8,
+                  fontWeight: pw.FontWeight.bold,
+                  color: PdfColors.grey600,
+                  letterSpacing: 1)),
+          pw.SizedBox(height: 6),
+          line('Branch 1', _branch1),
+          line('Branch 2', _branch2),
+        ],
+      ),
+    );
   }
 
   // ── Installment receipt ────────────────────────────────────────────────────
