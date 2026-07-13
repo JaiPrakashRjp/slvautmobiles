@@ -93,12 +93,8 @@ class SaleService:
             DepositType.full_cash if is_full_cash else DepositType.down_payment
         )
         remaining = 0.0 if is_full_cash else round(float(data.remaining_amount), 2)
-        # HP (loan) amount is honoured only when a super admin creates the sale.
-        hp_amount = (
-            float(data.hp_amount)
-            if (data.hp_amount is not None and actor_role == "super_admin")
-            else None
-        )
+        # HP (loan) amount — captured for every role (admins included).
+        hp_amount = float(data.hp_amount) if data.hp_amount is not None else None
 
         sale = Sale(
             module_id=module_id,

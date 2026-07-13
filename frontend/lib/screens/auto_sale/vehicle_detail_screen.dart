@@ -335,6 +335,15 @@ class VehicleDetailScreen extends StatelessWidget {
     final financers = context.read<FinancerService>();
     final auth = context.read<AuthController>();
 
+    // Re-pull the vehicle + its sale/customer so seize state (approve/cancel/
+    // confirm made elsewhere) shows without a re-login. Backs auto-refresh on
+    // open and pull-to-refresh.
+    Future<void> refreshAll() => Future.wait([
+          vehicles.refresh(),
+          sales.refresh(),
+          customers.refresh(),
+        ]);
+
     final vehicle = vehicles.byId(vehicleId);
     if (vehicle == null) {
       return Scaffold(
@@ -374,9 +383,13 @@ class VehicleDetailScreen extends StatelessWidget {
       body: SafeArea(
         child: ResponsiveBody(
           maxFormWidth: 560,
-          phone: ListView(
+          phone: RefreshIndicator(
+            onRefresh: refreshAll,
+            child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
             padding: EdgeInsets.all(context.screenHPadding),
             children: [
+              _AutoRefreshTrigger(onInit: refreshAll),
               if (!vehicle.isActive) ...[
                 RoleGateBanner(
                   status: vehicle.status,
@@ -496,6 +509,7 @@ class VehicleDetailScreen extends StatelessWidget {
                 },
               ),
             ],
+          ),
           ),
         ),
       ),
@@ -841,4 +855,27 @@ class _SoldBanner extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Invisible child that runs [onInit] once after the first frame — gives a
+/// StatelessWidget an "auto-refresh on open" without converting it to stateful.
+class _AutoRefreshTrigger extends StatefulWidget {
+  const _AutoRefreshTrigger({required this.onInit});
+  final Future<void> Function() onInit;
+
+  @override
+  State<_AutoRefreshTrigger> createState() => _AutoRefreshTriggerState();
+}
+
+class _AutoRefreshTriggerState extends State<_AutoRefreshTrigger> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) widget.onInit();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => const SizedBox.shrink();
 }

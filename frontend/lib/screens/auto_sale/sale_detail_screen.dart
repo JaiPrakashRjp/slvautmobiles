@@ -2,17 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../controllers/auth_controller.dart';
-import '../../models/doc_ref.dart';
 import '../../models/enums.dart';
 import '../../models/installment.dart';
 import '../../models/sale.dart';
 import '../../models/sale_payment.dart';
-import '../../models/vehicle.dart';
-import '../../utils/doc_picker.dart';
 import '../../services/customer_service.dart';
 import '../../services/pdf_service.dart';
 import '../../services/sale_service.dart';
@@ -63,9 +59,24 @@ class _SaleDetailViewState extends State<_SaleDetailView> {
   @override
   void initState() {
     super.initState();
+    // Auto-refresh on open so approvals / reminders made elsewhere show without
+    // a re-login.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<SaleDetailViewModel>().loadReminders();
+      if (mounted) _refresh();
     });
+  }
+
+  /// Re-pull the sale (+ its vehicle, customer and reminder log) from the
+  /// server. Backs both the auto-refresh on open and pull-to-refresh.
+  Future<void> _refresh() async {
+    final vm = context.read<SaleDetailViewModel>();
+    await Future.wait([
+      context.read<SaleService>().refresh(),
+      context.read<VehicleService>().refresh(),
+      context.read<CustomerService>().refresh(),
+    ]);
+    if (!mounted) return;
+    await vm.loadReminders();
   }
 
   Future<void> _act(BuildContext context, Future<void> Function() action,
@@ -449,179 +460,6 @@ class _SaleDetailViewState extends State<_SaleDetailView> {
     );
   }
 
-  // ── Vehicle papers: editable reg no + RC/permit/insurance + share ─────────
-  Widget _vehiclePapers(
-      BuildContext context, SaleDetailViewModel vm, Vehicle vehicle) {
-    final c = context.colors;
-    final editable = vm.canModify;
-    final regDisplay =
-        vehicle.regNo.isNotEmpty ? vehicle.regNo : (vehicle.chassisNo ?? '—');
-
-    Widget flagRow(
-        String label, bool value, String docWire, ValueChanged<bool> toggle) {
-      final ref = vehicle.uploadedDocs
-          .where((d) => d.docTypeWire == docWire)
-          .cast<DocRef?>()
-          .firstOrNull;
-      return Row(
-        children: [
-          Checkbox(
-            value: value,
-            activeColor: c.primary,
-            onChanged: editable ? (v) => toggle(v ?? false) : null,
-          ),
-          Expanded(
-              child: Text(label,
-                  style: AppTextStyles.body.copyWith(color: c.textMain))),
-          if (ref != null)
-            IconButton(
-              icon: const Icon(Icons.visibility_outlined, size: 20),
-              tooltip: 'View / share',
-              onPressed: () => Navigator.of(context).push(MaterialPageRoute(
-                builder: (_) => DocumentPreviewScreen(
-                  title: label,
-                  fileName: ref.fileName,
-                  loader: () => vm.vehicleDocBytes(ref.id),
-                ),
-              )),
-            ),
-          if (editable)
-            TextButton.icon(
-              onPressed: () => _uploadVehicleDoc(context, vm, docWire),
-              icon: const Icon(Icons.upload_file_outlined, size: 18),
-              label: Text(ref == null ? 'Upload' : 'Replace'),
-            ),
-        ],
-      );
-    }
-
-    return AppCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text('Vehicle papers',
-                  style: AppTextStyles.bodyStrong.copyWith(color: c.textMain)),
-              const Spacer(),
-              IconButton(
-                icon: const Icon(Icons.share_outlined),
-                tooltip: 'Share',
-                onPressed: () => _shareVehiclePapers(context, vm, vehicle),
-              ),
-            ],
-          ),
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Vehicle number',
-                        style: AppTextStyles.caption.copyWith(color: c.textSub)),
-                    Text(regDisplay,
-                        style: AppTextStyles.bodyStrong
-                            .copyWith(color: c.textMain)),
-                  ],
-                ),
-              ),
-              if (editable)
-                TextButton.icon(
-                  onPressed: () => _editRegNo(context, vm, vehicle),
-                  icon: const Icon(Icons.edit_outlined, size: 18),
-                  label: Text(vehicle.regNo.isEmpty ? 'Add' : 'Edit'),
-                ),
-            ],
-          ),
-          const Divider(),
-          flagRow('RC', vehicle.rc, 'rc', (v) => vm.updateVehicle(rc: v)),
-          flagRow('Permit', vehicle.permit, 'permit',
-              (v) => vm.updateVehicle(permit: v)),
-          flagRow('Insurance', vehicle.insurance, 'insurance',
-              (v) => vm.updateVehicle(insurance: v)),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _editRegNo(
-      BuildContext context, SaleDetailViewModel vm, Vehicle vehicle) async {
-    final ctrl = TextEditingController(text: vehicle.regNo);
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Vehicle number'),
-        content: TextField(
-          controller: ctrl,
-          autofocus: true,
-          textCapitalization: TextCapitalization.characters,
-          decoration: const InputDecoration(hintText: 'KA-01-AB-1234'),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Save')),
-        ],
-      ),
-    );
-    if (ok != true) return;
-    await vm.updateVehicle(regNo: ctrl.text.trim());
-  }
-
-  Future<void> _uploadVehicleDoc(
-      BuildContext context, SaleDetailViewModel vm, String docWire) async {
-    final messenger = ScaffoldMessenger.of(context);
-    final source = await showModalBottomSheet<String>(
-      context: context,
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.camera_alt_outlined),
-              title: const Text('Take photo'),
-              onTap: () => Navigator.pop(ctx, 'photo'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.upload_file_outlined),
-              title: const Text('Choose file'),
-              onTap: () => Navigator.pop(ctx, 'file'),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (source == null) return;
-    final doc = source == 'photo' ? await pickPhotoDoc() : await pickFileDoc();
-    if (doc == null) return;
-    try {
-      await vm.uploadVehicleDoc(docWire, doc);
-      messenger
-          .showSnackBar(const SnackBar(content: Text('Document uploaded.')));
-    } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Upload failed: $e')));
-    }
-  }
-
-  void _shareVehiclePapers(
-      BuildContext context, SaleDetailViewModel vm, Vehicle vehicle) {
-    final sale = vm.sale;
-    final lines = <String>[
-      'SLV Auto Consultant',
-      if (vm.customer != null) 'Customer: ${vm.customer!.fullName}',
-      'Vehicle no: ${vehicle.regNo.isNotEmpty ? vehicle.regNo : "—"}',
-      'Chassis: ${vehicle.chassisNo ?? "—"}',
-      'RC: ${vehicle.rc ? "Yes" : "No"}',
-      'Permit: ${vehicle.permit ? "Yes" : "No"}',
-      'Insurance: ${vehicle.insurance ? "Yes" : "No"}',
-      if (sale?.salePrice != null) 'Total: ₹${sale!.salePrice}',
-    ];
-    Share.share(lines.join('\n'), subject: 'Vehicle papers');
-  }
-
   Widget _statusChip(Installment inst, SalePayment? pending, AppColors c) {
     String label;
     Color color;
@@ -786,7 +624,10 @@ class _SaleDetailViewState extends State<_SaleDetailView> {
                     style: AppTextStyles.body.copyWith(color: c.textSub)))
             : ResponsiveBody(
                 maxFormWidth: 560,
-                phone: ListView(
+                phone: RefreshIndicator(
+                  onRefresh: _refresh,
+                  child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
                   padding: EdgeInsets.all(context.screenHPadding),
                   children: [
                     // ── Pending / rejected banner ───────────────────────────
@@ -900,12 +741,6 @@ class _SaleDetailViewState extends State<_SaleDetailView> {
                     ),
                     const SizedBox(height: AppSpacing.lg),
 
-                    // ── Vehicle papers (reg no + RC/permit/insurance + share) ─
-                    if (vm.vehicle != null) ...[
-                      _vehiclePapers(context, vm, vm.vehicle!),
-                      const SizedBox(height: AppSpacing.lg),
-                    ],
-
                     // ── Pay off / payoff receipt ─────────────────────────────
                     if (sale.mode == PaymentMode.installments) ...[
                       if (vm.isClosed && vm.customer != null && vm.vehicle != null)
@@ -994,6 +829,7 @@ class _SaleDetailViewState extends State<_SaleDetailView> {
 
                     const SizedBox(height: AppSpacing.xxl),
                   ],
+                  ),
                 ),
               ),
       ),

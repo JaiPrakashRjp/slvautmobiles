@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../controllers/auth_controller.dart';
 import 'api_client.dart';
@@ -47,11 +48,15 @@ class NotificationFeed extends ChangeNotifier {
       : _auth = auth,
         _api = client ?? ApiClient();
 
+  static const _kLastPushedKey = 'notif_last_pushed_id';
+
   final AuthController _auth;
   final ApiClient _api;
   final List<NotificationItem> _items = [];
-  // Track which notification IDs have already triggered a local push.
-  final Set<int> _pushedIds = {};
+  // High-water mark of the newest notification id we've already pushed. Persisted
+  // so a push fires only ONCE per notification, even across app restarts (fixes
+  // the duplicate push on every close/reopen). null = not yet loaded.
+  int? _lastPushedId;
   bool _loading = false;
 
   List<NotificationItem> all() => List.unmodifiable(_items);
@@ -65,6 +70,9 @@ class NotificationFeed extends ChangeNotifier {
       notifyListeners();
       return;
     }
+    // Load the persisted "last pushed" high-water mark once.
+    final prefs = await SharedPreferences.getInstance();
+    _lastPushedId ??= prefs.getInt(_kLastPushedKey);
     _loading = true;
     notifyListeners();
     try {
@@ -75,18 +83,32 @@ class NotificationFeed extends ChangeNotifier {
         ..addAll((data as List)
             .map((j) => NotificationItem.fromJson(j as Map<String, dynamic>)));
 
-      // Fire a system-tray push for each new unread verification request.
-      for (final n in _items) {
-        if (!n.isRead &&
-            n.type == 'verification_request' &&
-            !_pushedIds.contains(n.id)) {
-          _pushedIds.add(n.id);
-          unawaited(LocalPushService.show(
-            id: n.id,
-            title: n.title,
-            body: n.message.isNotEmpty ? n.message : 'Tap to review',
-          ));
+      final maxId = _items.isEmpty
+          ? 0
+          : _items.map((n) => n.id).reduce((a, b) => a > b ? a : b);
+      final baseline = _lastPushedId;
+      if (baseline == null) {
+        // First run on this device — treat the existing backlog as already seen
+        // so we don't spam a push for every old pending item.
+        _lastPushedId = maxId;
+      } else {
+        // Push a system-tray notification only for genuinely NEW unread
+        // verification requests (id above the last one we pushed).
+        for (final n in _items) {
+          if (n.id > baseline &&
+              !n.isRead &&
+              n.type == 'verification_request') {
+            unawaited(LocalPushService.show(
+              id: n.id,
+              title: n.title,
+              body: n.message.isNotEmpty ? n.message : 'Tap to review',
+            ));
+          }
         }
+        if (maxId > baseline) _lastPushedId = maxId;
+      }
+      if (_lastPushedId != baseline && _lastPushedId != null) {
+        await prefs.setInt(_kLastPushedKey, _lastPushedId!);
       }
     } finally {
       _loading = false;

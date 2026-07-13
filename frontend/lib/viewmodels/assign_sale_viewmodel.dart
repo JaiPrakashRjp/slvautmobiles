@@ -4,6 +4,7 @@ import '../controllers/auth_controller.dart';
 import '../models/customer.dart';
 import '../models/enums.dart';
 import '../models/financer.dart';
+import '../models/picked_doc.dart';
 import '../models/vehicle.dart';
 import '../services/customer_service.dart';
 import '../services/sale_financer_service.dart';
@@ -36,6 +37,9 @@ class AssignSaleViewModel extends ChangeNotifier {
         vehicleLocked = initialVehicleId != null {
     final phone = customers.byId(customerId)?.phone ?? '';
     if (phone.isNotEmpty) whatsappController.text = phone;
+    // Prefill the reg number from the (pre-)selected vehicle, if any.
+    final preVehicle = _vehicleId == null ? null : vehicles.byId(_vehicleId!);
+    if (preVehicle != null) regNoController.text = preVehicle.regNo;
     // Recompute total + loan-field visibility live as amounts change.
     for (final ctl in _amountControllers) {
       ctl.addListener(notifyListeners);
@@ -59,6 +63,8 @@ class AssignSaleViewModel extends ChangeNotifier {
   final hpAmountController = TextEditingController();
   final whatsappController = TextEditingController();
   final remarksController = TextEditingController();
+  // Vehicle reg number — captured at sell time, written onto the vehicle.
+  final regNoController = TextEditingController();
 
   late final List<TextEditingController> _amountControllers = [
     vehicleAmountController,
@@ -75,6 +81,53 @@ class AssignSaleViewModel extends ChangeNotifier {
   int? _financerId;
   DateTime? _saleDate;
   bool _loading = false;
+
+  // Vehicle papers captured at sell time → written onto the vehicle on submit.
+  bool _rc = false;
+  bool _permit = false;
+  bool _insurance = false;
+  PickedDoc? _rcDoc;
+  PickedDoc? _permitDoc;
+  PickedDoc? _insuranceDoc;
+
+  bool get rc => _rc;
+  bool get permit => _permit;
+  bool get insurance => _insurance;
+  PickedDoc? get rcDoc => _rcDoc;
+  PickedDoc? get permitDoc => _permitDoc;
+  PickedDoc? get insuranceDoc => _insuranceDoc;
+
+  set rc(bool v) {
+    _rc = v;
+    notifyListeners();
+  }
+
+  set permit(bool v) {
+    _permit = v;
+    notifyListeners();
+  }
+
+  set insurance(bool v) {
+    _insurance = v;
+    notifyListeners();
+  }
+
+  /// Attach a picked document for one of the papers ('rc' | 'permit' |
+  /// 'insurance'); ticks the matching flag on.
+  void setPaperDoc(String wire, PickedDoc? doc) {
+    switch (wire) {
+      case 'rc':
+        _rcDoc = doc;
+        if (doc != null) _rc = true;
+      case 'permit':
+        _permitDoc = doc;
+        if (doc != null) _permit = true;
+      case 'insurance':
+        _insuranceDoc = doc;
+        if (doc != null) _insurance = true;
+    }
+    notifyListeners();
+  }
 
   final bool vehicleLocked;
 
@@ -105,9 +158,9 @@ class AssignSaleViewModel extends ChangeNotifier {
   int get downPayment => _parse(downPaymentController);
   int get hpAmount => _parse(hpAmountController);
 
-  /// HP (loan) amount actually applied — only a super admin's positive entry
-  /// counts (the field is hidden for admins and ignored by the backend).
-  int get hpEffective => (isSuperAdmin && hpAmount > 0) ? hpAmount : 0;
+  /// HP (loan) amount actually applied — any positive entry counts (available
+  /// to every role, admins included).
+  int get hpEffective => hpAmount > 0 ? hpAmount : 0;
 
   /// Amount the customer repays in installments, derived (not typed):
   /// Remaining = Total − HP − Down payment.
@@ -130,6 +183,9 @@ class AssignSaleViewModel extends ChangeNotifier {
 
   set vehicleId(String? v) {
     _vehicleId = v;
+    // Reflect the newly-selected vehicle's reg number in the editable field.
+    final veh = v == null ? null : _vehicles.byId(v);
+    regNoController.text = veh?.regNo ?? '';
     notifyListeners();
   }
 
@@ -182,7 +238,25 @@ class AssignSaleViewModel extends ChangeNotifier {
             : remarksController.text.trim(),
         financerId: _financerId,
       );
-      await _vehicles.update(_vehicleId!, saleStatus: SaleStatus.sold);
+      // Mark sold + write the captured vehicle papers (reg no + flags).
+      final regNo = regNoController.text.trim();
+      await _vehicles.update(_vehicleId!,
+          saleStatus: SaleStatus.sold,
+          regNo: regNo.isEmpty ? null : regNo,
+          rc: _rc,
+          permit: _permit,
+          insurance: _insurance);
+      // Upload any attached papers onto the vehicle's documents.
+      final papers = <String, PickedDoc?>{
+        'rc': _rcDoc,
+        'permit': _permitDoc,
+        'insurance': _insuranceDoc,
+      };
+      for (final e in papers.entries) {
+        if (e.value != null) {
+          await _vehicles.uploadDocument(_vehicleId!, e.key, e.value!);
+        }
+      }
       return !user.isSuperAdmin;
     } finally {
       _loading = false;
@@ -204,6 +278,7 @@ class AssignSaleViewModel extends ChangeNotifier {
     hpAmountController.dispose();
     whatsappController.dispose();
     remarksController.dispose();
+    regNoController.dispose();
     super.dispose();
   }
 }

@@ -47,8 +47,38 @@ class _PendingItem {
 
 /// Super Admin review queue — spec 5.5. Aggregates pending items from every
 /// module, oldest first.
-class PendingApprovalsScreen extends StatelessWidget {
+class PendingApprovalsScreen extends StatefulWidget {
   const PendingApprovalsScreen({super.key});
+
+  @override
+  State<PendingApprovalsScreen> createState() =>
+      _PendingApprovalsScreenState();
+}
+
+class _PendingApprovalsScreenState extends State<PendingApprovalsScreen> {
+  // True while the first fetch on open is in flight (shows a spinner instead of
+  // a misleading empty state).
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    // Auto-refresh on open so newly-submitted items (an admin's sale/seize) show.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _refresh();
+    });
+  }
+
+  /// Re-pull the gated entities from the server. Backs both the auto-refresh on
+  /// open and pull-to-refresh (slide down).
+  Future<void> _refresh() async {
+    await Future.wait([
+      context.read<CustomerService>().refresh(),
+      context.read<VehicleService>().refresh(),
+      context.read<SaleService>().refresh(),
+    ]);
+    if (mounted) setState(() => _loading = false);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -131,6 +161,23 @@ class PendingApprovalsScreen extends StatelessWidget {
         )),
       ));
     }
+    // Pending payments (manual + installment) submitted by an admin.
+    for (final s in sales.all()) {
+      for (final p in s.payments.where((p) => p.isPending)) {
+        items.add(_PendingItem(
+          type: 'Payment',
+          title: 'Payment · ${custName(s.customerId)}',
+          subtitle:
+              '${Formatters.currency(p.amount)} · ${p.isManual ? 'Manual' : 'Installment'}',
+          createdAt: p.paidAt ?? s.createdAt,
+          onApprove: () => sales.approvePayment(s.id, p.id),
+          onReject: (r) => sales.declinePayment(s.id, p.id, r),
+          onView: () => Navigator.of(context).push(MaterialPageRoute(
+            builder: (_) => SaleDetailScreen(saleId: s.id),
+          )),
+        ));
+      }
+    }
     for (final r in rentals.pendingRentals()) {
       items.add(_PendingItem(
         type: 'Rental',
@@ -159,15 +206,27 @@ class PendingApprovalsScreen extends StatelessWidget {
       backgroundColor: c.bgCanvas,
       appBar: AppBar(title: const Text('Pending approvals')),
       body: SafeArea(
-        child: items.isEmpty
-            ? const EmptyState(
-                icon: Icons.task_alt,
-                title: 'Nothing to review',
-                subtitle: 'Admin actions awaiting your confirmation show up here.',
+        child: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : RefreshIndicator(
+          onRefresh: _refresh,
+          child: items.isEmpty
+            ? ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                children: const [
+                  SizedBox(height: 120),
+                  EmptyState(
+                    icon: Icons.task_alt,
+                    title: 'Nothing to review',
+                    subtitle:
+                        'Admin actions awaiting your confirmation show up here.',
+                  ),
+                ],
               )
             : ResponsiveBody(
                 maxFormWidth: 720,
                 phone: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
                   padding: EdgeInsets.all(context.screenHPadding),
                   children: [
                     Text(
@@ -183,6 +242,7 @@ class PendingApprovalsScreen extends StatelessWidget {
                   ],
                 ),
               ),
+        ),
       ),
     );
   }

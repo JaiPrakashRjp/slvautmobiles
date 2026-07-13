@@ -7,9 +7,11 @@ import '../../services/customer_service.dart';
 import '../../services/sale_financer_service.dart';
 import '../../services/sale_service.dart';
 import '../../services/vehicle_service.dart';
+import '../../models/picked_doc.dart';
 import '../../theme/app_colors.dart';
 import '../../utils/app_spacing.dart';
 import '../../utils/app_text_styles.dart';
+import '../../utils/doc_picker.dart';
 import '../../utils/formatters.dart';
 import '../../utils/responsive.dart';
 import '../../viewmodels/assign_sale_viewmodel.dart';
@@ -268,13 +270,11 @@ class _AssignSaleView extends StatelessWidget {
                   c: c,
                 ),
 
-              // ── Loan-case fields ──────────────────────────────────────────
+              // ── Loan-case fields (HP available to everyone, admins too) ───
               if (vm.showLoanFields) ...[
                 const SizedBox(height: AppSpacing.lg),
-                if (vm.isSuperAdmin) ...[
-                  _money(label: 'HP amount (loan)', controller: vm.hpAmountController),
-                  const SizedBox(height: AppSpacing.md),
-                ],
+                _money(label: 'HP amount (loan)', controller: vm.hpAmountController),
+                const SizedBox(height: AppSpacing.md),
                 // Remaining is derived: Total − HP − Down payment (read-only).
                 _RemainingCard(amount: vm.remaining, c: c),
               ],
@@ -289,6 +289,24 @@ class _AssignSaleView extends StatelessWidget {
                 onTap: () => _pickSaleDate(context, vm),
               ),
               const SizedBox(height: AppSpacing.lg),
+
+              // ── Vehicle papers — saved onto the vehicle on Confirm ────────
+              _SectionLabel('Vehicle papers', c: c),
+              const SizedBox(height: AppSpacing.sm),
+              AppTextField(
+                label: 'Vehicle number',
+                hint: 'e.g. KA-01-AB-1234',
+                controller: vm.regNoController,
+              ),
+              const SizedBox(height: AppSpacing.md),
+              _paperRow(context, vm, 'RC', 'rc', vm.rc, vm.rcDoc,
+                  (v) => vm.rc = v),
+              _paperRow(context, vm, 'Permit', 'permit', vm.permit,
+                  vm.permitDoc, (v) => vm.permit = v),
+              _paperRow(context, vm, 'Insurance', 'insurance', vm.insurance,
+                  vm.insuranceDoc, (v) => vm.insurance = v),
+              const SizedBox(height: AppSpacing.lg),
+
               AppTextField(
                 label: 'Customer WhatsApp',
                 hint: '10-digit mobile number',
@@ -331,6 +349,76 @@ class _AssignSaleView extends StatelessWidget {
       keyboardType: TextInputType.number,
       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
     );
+  }
+
+  /// One vehicle-paper row: a tick + an attach/change document button. Both the
+  /// flag and the file are written onto the vehicle when the sale is confirmed.
+  Widget _paperRow(
+    BuildContext context,
+    AssignSaleViewModel vm,
+    String label,
+    String wire,
+    bool value,
+    PickedDoc? doc,
+    ValueChanged<bool> onToggle,
+  ) {
+    final c = context.colors;
+    return Row(
+      children: [
+        Checkbox(
+          value: value,
+          activeColor: c.primary,
+          onChanged: (v) => onToggle(v ?? false),
+        ),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label,
+                  style: AppTextStyles.body.copyWith(color: c.textMain)),
+              if (doc != null)
+                Text(doc.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTextStyles.caption.copyWith(color: c.textSub)),
+            ],
+          ),
+        ),
+        TextButton.icon(
+          onPressed: () => _pickPaper(context, vm, wire),
+          icon: Icon(doc == null ? Icons.upload_file_outlined : Icons.check,
+              size: 18),
+          label: Text(doc == null ? 'Upload' : 'Change'),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _pickPaper(
+      BuildContext context, AssignSaleViewModel vm, String wire) async {
+    final source = await showModalBottomSheet<String>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt_outlined),
+              title: const Text('Take photo'),
+              onTap: () => Navigator.pop(ctx, 'photo'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.upload_file_outlined),
+              title: const Text('Choose file'),
+              onTap: () => Navigator.pop(ctx, 'file'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (source == null) return;
+    final doc = source == 'photo' ? await pickPhotoDoc() : await pickFileDoc();
+    if (doc != null) vm.setPaperDoc(wire, doc);
   }
 }
 
