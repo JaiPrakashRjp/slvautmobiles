@@ -139,7 +139,10 @@ class _CreateCustomerViewState extends State<_CreateCustomerView> {
         );
 
     Widget avatar;
+    // Bytes of the current photo (if any) — used to open the enlarged popup.
+    Future<Uint8List>? enlargeSource;
     if (picked != null) {
+      enlargeSource = Future.value(picked.bytes);
       avatar = ClipOval(
         child: Image.memory(picked.bytes,
             width: 110, height: 110, fit: BoxFit.cover),
@@ -152,6 +155,9 @@ class _CreateCustomerViewState extends State<_CreateCustomerView> {
           .where((d) => d.docTypeWire == 'photo')
           .cast<DocRef?>()
           .firstOrNull;
+      if (ref != null) {
+        enlargeSource = _photoBytes(context.read<CustomerService>(), ref.id);
+      }
       avatar = ref == null
           ? placeholder()
           : ClipOval(
@@ -177,7 +183,13 @@ class _CreateCustomerViewState extends State<_CreateCustomerView> {
           Stack(
             alignment: Alignment.center,
             children: [
-              avatar,
+              // Tap the photo → enlarged, zoomable popup (only when one exists).
+              GestureDetector(
+                onTap: enlargeSource == null
+                    ? null
+                    : () => _showEnlargedPhoto(context, enlargeSource!),
+                child: avatar,
+              ),
               if (_photoUploading)
                 Container(
                   width: 110,
@@ -211,6 +223,35 @@ class _CreateCustomerViewState extends State<_CreateCustomerView> {
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  /// Enlarged, zoomable profile photo in a dialog. Tap the image (or outside)
+  /// to close.
+  void _showEnlargedPhoto(BuildContext context, Future<Uint8List> bytes) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(24),
+        child: GestureDetector(
+          onTap: () => Navigator.pop(ctx),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: FutureBuilder<Uint8List>(
+              future: bytes,
+              builder: (c, snap) => (snap.hasData && snap.data!.isNotEmpty)
+                  ? InteractiveViewer(
+                      child: Image.memory(snap.data!, fit: BoxFit.contain),
+                    )
+                  : const SizedBox(
+                      height: 240,
+                      child: Center(child: CircularProgressIndicator()),
+                    ),
+            ),
+          ),
+        ),
       ),
     );
   }

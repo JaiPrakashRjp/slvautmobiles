@@ -11,6 +11,7 @@ class IconButtonSoft extends StatelessWidget {
     required this.onPressed,
     this.tooltip,
     this.danger = false,
+    this.compact = false,
   });
 
   final IconData icon;
@@ -18,10 +19,15 @@ class IconButtonSoft extends StatelessWidget {
   final String? tooltip;
   final bool danger;
 
+  /// Smaller tile (32×32, icon 16) for the two-row card action strip.
+  final bool compact;
+
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
     final fg = danger ? c.danger : c.primary;
+    final dim = compact ? 32.0 : 40.0;
+    final iconSize = compact ? 16.0 : 18.0;
     final btn = Material(
       color: danger ? c.dangerTint : c.bgCanvas,
       borderRadius: BorderRadius.circular(AppRadius.button),
@@ -29,9 +35,9 @@ class IconButtonSoft extends StatelessWidget {
         onTap: onPressed,
         borderRadius: BorderRadius.circular(AppRadius.button),
         child: SizedBox(
-          height: 40,
-          width: 40,
-          child: Icon(icon, size: 18, color: fg),
+          height: dim,
+          width: dim,
+          child: Icon(icon, size: iconSize, color: fg),
         ),
       ),
     );

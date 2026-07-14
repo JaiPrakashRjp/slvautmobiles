@@ -277,7 +277,6 @@ class RealPdfService implements PdfService {
     required Vehicle vehicle,
   }) async {
     final logo = await _loadLogo();
-    final total = (sale.salePrice ?? sale.collected).round();
     final branch = vehicle.branch?.label ?? customer.branch?.label;
     final doc = pw.Document();
     doc.addPage(pw.Page(
@@ -358,7 +357,7 @@ class RealPdfService implements PdfService {
                     pw.Padding(
                       padding: const pw.EdgeInsets.symmetric(
                           horizontal: 14, vertical: 9),
-                      child: pw.Text(_amountInWords(total),
+                      child: pw.Text(_amountInWords(sale.collected),
                           style: pw.TextStyle(
                               fontSize: 10,
                               fontWeight: pw.FontWeight.bold,
@@ -399,9 +398,19 @@ class RealPdfService implements PdfService {
         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
         crossAxisAlignment: pw.CrossAxisAlignment.center,
         children: [
-          logo != null
-              ? pw.Image(logo, width: 68, height: 68, fit: pw.BoxFit.contain)
-              : pw.SizedBox(width: 68, height: 68),
+          // White circular background so the logo stands out on the navy header.
+          pw.Container(
+            width: 74,
+            height: 74,
+            decoration: const pw.BoxDecoration(
+              color: PdfColors.white,
+              shape: pw.BoxShape.circle,
+            ),
+            padding: const pw.EdgeInsets.all(6),
+            child: logo != null
+                ? pw.Image(logo, fit: pw.BoxFit.contain)
+                : pw.SizedBox(),
+          ),
           pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.end,
             children: [

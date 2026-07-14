@@ -128,13 +128,16 @@ class SaleService:
         # NOTE: installment schedule is intentionally not built here yet — the
         # monthly/EMI flow is being revisited alongside WhatsApp reminders.
 
-        # mark the vehicle sold + assigned; clear any prior seizure flag (a
-        # re-sold vehicle is no longer "seized" — the history stays on the old sale).
+        # Assign the vehicle to the customer + clear any prior seizure flag. Only
+        # mark it SOLD when the sale is active (super admin). An admin's sale is
+        # pending_confirmation, so the vehicle stays "not sold" until the super
+        # admin approves — it moves to Sold in confirm().
         vehicle = db.get(Vehicle, data.vehicle_id)
         if vehicle is not None:
-            vehicle.sale_status = SaleStatus.sold
             vehicle.assigned_to_customer_id = data.customer_id
             vehicle.is_seized = False
+            if sale.status == EntityStatus.active:
+                vehicle.sale_status = SaleStatus.sold
 
         if actor_role != "super_admin":
             NotificationService.create_verification(
@@ -220,6 +223,11 @@ class SaleService:
         sale.confirmed_by = by_user_id
         sale.confirmed_at = datetime.now(timezone.utc)
         sale.rejection_reason = None
+        # The sale is approved — the vehicle now becomes Sold.
+        vehicle = db.get(Vehicle, sale.vehicle_id)
+        if vehicle is not None and sale.sale_status == SaleLifecycle.active:
+            vehicle.sale_status = SaleStatus.sold
+            vehicle.assigned_to_customer_id = sale.customer_id
         db.commit()
         return SaleService.get(db, sale_id)
 
@@ -230,6 +238,11 @@ class SaleService:
         sale.confirmed_by = by_user_id
         sale.confirmed_at = datetime.now(timezone.utc)
         sale.rejection_reason = reason
+        # Rejected — free the vehicle back to the unsold pool.
+        vehicle = db.get(Vehicle, sale.vehicle_id)
+        if vehicle is not None:
+            vehicle.sale_status = SaleStatus.not_sold
+            vehicle.assigned_to_customer_id = None
         db.commit()
         return SaleService.get(db, sale_id)
 
@@ -278,10 +291,12 @@ class SaleService:
         takes effect immediately; an admin's seize is held 'pending' and a
         verification notification goes to the super admins to approve or reject."""
         sale = SaleService.get(db, sale_id)
-        if sale.sale_status != SaleLifecycle.active:
+        # Seizable while the sale is live OR fully paid (closed) — but not once
+        # cancelled or already seized.
+        if sale.sale_status not in (SaleLifecycle.active, SaleLifecycle.closed):
             raise HTTPException(
                 status_code=400,
-                detail="Only an active sale can be seized.",
+                detail="Only an active or fully-paid sale can be seized.",
             )
         sale.seized_at = datetime.now(timezone.utc)
         sale.seized_by = by_user_id
@@ -341,7 +356,13 @@ class SaleService:
         sale = SaleService.get(db, sale_id)
         if sale.seize_stage != "seized":
             raise HTTPException(status_code=400, detail="No active seize to cancel.")
-        sale.sale_status = SaleLifecycle.active
+        # Restore the pre-seize status: a fully-paid sale returns to closed,
+        # otherwise it goes back to active.
+        sale.sale_status = (
+            SaleLifecycle.closed
+            if float(sale.remaining_amount) <= 0
+            else SaleLifecycle.active
+        )
         sale.seize_stage = None
         sale.seize_cancel_remarks = remarks
         sale.seized_at = None

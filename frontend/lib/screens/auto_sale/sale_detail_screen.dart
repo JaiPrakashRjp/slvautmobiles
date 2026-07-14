@@ -723,12 +723,14 @@ class _SaleDetailViewState extends State<_SaleDetailView> {
                           if (sale.mode == PaymentMode.installments)
                             _SummaryRow(
                                 label: 'Remaining',
-                                value: Formatters.currency(sale.remainingAmount),
+                                value: sale.remainingAmount > 0
+                                    ? Formatters.currency(sale.remainingAmount)
+                                    : 'Paid',
                                 c: c,
                                 highlight: sale.remainingAmount > 0),
                           _SummaryRow(
                               label: 'Status',
-                              value: sale.saleStatus,
+                              value: vm.isClosed ? 'Paid' : sale.saleStatus,
                               c: c),
                           if (sale.remarks != null &&
                               sale.remarks!.isNotEmpty)

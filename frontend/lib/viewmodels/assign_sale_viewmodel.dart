@@ -238,14 +238,24 @@ class AssignSaleViewModel extends ChangeNotifier {
             : remarksController.text.trim(),
         financerId: _financerId,
       );
-      // Mark sold + write the captured vehicle papers (reg no + flags).
+      // Write the captured vehicle papers (reg no + flags). Only mark the
+      // vehicle SOLD when the sale is active (super admin); an admin's sale is
+      // pending approval, so the vehicle stays "not sold" (with a Pending badge)
+      // until the super admin approves — it moves to Sold on approval.
+      final isSuper = user.isSuperAdmin;
       final regNo = regNoController.text.trim();
       await _vehicles.update(_vehicleId!,
-          saleStatus: SaleStatus.sold,
+          saleStatus: isSuper ? SaleStatus.sold : null,
           regNo: regNo.isEmpty ? null : regNo,
           rc: _rc,
           permit: _permit,
           insurance: _insurance);
+      if (!isSuper) {
+        // Reserve the vehicle so it can't be re-sold while the sale is pending;
+        // it stays in the "Not sold" tab until approved.
+        _vehicles.assignTo(
+            _vehicleId!, customerId, InventoryStatus.reserved);
+      }
       // Upload any attached papers onto the vehicle's documents.
       final papers = <String, PickedDoc?>{
         'rc': _rcDoc,

@@ -26,7 +26,12 @@ class CreateUserViewModel extends ChangeNotifier {
 
   final Set<AppModule> _modules = {};
 
-  static const grantable = [AppModule.autoSale, AppModule.loans, AppModule.rentals];
+  // Only Auto sale is grantable for this release — Loan & Auto rental hidden.
+  static const grantable = [
+    AppModule.autoSale,
+    // AppModule.loans,
+    // AppModule.rentals,
+  ];
   Set<AppModule> get modules => _modules;
 
   void toggleModule(AppModule m) {

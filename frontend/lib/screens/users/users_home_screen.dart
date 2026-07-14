@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../controllers/auth_controller.dart';
+// import '../../controllers/auth_controller.dart'; // hidden: Run reminders button
 import '../../models/app_user.dart';
 import '../../models/enums.dart';
 import '../../models/reminder_log.dart';
@@ -21,7 +21,7 @@ import '../../widgets/empty_state.dart';
 import '../../widgets/gold_create_button.dart';
 import '../../widgets/status_pill.dart';
 import 'create_user_screen.dart';
-import 'pending_approvals_screen.dart';
+// import 'pending_approvals_screen.dart'; // hidden: Pending approvals button
 import 'user_detail_screen.dart';
 
 /// User management — spec 6.2.1. Super Admin only.
@@ -31,7 +31,7 @@ class UsersHomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    final auth = context.read<AuthController>();
+    // final auth = context.read<AuthController>(); // hidden: Run reminders button
     final users = context.watch<UserService>();
     final admins = users.admins();
 
@@ -40,14 +40,15 @@ class UsersHomeScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('User management'),
         actions: [
-          if (auth.isSuperAdmin) const _RunRemindersButton(),
-          IconButton(
-            icon: const Icon(Icons.fact_check_outlined),
-            tooltip: 'Pending approvals',
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const PendingApprovalsScreen()),
-            ),
-          ),
+          // Hidden for this release — Run WhatsApp reminders & Pending approvals.
+          // if (auth.isSuperAdmin) const _RunRemindersButton(),
+          // IconButton(
+          //   icon: const Icon(Icons.fact_check_outlined),
+          //   tooltip: 'Pending approvals',
+          //   onPressed: () => Navigator.of(context).push(
+          //     MaterialPageRoute(builder: (_) => const PendingApprovalsScreen()),
+          //   ),
+          // ),
           GoldCreateButton(
             label: 'New admin',
             onPressed: () => Navigator.of(context).push(

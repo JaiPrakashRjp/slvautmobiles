@@ -5,6 +5,7 @@ import '../../controllers/auth_controller.dart';
 import '../../models/enums.dart';
 import '../../models/vehicle.dart';
 import '../../services/customer_service.dart';
+import '../../services/sale_service.dart';
 import '../../services/vehicle_service.dart';
 import '../../theme/app_colors.dart';
 import '../../utils/app_radius.dart';
@@ -55,6 +56,8 @@ class _VehiclesListView extends StatelessWidget {
     final c = context.colors;
     // Rebuild when the underlying vehicle data changes.
     final vehicles = context.watch<VehicleService>();
+    // Rebuild cards when sales change so the "Pending" badge appears/clears live.
+    context.watch<SaleService>();
     final vm = context.watch<VehiclesListViewModel>();
 
     return Scaffold(
@@ -228,77 +231,94 @@ class _VehicleCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.colors;
     final auth = context.read<AuthController>();
+    // A sale awaiting super-admin approval keeps the vehicle in "Not sold" with
+    // a Pending badge; it only moves to Sold once approved.
+    final hasPendingSale = context
+        .read<SaleService>()
+        .all()
+        .any((s) => s.vehicleId == vehicle.id && s.isPending);
     // An admin may only modify what they created; super-admin records are
     // view-only for them. Super admin can do anything.
     final canModify =
         auth.isSuperAdmin || vehicle.createdBy == auth.currentUser?.id;
     final canSell = canModify &&
         vehicle.isActive &&
-        vehicle.saleStatus == SaleStatus.notSold;
+        vehicle.saleStatus == SaleStatus.notSold &&
+        !hasPendingSale;
     return AppCard(
       onTap: () => _openDetail(context),
       accentLeft: vehicle.isRejected,
       accentColor: vehicle.isRejected ? c.danger : null,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // ── Content ───────────────────────────────────────────────
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(
-                        (vehicle.chassisNo?.isNotEmpty ?? false)
-                            ? vehicle.chassisNo!
-                            : vehicle.displayLabel,
-                        style: AppTextStyles.h2.copyWith(color: c.textMain)),
-                    const SizedBox(width: AppSpacing.sm),
-                    if (vehicle.isSeized)
-                      const StatusPill(
-                          label: 'Seized', variant: PillVariant.danger)
-                    else
-                      StatusPill.forEntity(vehicle.status),
-                  ],
-                ),
-                const SizedBox(height: AppSpacing.xs),
-                Text(vehicle.type.label,
-                    style: AppTextStyles.body.copyWith(color: c.textSub)),
-                if (vehicle.isRejected &&
-                    (vehicle.rejectionReason?.isNotEmpty ?? false)) ...[
-                  const SizedBox(height: AppSpacing.xs),
-                  Text('Rejected: ${vehicle.rejectionReason}',
-                      style: AppTextStyles.caption.copyWith(color: c.danger)),
+          // ── Top: details + status (full width) ────────────────────
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: AppSpacing.sm,
+                runSpacing: 4,
+                children: [
+                  Text(
+                      (vehicle.chassisNo?.isNotEmpty ?? false)
+                          ? vehicle.chassisNo!
+                          : vehicle.displayLabel,
+                      style: AppTextStyles.h2.copyWith(color: c.textMain)),
+                  if (vehicle.isSeized)
+                    const StatusPill(
+                        label: 'Seized', variant: PillVariant.danger)
+                  else if (hasPendingSale)
+                    const StatusPill(
+                        label: 'Pending', variant: PillVariant.warning)
+                  else
+                    StatusPill.forEntity(vehicle.status),
                 ],
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              Text(vehicle.type.label,
+                  style: AppTextStyles.body.copyWith(color: c.textSub)),
+              if (vehicle.isRejected &&
+                  (vehicle.rejectionReason?.isNotEmpty ?? false)) ...[
+                const SizedBox(height: AppSpacing.xs),
+                Text('Rejected: ${vehicle.rejectionReason}',
+                    style: AppTextStyles.caption.copyWith(color: c.danger)),
               ],
-            ),
+            ],
           ),
-          // ── Icons (top-right, horizontal with spacing) ─────────────
+          const SizedBox(height: AppSpacing.sm),
+          Divider(height: 1, color: c.borderColor),
+          const SizedBox(height: AppSpacing.sm),
+          // ── Below: small action icons, right-aligned ──────────────
           Row(
-            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.end,
             children: [
               IconButtonSoft(
                 icon: Icons.visibility_outlined,
                 tooltip: 'View',
+                compact: true,
                 onPressed: () => _openDetail(context),
               ),
-              const SizedBox(width: AppSpacing.xs),
               if (canSell) ...[
+                const SizedBox(width: AppSpacing.sm),
                 IconButtonSoft(
                   icon: Icons.sell_outlined,
                   tooltip: 'Sell',
+                  compact: true,
                   onPressed: () => _sell(context),
                 ),
-                const SizedBox(width: AppSpacing.xs),
               ],
-              if (canModify)
+              if (canModify) ...[
+                const SizedBox(width: AppSpacing.sm),
                 IconButtonSoft(
                   icon: Icons.delete_outline,
                   tooltip: 'Delete',
                   danger: true,
+                  compact: true,
                   onPressed: () => _confirmDelete(context),
                 ),
+              ],
             ],
           ),
         ],

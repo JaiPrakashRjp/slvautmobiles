@@ -257,79 +257,95 @@ class _CustomerCard extends StatelessWidget {
       onTap: () => _open(context),
       accentLeft: customer.isRejected,
       accentColor: customer.isRejected ? c.danger : null,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // ── Photo (tap to enlarge) ────────────────────────────────
-          GestureDetector(
-            onTap: photoRef == null
-                ? null
-                : () =>
-                    _showPhoto(context, customers.documentUrl(photoRef.id)),
-            child: CircleAvatar(
-              radius: 22,
-              backgroundColor: c.bgSurface,
-              backgroundImage: photoRef == null
-                  ? null
-                  // Disk-cached: downloads once, then loads instantly.
-                  : CachedNetworkImageProvider(
-                      customers.documentUrl(photoRef.id)),
-              child: photoRef == null
-                  ? Icon(Icons.person_outline, color: c.textSub)
-                  : null,
-            ),
-          ),
-          const SizedBox(width: AppSpacing.md),
-          // ── Content ───────────────────────────────────────────────
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+          // ── Top: photo + details + status (full width) ────────────
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Photo (tap to enlarge)
+              GestureDetector(
+                onTap: photoRef == null
+                    ? null
+                    : () =>
+                        _showPhoto(context, customers.documentUrl(photoRef.id)),
+                child: CircleAvatar(
+                  radius: 22,
+                  backgroundColor: c.bgSurface,
+                  backgroundImage: photoRef == null
+                      ? null
+                      // Disk-cached: downloads once, then loads instantly.
+                      : CachedNetworkImageProvider(
+                          customers.documentUrl(photoRef.id)),
+                  child: photoRef == null
+                      ? Icon(Icons.person_outline, color: c.textSub)
+                      : null,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(customer.fullName,
-                        style: AppTextStyles.h2.copyWith(color: c.textMain)),
-                    const SizedBox(width: AppSpacing.sm),
-                    StatusPill.forEntity(customer.status),
+                    Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: AppSpacing.sm,
+                      runSpacing: 4,
+                      children: [
+                        Text(customer.fullName,
+                            style:
+                                AppTextStyles.h2.copyWith(color: c.textMain)),
+                        StatusPill.forEntity(customer.status),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    Text(Formatters.phone(customer.phone),
+                        style:
+                            AppTextStyles.caption.copyWith(color: c.textSub)),
+                    if (customer.isRejected &&
+                        (customer.rejectionReason?.isNotEmpty ?? false)) ...[
+                      const SizedBox(height: AppSpacing.xs),
+                      Text('Rejected: ${customer.rejectionReason}',
+                          style:
+                              AppTextStyles.caption.copyWith(color: c.danger)),
+                    ],
                   ],
                 ),
-                const SizedBox(height: AppSpacing.xs),
-                Text(Formatters.phone(customer.phone),
-                    style: AppTextStyles.caption.copyWith(color: c.textSub)),
-                if (customer.isRejected &&
-                    (customer.rejectionReason?.isNotEmpty ?? false)) ...[
-                  const SizedBox(height: AppSpacing.xs),
-                  Text('Rejected: ${customer.rejectionReason}',
-                      style: AppTextStyles.caption.copyWith(color: c.danger)),
-                ],
-              ],
-            ),
+              ),
+            ],
           ),
-          // ── Icons (top-right, horizontal with spacing) ─────────────
+          const SizedBox(height: AppSpacing.sm),
+          Divider(height: 1, color: c.borderColor),
+          const SizedBox(height: AppSpacing.sm),
+          // ── Below: small action icons, right-aligned ──────────────
           Row(
-            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.end,
             children: [
               IconButtonSoft(
                 icon: Icons.visibility_outlined,
                 tooltip: 'View customer',
+                compact: true,
                 onPressed: () => _open(context),
               ),
               if (canModify) ...[
-                const SizedBox(width: AppSpacing.xs),
+                const SizedBox(width: AppSpacing.sm),
                 IconButtonSoft(
                   icon: Icons.edit_outlined,
                   tooltip: 'Edit',
+                  compact: true,
                   onPressed: () => Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (_) => CreateCustomerScreen(existing: customer),
                     ),
                   ),
                 ),
-                const SizedBox(width: AppSpacing.xs),
+                const SizedBox(width: AppSpacing.sm),
                 IconButtonSoft(
                   icon: Icons.delete_outline,
                   tooltip: 'Delete',
                   danger: true,
+                  compact: true,
                   onPressed: () => _confirmDelete(context),
                 ),
               ],
