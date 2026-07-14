@@ -232,6 +232,20 @@ class SaleService:
         return SaleService.get(db, sale_id)
 
     @staticmethod
+    def confirm_sold(db: Session, sale_id: int, *, by_user_id: int) -> Sale:
+        """User confirms a fully-paid sale as sold. Only allowed once the balance
+        is cleared. Sets sold=true, which hides the Seize option."""
+        sale = SaleService.get(db, sale_id)
+        if float(sale.remaining_amount) > 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Sale still has an outstanding balance.",
+            )
+        sale.sold = True
+        db.commit()
+        return SaleService.get(db, sale_id)
+
+    @staticmethod
     def reject(db: Session, sale_id: int, reason: str, by_user_id: int) -> Sale:
         sale = SaleService.get(db, sale_id)
         sale.status = EntityStatus.rejected
@@ -291,12 +305,12 @@ class SaleService:
         takes effect immediately; an admin's seize is held 'pending' and a
         verification notification goes to the super admins to approve or reject."""
         sale = SaleService.get(db, sale_id)
-        # Seizable while the sale is live OR fully paid (closed) — but not once
-        # cancelled or already seized.
-        if sale.sale_status not in (SaleLifecycle.active, SaleLifecycle.closed):
+        # Seizable only while the sale is live (an outstanding balance). A
+        # fully-paid (closed) sale can't be seized — the customer owns it.
+        if sale.sale_status != SaleLifecycle.active:
             raise HTTPException(
                 status_code=400,
-                detail="Only an active or fully-paid sale can be seized.",
+                detail="Only an active sale can be seized.",
             )
         sale.seized_at = datetime.now(timezone.utc)
         sale.seized_by = by_user_id

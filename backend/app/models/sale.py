@@ -97,6 +97,9 @@ class Sale(Base):
     seize_confirmed_by: Mapped[int | None] = mapped_column(BigInteger)
     seize_confirm_remarks: Mapped[str | None] = mapped_column(Text)
     seize_cancel_remarks: Mapped[str | None] = mapped_column(Text)
+    # Set true when the user confirms a fully-paid sale as sold (drives the UI:
+    # false → Seize button available; true → Seize hidden).
+    sold: Mapped[bool] = mapped_column(nullable=False, server_default="false")
     remarks: Mapped[str | None] = mapped_column(Text)
 
     installments: Mapped[list["SaleInstallment"]] = relationship(  # noqa: F821

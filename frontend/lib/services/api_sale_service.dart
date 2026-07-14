@@ -281,6 +281,13 @@ class ApiSaleService extends SaleService {
   }
 
   @override
+  Future<void> confirmSold(String saleId) async {
+    final numId = int.tryParse(saleId) ?? 0;
+    final j = await _api.post('/sales/$numId/confirm-sold');
+    _replace(_fromJson(j as Map<String, dynamic>));
+  }
+
+  @override
   Future<void> cancelSeize(String saleId, String remarks) async {
     final numId = int.tryParse(saleId) ?? 0;
     final j =
@@ -406,6 +413,7 @@ class ApiSaleService extends SaleService {
           : DateTime.tryParse(j['seize_confirmed_at'] as String),
       seizeConfirmRemarks: j['seize_confirm_remarks'] as String?,
       seizeCancelRemarks: j['seize_cancel_remarks'] as String?,
+      sold: (j['sold'] as bool?) ?? false,
       remarks: j['remarks'] as String?,
     );
   }

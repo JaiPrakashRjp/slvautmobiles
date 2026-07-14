@@ -180,6 +180,16 @@ def confirm_sale(
     return SaleService.confirm(db, sale_id, current_user.id)
 
 
+@router.post("/{sale_id}/confirm-sold", response_model=SaleOut)
+def confirm_sold(
+    sale_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Confirm a fully-paid sale as sold (hides the Seize option)."""
+    return SaleService.confirm_sold(db, sale_id, by_user_id=current_user.id)
+
+
 @router.post("/{sale_id}/reject", response_model=SaleOut)
 def reject_sale(
     sale_id: int,

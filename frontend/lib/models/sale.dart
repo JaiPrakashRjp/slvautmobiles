@@ -47,6 +47,7 @@ class Sale with GatedEntity {
     this.seizeConfirmedAt,
     this.seizeConfirmRemarks,
     this.seizeCancelRemarks,
+    this.sold = false,
   })  : installments = installments ?? [],
         payments = payments ?? [];
 
@@ -119,6 +120,10 @@ class Sale with GatedEntity {
   DateTime? seizeConfirmedAt;
   String? seizeConfirmRemarks;
   String? seizeCancelRemarks;
+
+  /// True once the user confirms a fully-paid sale as sold. While false the
+  /// Seize button is available; once true it is hidden.
+  bool sold;
 
   /// Admin requested a seize that a super admin hasn't approved yet.
   bool get isSeizePending => seizeStage == 'pending';

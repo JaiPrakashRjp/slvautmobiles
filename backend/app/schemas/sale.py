@@ -128,6 +128,7 @@ class SaleOut(BaseModel):
     seize_confirmed_by: int | None = None
     seize_confirm_remarks: str | None = None
     seize_cancel_remarks: str | None = None
+    sold: bool = False
     remarks: str | None = None
     installments: list[InstallmentOut] = []
     payments: list[PaymentOut] = []

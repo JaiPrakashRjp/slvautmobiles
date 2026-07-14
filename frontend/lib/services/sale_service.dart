@@ -96,6 +96,10 @@ abstract class SaleService extends ChangeNotifier {
   /// admin's is held pending until a super admin approves it.
   Future<void> seize(String saleId, String reason, String byUserId);
 
+  /// Confirm a fully-paid sale as sold (only when the balance is cleared).
+  /// Sets `sold = true`, which hides the Seize option.
+  Future<void> confirmSold(String saleId);
+
   /// Cancel an active seize (any time): the vehicle goes back to the same
   /// customer and the sale reactivates.
   Future<void> cancelSeize(String saleId, String remarks);
@@ -416,6 +420,15 @@ class MockSaleService extends SaleService {
     _vehicles.release(s.vehicleId);
     _vehicles.byId(s.vehicleId)?.isSeized = true;
     notifyListeners();
+  }
+
+  @override
+  Future<void> confirmSold(String saleId) async {
+    final s = byId(saleId);
+    if (s != null) {
+      s.sold = true;
+      notifyListeners();
+    }
   }
 
   @override

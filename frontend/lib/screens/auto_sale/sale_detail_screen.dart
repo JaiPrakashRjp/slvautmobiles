@@ -21,7 +21,7 @@ import '../../utils/responsive.dart';
 import '../../viewmodels/sale_detail_viewmodel.dart';
 import '../../widgets/app_card.dart';
 import '../../widgets/role_gate_banner.dart';
-import '../../widgets/secondary_button.dart';
+// import '../../widgets/secondary_button.dart'; // used only by hidden payoff receipt
 import '../../widgets/status_pill.dart';
 import '../document_preview_screen.dart';
 
@@ -292,6 +292,30 @@ class _SaleDetailViewState extends State<_SaleDetailView> {
         loader: () => vm.screenshotBytes(docId),
       ),
     ));
+  }
+
+  /// Confirm a fully-paid sale as sold — pops a confirmation, then flips the
+  /// sale's `sold` flag (which hides the Seize option).
+  Future<void> _confirmSold(BuildContext context, SaleDetailViewModel vm) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Confirm sold'),
+        content: const Text(
+            'The balance is fully cleared. Mark this sale as sold? '
+            'The vehicle can no longer be seized once confirmed.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Not yet')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Confirm sold')),
+        ],
+      ),
+    );
+    if (ok != true || !context.mounted) return;
+    await _act(context, () => vm.confirmSold(), 'Sale confirmed as sold.');
   }
 
   /// Record a standalone (manual) payment: amount + screenshot, not tied to any
@@ -657,6 +681,14 @@ class _SaleDetailViewState extends State<_SaleDetailView> {
                       const SizedBox(height: AppSpacing.lg),
                     ],
 
+                    // ── Fully paid → confirm as sold ────────────────────────
+                    if (vm.canConfirmSold) ...[
+                      _ConfirmSoldBanner(
+                        onConfirm: () => _confirmSold(context, vm),
+                      ),
+                      const SizedBox(height: AppSpacing.lg),
+                    ],
+
                     // ── Summary card ────────────────────────────────────────
                     AppCard(
                       child: Column(
@@ -730,7 +762,11 @@ class _SaleDetailViewState extends State<_SaleDetailView> {
                                 highlight: sale.remainingAmount > 0),
                           _SummaryRow(
                               label: 'Status',
-                              value: vm.isClosed ? 'Paid' : sale.saleStatus,
+                              value: vm.isSold
+                                  ? 'Sold'
+                                  : vm.isClosed
+                                      ? 'Paid'
+                                      : sale.saleStatus,
                               c: c),
                           if (sale.remarks != null &&
                               sale.remarks!.isNotEmpty)
@@ -743,7 +779,8 @@ class _SaleDetailViewState extends State<_SaleDetailView> {
                     ),
                     const SizedBox(height: AppSpacing.lg),
 
-                    // ── Pay off / payoff receipt ─────────────────────────────
+                    // ── Pay off / payoff receipt ─ hidden for this release ───
+                    /*
                     if (sale.mode == PaymentMode.installments) ...[
                       if (vm.isClosed && vm.customer != null && vm.vehicle != null)
                         SecondaryButton(
@@ -758,6 +795,7 @@ class _SaleDetailViewState extends State<_SaleDetailView> {
                         ),
                       const SizedBox(height: AppSpacing.lg),
                     ],
+                    */
 
                     // ── Payment history + Reminders / Collections ────────────
                     if (sale.mode == PaymentMode.installments) ...[
@@ -943,6 +981,54 @@ class _SeizeApprovalBanner extends StatelessWidget {
               ],
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Shown when the balance is cleared but the sale isn't yet confirmed sold.
+class _ConfirmSoldBanner extends StatelessWidget {
+  const _ConfirmSoldBanner({required this.onConfirm});
+
+  final VoidCallback onConfirm;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: c.success.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: c.success.withValues(alpha: 0.5)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.check_circle_outline, color: c.success, size: 20),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text('Balance fully paid',
+                    style:
+                        AppTextStyles.bodyStrong.copyWith(color: c.textMain)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text('Confirm this sale as sold to finish it.',
+              style: AppTextStyles.caption.copyWith(color: c.textSub)),
+          const SizedBox(height: AppSpacing.sm),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: onConfirm,
+              icon: const Icon(Icons.sell_outlined, size: 18),
+              label: const Text('Confirm sold'),
+            ),
+          ),
         ],
       ),
     );

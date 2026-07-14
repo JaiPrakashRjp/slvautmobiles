@@ -451,13 +451,14 @@ class VehicleDetailScreen extends StatelessWidget {
                   ),
                 ),
               ],
-              // Seize: sold + modify rights. Available on an active OR a
-              // fully-paid (closed) sale — repossession has no time limit.
+              // Seize: sold + modify rights. Hidden once the sale is confirmed
+              // sold (fully paid + confirmed) — a sold-off customer owns the
+              // vehicle, so there is nothing to repossess. No time limit.
               if (canModify &&
                   vehicle.saleStatus == SaleStatus.sold &&
                   sale != null &&
-                  (sale.saleStatus == 'active' ||
-                      sale.saleStatus == 'closed')) ...[
+                  sale.saleStatus == 'active' &&
+                  !sale.sold) ...[
                 const SizedBox(height: AppSpacing.md),
                 _SeizeButton(
                   onTap: () => _seize(

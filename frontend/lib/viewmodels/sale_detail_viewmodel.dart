@@ -56,6 +56,13 @@ class SaleDetailViewModel extends ChangeNotifier {
 
   bool get isClosed => sale?.saleStatus == 'closed';
 
+  /// The sale has been confirmed as sold (fully paid + user-confirmed).
+  bool get isSold => sale?.sold ?? false;
+
+  /// Show the "confirm sold" prompt: balance cleared but not yet confirmed.
+  bool get canConfirmSold =>
+      canModify && !isSold && (sale?.remainingAmount ?? 1) <= 0;
+
   Future<void> loadReminders() async {
     _loadingReminders = true;
     notifyListeners();
@@ -147,6 +154,8 @@ class SaleDetailViewModel extends ChangeNotifier {
           filename: filename,
           mimeType: mimeType,
           paidOn: paidOn));
+
+  Future<void> confirmSold() => _run(() => _sales.confirmSold(_saleId));
 
   Future<void> approvePayment(String paymentId) =>
       _run(() => _sales.approvePayment(_saleId, paymentId));
