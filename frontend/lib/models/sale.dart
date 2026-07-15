@@ -40,6 +40,8 @@ class Sale with GatedEntity {
     this.confirmedAt,
     this.rejectionReason,
     this.unsellReason,
+    this.unsellStage,
+    this.unsellRequestedBy,
     this.seizedAt,
     this.seizedBy,
     this.seizeReason,
@@ -108,6 +110,13 @@ class Sale with GatedEntity {
   @override
   String? rejectionReason;
   String? unsellReason;
+
+  /// Unsell approval: null | 'pending' (admin requested, awaiting super admin).
+  String? unsellStage;
+  String? unsellRequestedBy;
+
+  /// An admin requested an unsell that a super admin hasn't approved yet.
+  bool get isUnsellPending => unsellStage == 'pending';
 
   // Seizure (repossession) audit — set on a seized sale (kept as history).
   DateTime? seizedAt;

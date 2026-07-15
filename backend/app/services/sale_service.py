@@ -264,25 +264,86 @@ class SaleService:
     UNSELL_WINDOW = timedelta(days=1)
 
     @staticmethod
-    def cancel(db: Session, sale_id: int, reason: str, by_user_id: int) -> "Sale":
-        sale = SaleService.get(db, sale_id)
-        # Enforce the 1-day unsell window (applies to everyone, incl. super admin).
-        # created_at is stored as naive UTC, so treat it as UTC when comparing.
+    def _unsell_window_open(sale: "Sale") -> bool:
+        """True while the sale is still within the 1-day unsell window."""
         created = sale.created_at
         if created.tzinfo is None:
             created = created.replace(tzinfo=timezone.utc)
-        if datetime.now(timezone.utc) - created > SaleService.UNSELL_WINDOW:
-            raise HTTPException(
-                status_code=403,
-                detail="This sale can no longer be unsold — the 1-day window has passed.",
-            )
+        return datetime.now(timezone.utc) - created <= SaleService.UNSELL_WINDOW
+
+    @staticmethod
+    def _apply_unsell(db: Session, sale: "Sale", reason: str) -> None:
+        """Reverse the sale: mark it cancelled and free the vehicle back to the
+        unsold pool."""
         sale.sale_status = SaleLifecycle.cancelled
         sale.unsell_reason = reason
-        # Reset vehicle back to not-sold and unassign the customer.
+        sale.unsell_stage = None
         vehicle = db.get(Vehicle, sale.vehicle_id)
         if vehicle is not None:
             vehicle.sale_status = SaleStatus.not_sold
             vehicle.assigned_to_customer_id = None
+
+    @staticmethod
+    def cancel(
+        db: Session, sale_id: int, reason: str, by_user_id: int, actor_role: str
+    ) -> "Sale":
+        """Unsell a sale. A super admin's unsell applies immediately; an admin's
+        is held 'pending' and a verification notification goes to the super
+        admins to approve or reject. Both are gated by the 1-day window."""
+        sale = SaleService.get(db, sale_id)
+        # Enforce the 1-day unsell window (applies to everyone, incl. super admin).
+        if not SaleService._unsell_window_open(sale):
+            raise HTTPException(
+                status_code=403,
+                detail="This sale can no longer be unsold — the 1-day window has passed.",
+            )
+        if actor_role == "super_admin":
+            SaleService._apply_unsell(db, sale, reason)
+        else:
+            sale.unsell_stage = "pending"
+            sale.unsell_reason = reason
+            sale.unsell_requested_by = by_user_id
+            NotificationService.create_verification(
+                db,
+                entity_type=NotificationEntity.sale,
+                entity_id=sale.id,
+                title="Unsell needs approval",
+                message=(
+                    f"Unsell of {sale.invoice_no} by an admin awaits verification. "
+                    f"Reason: {reason}"
+                ),
+            )
+        db.commit()
+        return SaleService.get(db, sale_id)
+
+    @staticmethod
+    def approve_unsell(db: Session, sale_id: int, *, by_user_id: int) -> "Sale":
+        """Super admin approves an admin's pending unsell — it now takes effect.
+        Strict window: must still be within 1 day of the sale."""
+        sale = SaleService.get(db, sale_id)
+        if sale.unsell_stage != "pending":
+            raise HTTPException(status_code=400, detail="No pending unsell to approve.")
+        if not SaleService._unsell_window_open(sale):
+            raise HTTPException(
+                status_code=403,
+                detail="The 1-day unsell window has passed — cannot approve.",
+            )
+        SaleService._apply_unsell(db, sale, sale.unsell_reason or "")
+        db.commit()
+        return SaleService.get(db, sale_id)
+
+    @staticmethod
+    def reject_unsell(
+        db: Session, sale_id: int, reason: str, *, by_user_id: int
+    ) -> "Sale":
+        """Super admin rejects an admin's pending unsell — nothing changes; the
+        sale stays sold."""
+        sale = SaleService.get(db, sale_id)
+        if sale.unsell_stage != "pending":
+            raise HTTPException(status_code=400, detail="No pending unsell to reject.")
+        sale.unsell_stage = None
+        sale.unsell_requested_by = None
+        sale.unsell_reason = reason
         db.commit()
         return SaleService.get(db, sale_id)
 

@@ -8,8 +8,8 @@ class SignInViewModel extends ChangeNotifier {
 
   final AuthController _auth;
 
-  final emailController    = TextEditingController(text: 'srinivas@slv.com');
-  final passwordController = TextEditingController(text: 'Admin@123');
+  final emailController = TextEditingController();
+  final passwordController = TextEditingController();
 
   bool _obscure = true;
   bool _loading = false;

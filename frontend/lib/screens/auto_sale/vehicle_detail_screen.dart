@@ -140,8 +140,12 @@ class VehicleDetailScreen extends StatelessWidget {
       await sales.cancel(saleId, reason, byUserId);
       await vehicles.refresh();
       if (!context.mounted) return;
+      final pending = sales.byId(saleId)?.isUnsellPending ?? false;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Sale cancelled. Vehicle is now available.')),
+        SnackBar(
+            content: Text(pending
+                ? 'Unsell requested — awaiting super-admin approval.'
+                : 'Sale cancelled. Vehicle is now available.')),
       );
     } catch (e) {
       if (!context.mounted) return;
@@ -433,13 +437,16 @@ class VehicleDetailScreen extends StatelessWidget {
                   ),
                 ),
               ],
-              // Unsell: only when sold + active sale + has modify rights, and
-              // only within 1 day of the sale being created (see Sale.canUnsell).
+              // Unsell: sold + active sale + modify rights, within the 1-day
+              // window (Sale.canUnsell), and not already awaiting approval.
+              // Admin's request is held pending a super admin; super admin's is
+              // immediate (handled in _unsell).
               if (canModify &&
                   vehicle.saleStatus == SaleStatus.sold &&
                   sale != null &&
                   sale.saleStatus == 'active' &&
-                  sale.canUnsell) ...[
+                  sale.canUnsell &&
+                  !sale.isUnsellPending) ...[
                 const SizedBox(height: AppSpacing.md),
                 _UnsellButton(
                   onTap: () => _unsell(

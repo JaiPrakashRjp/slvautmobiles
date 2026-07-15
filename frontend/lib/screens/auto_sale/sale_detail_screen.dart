@@ -681,6 +681,26 @@ class _SaleDetailViewState extends State<_SaleDetailView> {
                       const SizedBox(height: AppSpacing.lg),
                     ],
 
+                    // ── Pending unsell approval (admin requested) ───────────
+                    if (sale.isUnsellPending) ...[
+                      _ApprovalBanner(
+                        icon: Icons.undo_rounded,
+                        title: 'Unsell requested — awaiting approval',
+                        reason: sale.unsellReason,
+                        canReview: vm.isSuperAdmin,
+                        onApprove: () => _act(context, () => vm.approveUnsell(),
+                            'Unsell approved.'),
+                        onReject: () async {
+                          final r = await _askReason(
+                              context, 'Reject unsell', 'Reason for rejecting');
+                          if (r == null || !context.mounted) return;
+                          await _act(context, () => vm.rejectUnsell(r),
+                              'Unsell rejected.');
+                        },
+                      ),
+                      const SizedBox(height: AppSpacing.lg),
+                    ],
+
                     // ── Fully paid → confirm as sold ────────────────────────
                     if (vm.canConfirmSold) ...[
                       _ConfirmSoldBanner(
@@ -951,6 +971,80 @@ class _SeizeApprovalBanner extends StatelessWidget {
               const SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: Text('Seize requested — awaiting approval',
+                    style:
+                        AppTextStyles.bodyStrong.copyWith(color: c.textMain)),
+              ),
+            ],
+          ),
+          if (reason != null && reason!.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text('Reason: $reason',
+                style: AppTextStyles.caption.copyWith(color: c.textSub)),
+          ],
+          if (canReview) ...[
+            const SizedBox(height: AppSpacing.sm),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: onReject,
+                    child: const Text('Reject'),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: onApprove,
+                    child: const Text('Approve'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Generic pending-approval banner (icon + title + reason + Approve/Reject).
+/// Used for the pending unsell request.
+class _ApprovalBanner extends StatelessWidget {
+  const _ApprovalBanner({
+    required this.icon,
+    required this.title,
+    required this.reason,
+    required this.canReview,
+    required this.onApprove,
+    required this.onReject,
+  });
+
+  final IconData icon;
+  final String title;
+  final String? reason;
+  final bool canReview;
+  final VoidCallback onApprove;
+  final VoidCallback onReject;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: c.warning.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: c.warning.withValues(alpha: 0.5)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: c.warning, size: 20),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(title,
                     style:
                         AppTextStyles.bodyStrong.copyWith(color: c.textMain)),
               ),
