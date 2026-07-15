@@ -89,8 +89,15 @@ abstract class SaleService extends ChangeNotifier {
   /// Raw bytes of a payment proof screenshot (for the in-app viewer).
   Future<Uint8List> screenshotBytes(int docId);
 
-  /// Cancel a sale (unsell): saves the reason, resets vehicle to not-sold.
+  /// Cancel a sale (unsell): a super admin's applies at once; an admin's is held
+  /// pending until a super admin approves it. Gated by the 1-day window.
   Future<void> cancel(String saleId, String reason, String byUserId);
+
+  /// Super admin: approve an admin's pending unsell (it now takes effect).
+  Future<void> approveUnsell(String saleId);
+
+  /// Super admin: reject an admin's pending unsell (nothing changes; stays sold).
+  Future<void> rejectUnsell(String saleId, String reason);
 
   /// Seize (repossess) the vehicle: a super admin's seize applies at once; an
   /// admin's is held pending until a super admin approves it.
@@ -405,7 +412,27 @@ class MockSaleService extends SaleService {
     if (s == null) return;
     s.saleStatus = 'cancelled';
     s.unsellReason = reason;
+    s.unsellStage = null;
     _vehicles.release(s.vehicleId);
+    notifyListeners();
+  }
+
+  @override
+  Future<void> approveUnsell(String saleId) async {
+    final s = byId(saleId);
+    if (s == null) return;
+    s.saleStatus = 'cancelled';
+    s.unsellStage = null;
+    _vehicles.release(s.vehicleId);
+    notifyListeners();
+  }
+
+  @override
+  Future<void> rejectUnsell(String saleId, String reason) async {
+    final s = byId(saleId);
+    if (s == null) return;
+    s.unsellStage = null;
+    s.unsellReason = reason;
     notifyListeners();
   }
 

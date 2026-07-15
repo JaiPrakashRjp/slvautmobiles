@@ -161,6 +161,25 @@ class _PendingApprovalsScreenState extends State<PendingApprovalsScreen> {
         )),
       ));
     }
+    // Pending unsells requested by an admin.
+    for (final s in sales.all().where((s) => s.isUnsellPending)) {
+      items.add(_PendingItem(
+        type: 'Unsell',
+        title: 'Unsell · ${custName(s.customerId)}',
+        subtitle: s.unsellRequestedBy != null
+            ? 'Requested by ${users.byId(s.unsellRequestedBy!)?.name ?? s.unsellRequestedBy}'
+            : 'Unsell requested',
+        createdAt: s.createdAt,
+        onApprove: () async {
+          await sales.approveUnsell(s.id);
+          await vehicles.refresh();
+        },
+        onReject: (r) => sales.rejectUnsell(s.id, r),
+        onView: () => Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => SaleDetailScreen(saleId: s.id),
+        )),
+      ));
+    }
     // Pending payments (manual + installment) submitted by an admin.
     for (final s in sales.all()) {
       for (final p in s.payments.where((p) => p.isPending)) {

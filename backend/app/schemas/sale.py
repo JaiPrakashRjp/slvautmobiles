@@ -120,6 +120,8 @@ class SaleOut(BaseModel):
     confirmed_at: datetime | None = None
     rejection_reason: str | None = None
     unsell_reason: str | None = None
+    unsell_stage: str | None = None
+    unsell_requested_by: int | None = None
     seized_at: datetime | None = None
     seized_by: int | None = None
     seize_reason: str | None = None

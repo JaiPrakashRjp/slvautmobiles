@@ -205,9 +205,31 @@ def cancel_sale(
     sale_id: int,
     reason: str = Query(..., min_length=1),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    # Super admin → immediate; admin → pending super-admin approval.
+    return SaleService.cancel(
+        db, sale_id, reason, current_user.id, current_user.role.name
+    )
+
+
+@router.post("/{sale_id}/cancel/approve", response_model=SaleOut)
+def approve_unsell(
+    sale_id: int,
+    db: Session = Depends(get_db),
     current_user: User = Depends(require_super_admin),
 ):
-    return SaleService.cancel(db, sale_id, reason, current_user.id)
+    return SaleService.approve_unsell(db, sale_id, by_user_id=current_user.id)
+
+
+@router.post("/{sale_id}/cancel/reject", response_model=SaleOut)
+def reject_unsell(
+    sale_id: int,
+    reason: str = Query(..., min_length=1),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_super_admin),
+):
+    return SaleService.reject_unsell(db, sale_id, reason, by_user_id=current_user.id)
 
 
 @router.post("/{sale_id}/seize", response_model=SaleOut)

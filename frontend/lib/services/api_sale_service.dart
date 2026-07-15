@@ -262,14 +262,24 @@ class ApiSaleService extends SaleService {
   @override
   Future<void> cancel(String saleId, String reason, String byUserId) async {
     final numId = int.tryParse(saleId) ?? 0;
-    // by_user_id comes from the Bearer token server-side.
+    // by_user_id + actor_role come from the Bearer token server-side.
     final j = await _api.post('/sales/$numId/cancel', query: {'reason': reason});
-    final updated = _fromJson(j as Map<String, dynamic>);
-    final idx = _cache.indexWhere((s) => s.id == saleId);
-    if (idx != -1) {
-      _cache[idx] = updated;
-    }
-    notifyListeners();
+    _replace(_fromJson(j as Map<String, dynamic>));
+  }
+
+  @override
+  Future<void> approveUnsell(String saleId) async {
+    final numId = int.tryParse(saleId) ?? 0;
+    final j = await _api.post('/sales/$numId/cancel/approve');
+    _replace(_fromJson(j as Map<String, dynamic>));
+  }
+
+  @override
+  Future<void> rejectUnsell(String saleId, String reason) async {
+    final numId = int.tryParse(saleId) ?? 0;
+    final j =
+        await _api.post('/sales/$numId/cancel/reject', query: {'reason': reason});
+    _replace(_fromJson(j as Map<String, dynamic>));
   }
 
   @override
@@ -402,6 +412,8 @@ class ApiSaleService extends SaleService {
       // SaleOut uses "status" (not "entity_status") for the gated entity status
       status: EntityStatus.fromWire((j['status'] as String?) ?? 'active'),
       unsellReason: j['unsell_reason'] as String?,
+      unsellStage: j['unsell_stage'] as String?,
+      unsellRequestedBy: (j['unsell_requested_by'] as int?)?.toString(),
       seizedAt: j['seized_at'] == null
           ? null
           : DateTime.tryParse(j['seized_at'] as String),

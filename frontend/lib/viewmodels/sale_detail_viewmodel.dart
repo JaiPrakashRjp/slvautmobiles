@@ -163,6 +163,17 @@ class SaleDetailViewModel extends ChangeNotifier {
   Future<void> declinePayment(String paymentId, String reason) =>
       _run(() => _sales.declinePayment(_saleId, paymentId, reason));
 
+  /// Super admin approves an admin's pending unsell (it then takes effect and
+  /// frees the vehicle).
+  Future<void> approveUnsell() => _run(() async {
+        await _sales.approveUnsell(_saleId);
+        await _vehicles.refresh();
+      });
+
+  /// Super admin rejects an admin's pending unsell (nothing changes).
+  Future<void> rejectUnsell(String reason) =>
+      _run(() => _sales.rejectUnsell(_saleId, reason));
+
   /// Super admin approves an admin's pending seize (it then takes effect and
   /// frees the vehicle).
   Future<void> approveSeize() => _run(() async {

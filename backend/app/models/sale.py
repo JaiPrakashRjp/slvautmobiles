@@ -86,6 +86,9 @@ class Sale(Base):
     confirmed_at: Mapped[datetime | None] = mapped_column()
     rejection_reason: Mapped[str | None] = mapped_column(Text)
     unsell_reason: Mapped[str | None] = mapped_column(Text)
+    # unsell approval: NULL | 'pending' (admin requested, awaiting super admin).
+    unsell_stage: Mapped[str | None] = mapped_column(Text)
+    unsell_requested_by: Mapped[int | None] = mapped_column(BigInteger)
     # seizure (repossession): set when the vehicle is seized from this customer.
     seized_at: Mapped[datetime | None] = mapped_column()
     seized_by: Mapped[int | None] = mapped_column(BigInteger)
