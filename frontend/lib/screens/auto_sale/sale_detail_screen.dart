@@ -12,6 +12,7 @@ import '../../models/sale_payment.dart';
 import '../../services/customer_service.dart';
 import '../../services/pdf_service.dart';
 import '../../services/sale_service.dart';
+import '../../services/user_service.dart';
 import '../../services/vehicle_service.dart';
 import '../../theme/app_colors.dart';
 import '../../utils/app_spacing.dart';
@@ -574,25 +575,43 @@ class _SaleDetailViewState extends State<_SaleDetailView> {
           ));
         }
       } else if (inst.isInProgress) {
-        actions.add(IconButton(
-          onPressed: () => _callCustomer(vm),
-          icon: const Icon(Icons.call),
-          tooltip: 'Call customer',
-        ));
-        actions.add(TextButton(
-            onPressed: vm.busy ? null : () => _recordPayment(context, vm, inst),
-            child: const Text('Record payment')));
-        actions.add(TextButton(
-            onPressed: vm.busy
-                ? null
-                : () async {
-                    final r = await _askReason(
-                        context, 'Cancel reminder', 'Why is it deferred?');
-                    if (r == null || !context.mounted) return;
-                    await _act(context, () => vm.cancelReminder(inst.id, r),
-                        'Reminder cancelled.');
-                  },
-            child: const Text('Cancel')));
+        // The call is locked to whoever took it. Only that user gets the
+        // actions; everyone else sees a read-only "taken by …" note.
+        final mine = inst.takenBy != null && inst.takenBy == vm.currentUserId;
+        if (mine) {
+          actions.add(IconButton(
+            onPressed: () => _callCustomer(vm),
+            icon: const Icon(Icons.call),
+            tooltip: 'Call customer',
+          ));
+          actions.add(TextButton(
+              onPressed:
+                  vm.busy ? null : () => _recordPayment(context, vm, inst),
+              child: const Text('Record payment')));
+          actions.add(TextButton(
+              onPressed: vm.busy
+                  ? null
+                  : () async {
+                      final r = await _askReason(
+                          context, 'Cancel reminder', 'Why is it deferred?');
+                      if (r == null || !context.mounted) return;
+                      await _act(context, () => vm.cancelReminder(inst.id, r),
+                          'Reminder cancelled.');
+                    },
+              child: const Text('Cancel')));
+        } else {
+          final takerName =
+              context.read<UserService>().byId(inst.takenBy ?? '')?.name;
+          actions.add(Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.lock_outline, size: 16, color: c.textSub),
+              const SizedBox(width: AppSpacing.xs),
+              Text('Taken by ${takerName ?? 'another admin'}',
+                  style: AppTextStyles.caption.copyWith(color: c.textSub)),
+            ],
+          ));
+        }
       }
     }
     return AppCard(
