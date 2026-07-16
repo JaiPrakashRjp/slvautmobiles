@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
@@ -57,6 +59,8 @@ class _SaleDetailView extends StatefulWidget {
 }
 
 class _SaleDetailViewState extends State<_SaleDetailView> {
+  Timer? _pollTimer;
+
   @override
   void initState() {
     super.initState();
@@ -65,6 +69,18 @@ class _SaleDetailViewState extends State<_SaleDetailView> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _refresh();
     });
+    // Live auto-refresh while the screen is open, so a call another admin just
+    // took ("Taken by …") — and any payment/approval — appears without a manual
+    // pull. Light poll: re-pulls the sale + reminder log every 15s.
+    _pollTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (mounted) _pollRefresh();
+    });
+  }
+
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    super.dispose();
   }
 
   /// Re-pull the sale (+ its vehicle, customer and reminder log) from the
@@ -76,6 +92,16 @@ class _SaleDetailViewState extends State<_SaleDetailView> {
       context.read<VehicleService>().refresh(),
       context.read<CustomerService>().refresh(),
     ]);
+    if (!mounted) return;
+    await vm.loadReminders();
+  }
+
+  /// Lightweight periodic refresh — just the sale + reminder log. Skips while a
+  /// mutation is in flight so it never disrupts an in-progress action.
+  Future<void> _pollRefresh() async {
+    final vm = context.read<SaleDetailViewModel>();
+    if (vm.busy) return;
+    await context.read<SaleService>().refresh();
     if (!mounted) return;
     await vm.loadReminders();
   }
@@ -549,7 +575,7 @@ class _SaleDetailViewState extends State<_SaleDetailView> {
         actions.add(Text('₹${pending.amount} awaiting super-admin approval',
             style: AppTextStyles.caption.copyWith(color: c.textSub)));
       }
-    } else if (vm.canModify &&
+    } else if (vm.canHandleCalls &&
         !vm.isClosed &&
         !inst.isPaid &&
         !inst.isCancelled) {

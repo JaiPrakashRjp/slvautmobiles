@@ -51,6 +51,12 @@ class SaleDetailViewModel extends ChangeNotifier {
     return _auth.isSuperAdmin || s.createdBy == (_auth.currentUser?.id ?? '');
   }
 
+  /// Reminder calls are a shared pool: ANY signed-in staff (admin or super
+  /// admin) can take/handle a due call — not just the sale's creator. The
+  /// per-call lock (taken_by) then serialises who acts on it.
+  bool get canHandleCalls =>
+      (sale?.isActive ?? false) && _auth.currentUser != null;
+
   bool get hasUnpaid =>
       sale?.installments.any((i) => !i.isPaid) ?? false;
 
