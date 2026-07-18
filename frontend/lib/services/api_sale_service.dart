@@ -329,6 +329,60 @@ class ApiSaleService extends SaleService {
   }
 
   @override
+  Future<bool> editSale(
+    String saleId, {
+    required DateTime saleDate,
+    required String customerWhatsapp,
+    int vehicleAmount = 0,
+    int additionalFitting = 0,
+    int dlCharges = 0,
+    int documentCharges = 0,
+    int otherExpenses = 0,
+    required int downPayment,
+    int remainingAmount = 0,
+    int? hpAmount,
+    String? remarks,
+    int? financerId,
+  }) async {
+    final numId = int.tryParse(saleId) ?? 0;
+    // actor_role + by_user_id come from the Bearer token server-side.
+    final body = <String, dynamic>{
+      'sale_date': _dateStr(saleDate),
+      'vehicle_amount': vehicleAmount,
+      'additional_fitting': additionalFitting,
+      'dl_charges': dlCharges,
+      'document_charges': documentCharges,
+      'other_expenses': otherExpenses,
+      'amount_received': downPayment,
+      'remaining_amount': remainingAmount,
+      'hp_amount': hpAmount, // null clears it
+      'customer_whatsapp': customerWhatsapp,
+      'financer_id': financerId, // null clears it
+      'remarks': (remarks != null && remarks.isNotEmpty) ? remarks : null,
+    };
+    final j = await _api.post('/sales/$numId/edit', body: body);
+    final sale = _fromJson(j as Map<String, dynamic>);
+    _replace(sale);
+    // Pending (admin) when the edit is stashed awaiting approval.
+    return sale.isEditPending;
+  }
+
+  @override
+  Future<void> approveEdit(String saleId) async {
+    final numId = int.tryParse(saleId) ?? 0;
+    final j = await _api.post('/sales/$numId/edit/approve');
+    _replace(_fromJson(j as Map<String, dynamic>));
+  }
+
+  @override
+  Future<void> rejectEdit(String saleId, String reason) async {
+    final numId = int.tryParse(saleId) ?? 0;
+    final j =
+        await _api.post('/sales/$numId/edit/reject', query: {'reason': reason});
+    _replace(_fromJson(j as Map<String, dynamic>));
+  }
+
+  @override
   void confirm(String id, String byUserId) {
     final numId = int.tryParse(id) ?? 0;
     final sale = byId(id);
@@ -427,6 +481,9 @@ class ApiSaleService extends SaleService {
       seizeCancelRemarks: j['seize_cancel_remarks'] as String?,
       sold: (j['sold'] as bool?) ?? false,
       remarks: j['remarks'] as String?,
+      pendingEdit: (j['pending_edit'] as Map?)?.cast<String, dynamic>(),
+      editStage: j['edit_stage'] as String?,
+      editRequestedBy: (j['edit_requested_by'] as int?)?.toString(),
     );
   }
 

@@ -1,7 +1,7 @@
 name: slv_auto_consultant
 description: "SLV Auto Consultant — internal business app for three-wheeler auto-rickshaw operations."
 publish_to: "none"
-version: 0.1.4+5
+version: 0.1.5+6
 
 environment:
   sdk: ">=3.3.0 <4.0.0"

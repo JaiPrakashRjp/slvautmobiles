@@ -121,6 +121,31 @@ abstract class SaleService extends ChangeNotifier {
   /// Super admin: reject an admin's pending seize (nothing changes).
   Future<void> rejectSeize(String saleId, String reason);
 
+  /// Edit a sale's details. A super admin's edit applies immediately; an admin's
+  /// is held pending until a super admin approves it (the live sale is
+  /// unchanged until then). Returns true if the edit is pending (admin).
+  Future<bool> editSale(
+    String saleId, {
+    required DateTime saleDate,
+    required String customerWhatsapp,
+    int vehicleAmount,
+    int additionalFitting,
+    int dlCharges,
+    int documentCharges,
+    int otherExpenses,
+    required int downPayment,
+    int remainingAmount,
+    int? hpAmount,
+    String? remarks,
+    int? financerId,
+  });
+
+  /// Super admin: approve an admin's pending sale edit (it now takes effect).
+  Future<void> approveEdit(String saleId);
+
+  /// Super admin: reject an admin's pending sale edit (proposed values dropped).
+  Future<void> rejectEdit(String saleId, String reason);
+
   /// Seized sales for a vehicle (its repossession history), newest first.
   List<Sale> seizedForVehicle(String vehicleId);
 
@@ -502,6 +527,59 @@ class MockSaleService extends SaleService {
     s.seizeCancelRemarks = reason;
     s.seizedAt = null;
     s.seizeReason = null;
+    notifyListeners();
+  }
+
+  @override
+  Future<bool> editSale(
+    String saleId, {
+    required DateTime saleDate,
+    required String customerWhatsapp,
+    int vehicleAmount = 0,
+    int additionalFitting = 0,
+    int dlCharges = 0,
+    int documentCharges = 0,
+    int otherExpenses = 0,
+    required int downPayment,
+    int remainingAmount = 0,
+    int? hpAmount,
+    String? remarks,
+    int? financerId,
+  }) async {
+    final s = byId(saleId);
+    if (s == null) return false;
+    s.vehicleAmount = vehicleAmount;
+    s.additionalFitting = additionalFitting;
+    s.dlCharges = dlCharges;
+    s.documentCharges = documentCharges;
+    s.otherExpenses = otherExpenses;
+    s.salePrice = vehicleAmount +
+        additionalFitting +
+        dlCharges +
+        documentCharges +
+        otherExpenses;
+    s.advance = downPayment;
+    s.hpAmount = hpAmount;
+    s.remainingAmount = remainingAmount;
+    s.saleDate = saleDate;
+    s.customerWhatsapp = customerWhatsapp;
+    s.financerId = financerId;
+    s.remarks = remarks;
+    notifyListeners();
+    return false;
+  }
+
+  @override
+  Future<void> approveEdit(String saleId) async {
+    byId(saleId)?.editStage = null;
+    notifyListeners();
+  }
+
+  @override
+  Future<void> rejectEdit(String saleId, String reason) async {
+    byId(saleId)
+      ?..editStage = null
+      ..pendingEdit = null;
     notifyListeners();
   }
 

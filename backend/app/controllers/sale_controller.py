@@ -13,7 +13,13 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models.enums import EntityStatus
 from app.models.user import User
-from app.schemas.sale import ReminderCreate, ReminderLogOut, SaleCreate, SaleOut
+from app.schemas.sale import (
+    ReminderCreate,
+    ReminderLogOut,
+    SaleCreate,
+    SaleEdit,
+    SaleOut,
+)
 from app.security import get_current_user, require_super_admin
 from app.services.sale_service import SaleService
 
@@ -44,6 +50,39 @@ def create_sale(
     return SaleService.create(
         db, payload, actor_role=current_user.role.name, created_by=current_user.id
     )
+
+
+# ── Edit sale (super admin → immediate; admin → pending approval) ────────────
+@router.post("/{sale_id}/edit", response_model=SaleOut)
+def edit_sale(
+    sale_id: int,
+    payload: SaleEdit,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return SaleService.edit(
+        db, sale_id, payload,
+        actor_role=current_user.role.name, by_user_id=current_user.id,
+    )
+
+
+@router.post("/{sale_id}/edit/approve", response_model=SaleOut)
+def approve_edit(
+    sale_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_super_admin),
+):
+    return SaleService.approve_edit(db, sale_id, by_user_id=current_user.id)
+
+
+@router.post("/{sale_id}/edit/reject", response_model=SaleOut)
+def reject_edit(
+    sale_id: int,
+    reason: str = Query(..., min_length=1),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_super_admin),
+):
+    return SaleService.reject_edit(db, sale_id, reason, by_user_id=current_user.id)
 
 
 # ── Reminders / collections ─────────────────────────────────────────────────

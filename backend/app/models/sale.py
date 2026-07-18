@@ -12,6 +12,7 @@ from sqlalchemy import (
     Text,
     func,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -104,6 +105,13 @@ class Sale(Base):
     # false → Seize button available; true → Seize hidden).
     sold: Mapped[bool] = mapped_column(nullable=False, server_default="false")
     remarks: Mapped[str | None] = mapped_column(Text)
+    # Edit approval: a super admin's edit applies at once; an admin's proposed
+    # changes are stashed here (the live sale keeps its current values) until a
+    # super admin approves. pending_edit holds the proposed field values;
+    # edit_stage is NULL | 'pending'; edit_requested_by is the requesting admin.
+    pending_edit: Mapped[dict | None] = mapped_column(JSONB)
+    edit_stage: Mapped[str | None] = mapped_column(Text)
+    edit_requested_by: Mapped[int | None] = mapped_column(BigInteger)
 
     installments: Mapped[list["SaleInstallment"]] = relationship(  # noqa: F821
         back_populates="sale",
