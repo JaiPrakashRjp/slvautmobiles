@@ -69,6 +69,18 @@ class SaleDetailViewModel extends ChangeNotifier {
   bool get canConfirmSold =>
       canModify && !isSold && (sale?.remainingAmount ?? 1) <= 0;
 
+  /// Whether the sale's details can be edited: a live (active/closed) approved
+  /// sale, by its creator or a super admin, with no edit already pending.
+  bool get canEdit {
+    final s = sale;
+    if (s == null || !canModify) return false;
+    if (s.isEditPending) return false;
+    return s.saleStatus == 'active' || s.saleStatus == 'closed';
+  }
+
+  /// An admin's edit is awaiting super-admin approval.
+  bool get isEditPending => sale?.isEditPending ?? false;
+
   Future<void> loadReminders() async {
     _loadingReminders = true;
     notifyListeners();
@@ -190,6 +202,13 @@ class SaleDetailViewModel extends ChangeNotifier {
   /// Super admin rejects an admin's pending seize (nothing changes).
   Future<void> rejectSeize(String reason) =>
       _run(() => _sales.rejectSeize(_saleId, reason));
+
+  /// Super admin approves an admin's pending sale edit (it now takes effect).
+  Future<void> approveEdit() => _run(() => _sales.approveEdit(_saleId));
+
+  /// Super admin rejects an admin's pending sale edit (proposed values dropped).
+  Future<void> rejectEdit(String reason) =>
+      _run(() => _sales.rejectEdit(_saleId, reason));
 
   String screenshotUrl(int docId) => _sales.screenshotUrl(docId);
   Future<Uint8List> screenshotBytes(int docId) =>

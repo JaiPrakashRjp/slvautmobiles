@@ -8,6 +8,7 @@ import '../../services/sale_financer_service.dart';
 import '../../services/sale_service.dart';
 import '../../services/vehicle_service.dart';
 import '../../models/picked_doc.dart';
+import '../../models/sale.dart';
 import '../../theme/app_colors.dart';
 import '../../utils/app_spacing.dart';
 import '../../utils/app_text_styles.dart';
@@ -28,10 +29,15 @@ class AssignSaleScreen extends StatefulWidget {
     super.key,
     required this.customerId,
     this.initialVehicleId,
+    this.existingSale,
   });
 
   final String customerId;
   final String? initialVehicleId;
+
+  /// When set, the screen edits this existing sale instead of creating a new
+  /// one (vehicle/customer are fixed; only the sale terms are editable).
+  final Sale? existingSale;
 
   @override
   State<AssignSaleScreen> createState() => _AssignSaleScreenState();
@@ -52,6 +58,7 @@ class _AssignSaleScreenState extends State<AssignSaleScreen> {
         financers: context.read<SaleFinancerService>(),
         auth: context.read<AuthController>(),
         initialVehicleId: widget.initialVehicleId,
+        existingSale: widget.existingSale,
       ),
       child: const _AssignSaleView(),
     );
@@ -171,13 +178,17 @@ class _AssignSaleView extends StatelessWidget {
       return;
     }
     navigator.pop();
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(pending
-            ? 'Submitted. Awaiting Super admin confirmation.'
-            : 'Sale recorded.'),
-      ),
-    );
+    final String msg;
+    if (vm.isEditing) {
+      msg = pending
+          ? 'Edit submitted. Awaiting Super admin approval.'
+          : 'Changes saved.';
+    } else {
+      msg = pending
+          ? 'Submitted. Awaiting Super admin confirmation.'
+          : 'Sale recorded.';
+    }
+    messenger.showSnackBar(SnackBar(content: Text(msg)));
   }
 
   @override
@@ -189,7 +200,8 @@ class _AssignSaleView extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: c.bgCanvas,
-      appBar: AppBar(title: const Text('Customer - Sale')),
+      appBar: AppBar(
+          title: Text(vm.isEditing ? 'Edit sale' : 'Customer - Sale')),
       body: SafeArea(
         child: ResponsiveBody(
           maxFormWidth: 520,
@@ -291,21 +303,25 @@ class _AssignSaleView extends StatelessWidget {
               const SizedBox(height: AppSpacing.lg),
 
               // ── Vehicle papers — saved onto the vehicle on Confirm ────────
-              _SectionLabel('Vehicle papers', c: c),
-              const SizedBox(height: AppSpacing.sm),
-              AppTextField(
-                label: 'Vehicle number',
-                hint: 'e.g. KA-01-AB-1234',
-                controller: vm.regNoController,
-              ),
-              const SizedBox(height: AppSpacing.md),
-              _paperRow(context, vm, 'RC', 'rc', vm.rc, vm.rcDoc,
-                  (v) => vm.rc = v),
-              _paperRow(context, vm, 'Permit', 'permit', vm.permit,
-                  vm.permitDoc, (v) => vm.permit = v),
-              _paperRow(context, vm, 'Insurance', 'insurance', vm.insurance,
-                  vm.insuranceDoc, (v) => vm.insurance = v),
-              const SizedBox(height: AppSpacing.lg),
+              // Papers belong to the vehicle (not the gated sale edit), so they
+              // are only captured when creating a sale, not when editing one.
+              if (!vm.isEditing) ...[
+                _SectionLabel('Vehicle papers', c: c),
+                const SizedBox(height: AppSpacing.sm),
+                AppTextField(
+                  label: 'Vehicle number',
+                  hint: 'e.g. KA-01-AB-1234',
+                  controller: vm.regNoController,
+                ),
+                const SizedBox(height: AppSpacing.md),
+                _paperRow(context, vm, 'RC', 'rc', vm.rc, vm.rcDoc,
+                    (v) => vm.rc = v),
+                _paperRow(context, vm, 'Permit', 'permit', vm.permit,
+                    vm.permitDoc, (v) => vm.permit = v),
+                _paperRow(context, vm, 'Insurance', 'insurance', vm.insurance,
+                    vm.insuranceDoc, (v) => vm.insurance = v),
+                const SizedBox(height: AppSpacing.lg),
+              ],
 
               AppTextField(
                 label: 'Customer WhatsApp',
@@ -327,7 +343,9 @@ class _AssignSaleView extends StatelessWidget {
               const SizedBox(height: AppSpacing.xxl),
 
               PrimaryButton(
-                label: vm.loading ? 'Saving…' : 'Confirm sale',
+                label: vm.loading
+                    ? 'Saving…'
+                    : (vm.isEditing ? 'Save changes' : 'Confirm sale'),
                 onPressed: vm.loading ? null : () => _confirm(context, vm),
               ),
             ],

@@ -180,6 +180,25 @@ class _PendingApprovalsScreenState extends State<PendingApprovalsScreen> {
         )),
       ));
     }
+    // Pending sale edits requested by an admin.
+    for (final s in sales.all().where((s) => s.isEditPending)) {
+      items.add(_PendingItem(
+        type: 'Edit',
+        title: 'Sale edit · ${custName(s.customerId)}',
+        subtitle: s.editRequestedBy != null
+            ? 'Requested by ${users.byId(s.editRequestedBy!)?.name ?? s.editRequestedBy}'
+            : 'Edit requested',
+        createdAt: s.createdAt,
+        onApprove: () async {
+          await sales.approveEdit(s.id);
+          await vehicles.refresh();
+        },
+        onReject: (r) => sales.rejectEdit(s.id, r),
+        onView: () => Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => SaleDetailScreen(saleId: s.id),
+        )),
+      ));
+    }
     // Pending payments (manual + installment) submitted by an admin.
     for (final s in sales.all()) {
       for (final p in s.payments.where((p) => p.isPending)) {

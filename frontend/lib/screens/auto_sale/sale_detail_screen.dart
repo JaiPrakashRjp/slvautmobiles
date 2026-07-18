@@ -13,6 +13,7 @@ import '../../models/sale.dart';
 import '../../models/sale_payment.dart';
 import '../../services/customer_service.dart';
 import '../../services/pdf_service.dart';
+import '../../services/sale_financer_service.dart';
 import '../../services/sale_service.dart';
 import '../../services/user_service.dart';
 import '../../services/vehicle_service.dart';
@@ -26,6 +27,7 @@ import '../../widgets/app_card.dart';
 import '../../widgets/role_gate_banner.dart';
 // import '../../widgets/secondary_button.dart'; // used only by hidden payoff receipt
 import '../../widgets/status_pill.dart';
+import 'assign_sale_screen.dart';
 import '../document_preview_screen.dart';
 
 // ── Receipt helpers (inline) ──────────────────────────────────────────────
@@ -209,6 +211,18 @@ class _SaleDetailViewState extends State<_SaleDetailView> {
     amountCtrl.dispose();
     if (ok != true || amount <= 0 || !context.mounted) return;
     await _act(context, () => vm.addReminder(date, amount), 'Reminder set.');
+  }
+
+  /// Open the sale form pre-filled to edit this sale. A super admin's changes
+  /// apply at once; an admin's are held for super-admin approval.
+  Future<void> _editSale(BuildContext context, SaleDetailViewModel vm) async {
+    final sale = vm.sale;
+    if (sale == null) return;
+    await Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) =>
+          AssignSaleScreen(customerId: sale.customerId, existingSale: sale),
+    ));
+    if (mounted) await _refresh();
   }
 
   Future<void> _callCustomer(SaleDetailViewModel vm) async {
@@ -674,6 +688,12 @@ class _SaleDetailViewState extends State<_SaleDetailView> {
       appBar: AppBar(
         title: const Text('Sale detail'),
         actions: [
+          if (sale != null && vm.canEdit)
+            IconButton(
+              icon: const Icon(Icons.edit_outlined),
+              tooltip: 'Edit sale',
+              onPressed: () => _editSale(context, vm),
+            ),
           if (sale != null && vm.customer != null && vm.vehicle != null) ...[
             IconButton(
               icon: const Icon(Icons.receipt_long_outlined),
@@ -751,6 +771,25 @@ class _SaleDetailViewState extends State<_SaleDetailView> {
                           if (r == null || !context.mounted) return;
                           await _act(context, () => vm.rejectUnsell(r),
                               'Unsell rejected.');
+                        },
+                      ),
+                      const SizedBox(height: AppSpacing.lg),
+                    ],
+
+                    // ── Pending edit approval (admin requested) ─────────────
+                    if (sale.isEditPending) ...[
+                      _EditApprovalBanner(
+                        changes: _computeEditChanges(
+                            sale, context.read<SaleFinancerService>()),
+                        canReview: vm.isSuperAdmin,
+                        onApprove: () => _act(
+                            context, () => vm.approveEdit(), 'Edit approved.'),
+                        onReject: () async {
+                          final r = await _askReason(
+                              context, 'Reject edit', 'Reason for rejecting');
+                          if (r == null || !context.mounted) return;
+                          await _act(context, () => vm.rejectEdit(r),
+                              'Edit rejected.');
                         },
                       ),
                       const SizedBox(height: AppSpacing.lg),
@@ -1129,6 +1168,175 @@ class _ApprovalBanner extends StatelessWidget {
                 ),
               ],
             ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// One field changed by a pending edit: label + old → new display strings.
+class _EditChange {
+  const _EditChange(this.label, this.from, this.to);
+  final String label;
+  final String from;
+  final String to;
+}
+
+/// Compares the sale's live values against its [Sale.pendingEdit] proposal and
+/// returns only the fields that actually changed (for the approval diff).
+List<_EditChange> _computeEditChanges(Sale sale, SaleFinancerService financers) {
+  final e = sale.pendingEdit;
+  if (e == null) return const [];
+  final rows = <_EditChange>[];
+
+  void money(String label, int oldV, num? raw) {
+    final n = (raw ?? 0).round();
+    if (n != oldV) {
+      rows.add(_EditChange(
+          label, Formatters.currency(oldV), Formatters.currency(n)));
+    }
+  }
+
+  money('Vehicle amount', sale.vehicleAmount, e['vehicle_amount'] as num?);
+  money('Additional fitting', sale.additionalFitting,
+      e['additional_fitting'] as num?);
+  money('DL charges', sale.dlCharges, e['dl_charges'] as num?);
+  money('Document charges', sale.documentCharges, e['document_charges'] as num?);
+  money('Other expenses', sale.otherExpenses, e['other_expenses'] as num?);
+  money('Down payment', sale.advance, e['amount_received'] as num?);
+
+  final oldHp = sale.hpAmount ?? 0;
+  final newHp = (e['hp_amount'] as num?)?.round() ?? 0;
+  if (oldHp != newHp) {
+    rows.add(_EditChange(
+      'HP amount',
+      oldHp == 0 ? '—' : Formatters.currency(oldHp),
+      newHp == 0 ? '—' : Formatters.currency(newHp),
+    ));
+  }
+
+  final oldDate = sale.saleDate == null ? '—' : Formatters.date(sale.saleDate!);
+  final rawDate = e['sale_date'] as String?;
+  final parsed = rawDate == null ? null : DateTime.tryParse(rawDate);
+  final newDate = parsed == null ? '—' : Formatters.date(parsed);
+  if (oldDate != newDate) rows.add(_EditChange('Sale date', oldDate, newDate));
+
+  final oldWa = sale.customerWhatsapp;
+  final newWa = (e['customer_whatsapp'] as String?) ?? '';
+  if (oldWa != newWa) {
+    rows.add(_EditChange(
+        'WhatsApp', oldWa.isEmpty ? '—' : oldWa, newWa.isEmpty ? '—' : newWa));
+  }
+
+  final oldFin = sale.financerId;
+  final newFin = e['financer_id'] as int?;
+  if (oldFin != newFin) {
+    String name(int? id) =>
+        id == null ? '—' : (financers.byId(id)?.name ?? '#$id');
+    rows.add(_EditChange('Financer', name(oldFin), name(newFin)));
+  }
+
+  final oldRem = sale.remarks ?? '';
+  final newRem = (e['remarks'] as String?) ?? '';
+  if (oldRem != newRem) {
+    rows.add(_EditChange('Remarks', oldRem.isEmpty ? '—' : oldRem,
+        newRem.isEmpty ? '—' : newRem));
+  }
+
+  return rows;
+}
+
+/// Banner shown when an admin has requested a sale edit awaiting a super admin.
+/// Lists the proposed changes; the super admin sees Approve / Reject, others an
+/// info note. The live sale keeps its current values until approved.
+class _EditApprovalBanner extends StatelessWidget {
+  const _EditApprovalBanner({
+    required this.changes,
+    required this.canReview,
+    required this.onApprove,
+    required this.onReject,
+  });
+
+  final List<_EditChange> changes;
+  final bool canReview;
+  final VoidCallback onApprove;
+  final VoidCallback onReject;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: c.warning.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: c.warning.withValues(alpha: 0.5)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.edit_note_rounded, color: c.warning, size: 20),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text('Edit pending approval',
+                    style:
+                        AppTextStyles.bodyStrong.copyWith(color: c.textMain)),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          if (changes.isEmpty)
+            Text('No visible changes.',
+                style: AppTextStyles.caption.copyWith(color: c.textSub))
+          else
+            for (final ch in changes)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: RichText(
+                  text: TextSpan(
+                    style: AppTextStyles.caption.copyWith(color: c.textSub),
+                    children: [
+                      TextSpan(
+                          text: '${ch.label}:  ',
+                          style: AppTextStyles.caption
+                              .copyWith(color: c.textMain)),
+                      TextSpan(text: ch.from),
+                      const TextSpan(text: '  →  '),
+                      TextSpan(
+                          text: ch.to,
+                          style: AppTextStyles.caption.copyWith(
+                              color: c.textMain,
+                              fontWeight: FontWeight.w700)),
+                    ],
+                  ),
+                ),
+              ),
+          if (canReview) ...[
+            const SizedBox(height: AppSpacing.sm),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: onReject,
+                    child: const Text('Reject'),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: onApprove,
+                    child: const Text('Approve'),
+                  ),
+                ),
+              ],
+            ),
+          ] else ...[
+            const SizedBox(height: 4),
+            Text('Awaiting super-admin approval',
+                style: AppTextStyles.caption.copyWith(color: c.textSub)),
           ],
         ],
       ),

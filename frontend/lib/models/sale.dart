@@ -50,6 +50,9 @@ class Sale with GatedEntity {
     this.seizeConfirmRemarks,
     this.seizeCancelRemarks,
     this.sold = false,
+    this.pendingEdit,
+    this.editStage,
+    this.editRequestedBy,
   })  : installments = installments ?? [],
         payments = payments ?? [];
 
@@ -136,6 +139,16 @@ class Sale with GatedEntity {
 
   /// Admin requested a seize that a super admin hasn't approved yet.
   bool get isSeizePending => seizeStage == 'pending';
+
+  /// Pending edit: an admin proposed changes that a super admin hasn't approved
+  /// yet. The live sale keeps its current values; [pendingEdit] holds the
+  /// proposed field values (for the approval diff).
+  Map<String, dynamic>? pendingEdit;
+  String? editStage;
+  String? editRequestedBy;
+
+  /// An admin requested an edit that a super admin hasn't approved yet.
+  bool get isEditPending => editStage == 'pending';
 
   /// Seize is active — the 'Seized' badge stage (can be cancelled or confirmed).
   bool get isSeizeActive => seizeStage == 'seized';

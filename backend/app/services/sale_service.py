@@ -28,7 +28,7 @@ from app.models.sale_installment import SaleInstallment
 from app.models.sale_payment import SalePayment
 from app.models.sale_payment_document import SalePaymentDocument
 from app.models.vehicle import Vehicle
-from app.schemas.sale import SaleCreate
+from app.schemas.sale import SaleCreate, SaleEdit
 from app.services.notification_service import NotificationService
 
 
@@ -151,6 +151,170 @@ class SaleService:
 
         db.commit()
         return SaleService.get(db, sale.id)
+
+    # ── Edit (correcting a sale's details) ───────────────────────────────────
+    # A super admin's edit applies immediately; an admin's proposed changes are
+    # stashed in `pending_edit` (the live sale is untouched) until a super admin
+    # approves. Vehicle/customer are fixed — only the sale terms are editable.
+    @staticmethod
+    def _editable(sale: Sale) -> None:
+        """Guard: only an approved, live (active/closed) sale can be edited."""
+        if sale.status != EntityStatus.active:
+            raise HTTPException(
+                status_code=403, detail="Only an approved sale can be edited."
+            )
+        if sale.sale_status not in (SaleLifecycle.active, SaleLifecycle.closed):
+            raise HTTPException(
+                status_code=400, detail="This sale can no longer be edited."
+            )
+
+    @staticmethod
+    def _edit_payload(data: SaleEdit) -> dict:
+        """The JSON-serialisable proposed-edit dict stashed in `pending_edit`."""
+        return {
+            "vehicle_amount": float(data.vehicle_amount),
+            "additional_fitting": float(data.additional_fitting),
+            "dl_charges": float(data.dl_charges),
+            "document_charges": float(data.document_charges),
+            "other_expenses": float(data.other_expenses),
+            "amount_received": float(data.amount_received),
+            "hp_amount": float(data.hp_amount) if data.hp_amount is not None else None,
+            "sale_date": data.sale_date.isoformat() if data.sale_date else None,
+            "customer_whatsapp": data.customer_whatsapp,
+            "financer_id": data.financer_id,
+            "remarks": data.remarks,
+        }
+
+    @staticmethod
+    def _validate_edit(db: Session, payload: dict) -> tuple[float, float, float | None, bool]:
+        """Validate a proposed edit; returns (total, down, hp, is_full_cash)."""
+        financer_id = payload.get("financer_id")
+        if financer_id is not None and db.get(SaleFinancer, financer_id) is None:
+            raise HTTPException(status_code=400, detail="Unknown sale financer")
+        total = round(
+            float(payload["vehicle_amount"])
+            + float(payload["additional_fitting"])
+            + float(payload["dl_charges"])
+            + float(payload["document_charges"])
+            + float(payload["other_expenses"]),
+            2,
+        )
+        if total <= 0:
+            raise HTTPException(
+                status_code=400, detail="Total amount must be greater than 0"
+            )
+        down = round(float(payload["amount_received"]), 2)
+        if down < 0 or down > total:
+            raise HTTPException(
+                status_code=400, detail="Down payment cannot exceed the total amount"
+            )
+        hp = float(payload["hp_amount"]) if payload.get("hp_amount") is not None else None
+        is_full_cash = abs(down - total) < 0.01
+        return total, down, hp, is_full_cash
+
+    @staticmethod
+    def _apply_edit(db: Session, sale: Sale, payload: dict) -> None:
+        """Apply a proposed edit onto the sale: recompute total, deposit type and
+        the outstanding balance, preserving any payments already collected."""
+        total, down, hp, is_full_cash = SaleService._validate_edit(db, payload)
+
+        # Preserve money already collected via installment/manual payments so an
+        # edit never wipes out recorded payments. base = total − HP − down.
+        collected = round(
+            sum(
+                float(p.amount)
+                for p in sale.payments
+                if p.status == EntityStatus.active
+            ),
+            2,
+        )
+        base = 0.0 if is_full_cash else round(total - (hp or 0.0) - down, 2)
+        remaining = max(0.0, round(base - collected, 2))
+
+        sale.vehicle_amount = payload["vehicle_amount"]
+        sale.additional_fitting = payload["additional_fitting"]
+        sale.dl_charges = payload["dl_charges"]
+        sale.document_charges = payload["document_charges"]
+        sale.other_expenses = payload["other_expenses"]
+        sale.sale_price = total
+        sale.amount_received = down
+        sale.deposit_type = (
+            DepositType.full_cash if is_full_cash else DepositType.down_payment
+        )
+        sale.hp_amount = hp
+        sale.remaining_amount = remaining
+        if payload.get("sale_date"):
+            sale.sale_date = date.fromisoformat(payload["sale_date"])
+        sale.customer_whatsapp = payload.get("customer_whatsapp")
+        sale.financer_id = payload.get("financer_id")
+        sale.remarks = payload.get("remarks")
+
+        # Keep the lifecycle in step with the new balance (live sales only).
+        if remaining <= 0:
+            sale.sale_status = SaleLifecycle.closed
+            if sale.closed_at is None:
+                sale.closed_at = datetime.now(timezone.utc)
+        else:
+            sale.sale_status = SaleLifecycle.active
+            sale.closed_at = None
+
+    @staticmethod
+    def edit(
+        db: Session, sale_id: int, data: SaleEdit, *, actor_role: str, by_user_id: int
+    ) -> Sale:
+        """Edit a sale. Super admin → applied at once; admin → held pending until a
+        super admin approves (the live sale keeps its current values)."""
+        sale = SaleService.get(db, sale_id)
+        SaleService._editable(sale)
+        payload = SaleService._edit_payload(data)
+        # Validate up front so bad input is rejected for both roles immediately.
+        SaleService._validate_edit(db, payload)
+        if actor_role == "super_admin":
+            SaleService._apply_edit(db, sale, payload)
+            sale.pending_edit = None
+            sale.edit_stage = None
+            sale.edit_requested_by = None
+        else:
+            sale.pending_edit = payload
+            sale.edit_stage = "pending"
+            sale.edit_requested_by = by_user_id
+            NotificationService.create_verification(
+                db,
+                entity_type=NotificationEntity.sale,
+                entity_id=sale.id,
+                title="Sale edit needs approval",
+                message=f"Edit of {sale.invoice_no} by an admin awaits verification.",
+            )
+        db.commit()
+        return SaleService.get(db, sale_id)
+
+    @staticmethod
+    def approve_edit(db: Session, sale_id: int, *, by_user_id: int) -> Sale:
+        """Super admin approves an admin's pending edit — it now takes effect."""
+        sale = SaleService.get(db, sale_id)
+        if sale.edit_stage != "pending" or not sale.pending_edit:
+            raise HTTPException(status_code=400, detail="No pending edit to approve.")
+        SaleService._apply_edit(db, sale, sale.pending_edit)
+        sale.pending_edit = None
+        sale.edit_stage = None
+        sale.edit_requested_by = None
+        db.commit()
+        return SaleService.get(db, sale_id)
+
+    @staticmethod
+    def reject_edit(
+        db: Session, sale_id: int, reason: str, *, by_user_id: int
+    ) -> Sale:
+        """Super admin rejects an admin's pending edit — nothing changes; the
+        proposed values are discarded."""
+        sale = SaleService.get(db, sale_id)
+        if sale.edit_stage != "pending":
+            raise HTTPException(status_code=400, detail="No pending edit to reject.")
+        sale.pending_edit = None
+        sale.edit_stage = None
+        sale.edit_requested_by = None
+        db.commit()
+        return SaleService.get(db, sale_id)
 
     @staticmethod
     def _maybe_close(db: Session, sale: Sale) -> None:

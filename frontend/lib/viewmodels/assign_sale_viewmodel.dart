@@ -5,6 +5,7 @@ import '../models/customer.dart';
 import '../models/enums.dart';
 import '../models/financer.dart';
 import '../models/picked_doc.dart';
+import '../models/sale.dart';
 import '../models/vehicle.dart';
 import '../services/customer_service.dart';
 import '../services/sale_financer_service.dart';
@@ -28,23 +29,45 @@ class AssignSaleViewModel extends ChangeNotifier {
     required SaleFinancerService financers,
     required AuthController auth,
     String? initialVehicleId,
+    Sale? existingSale,
   })  : _customers = customers,
         _vehicles = vehicles,
         _sales = sales,
         _financers = financers,
         _auth = auth,
-        _vehicleId = initialVehicleId,
-        vehicleLocked = initialVehicleId != null {
+        _existingSale = existingSale,
+        _vehicleId = existingSale?.vehicleId ?? initialVehicleId,
+        // Vehicle is fixed both when pre-selected and when editing a sale.
+        vehicleLocked = existingSale != null || initialVehicleId != null {
     final phone = customers.byId(customerId)?.phone ?? '';
     if (phone.isNotEmpty) whatsappController.text = phone;
     // Prefill the reg number from the (pre-)selected vehicle, if any.
     final preVehicle = _vehicleId == null ? null : vehicles.byId(_vehicleId!);
     if (preVehicle != null) regNoController.text = preVehicle.regNo;
+    // Editing an existing sale → prefill every field from it (overrides the
+    // customer-phone default above).
+    if (existingSale != null) _prefillFrom(existingSale);
     // Recompute total + loan-field visibility live as amounts change.
     for (final ctl in _amountControllers) {
       ctl.addListener(notifyListeners);
     }
     _financers.refresh().then((_) => notifyListeners());
+  }
+
+  /// Prefill all controllers/fields from an existing sale for the edit flow.
+  void _prefillFrom(Sale s) {
+    String amt(int v) => v == 0 ? '' : '$v';
+    vehicleAmountController.text = amt(s.vehicleAmount);
+    additionalFittingController.text = amt(s.additionalFitting);
+    dlChargesController.text = amt(s.dlCharges);
+    documentChargesController.text = amt(s.documentCharges);
+    otherExpensesController.text = amt(s.otherExpenses);
+    downPaymentController.text = amt(s.advance);
+    hpAmountController.text = amt(s.hpAmount ?? 0);
+    whatsappController.text = s.customerWhatsapp;
+    remarksController.text = s.remarks ?? '';
+    _financerId = s.financerId;
+    _saleDate = s.saleDate;
   }
 
   final String customerId;
@@ -53,6 +76,10 @@ class AssignSaleViewModel extends ChangeNotifier {
   final SaleService _sales;
   final SaleFinancerService _financers;
   final AuthController _auth;
+
+  /// Non-null when editing an existing sale (vs creating a new one).
+  final Sale? _existingSale;
+  bool get isEditing => _existingSale != null;
 
   final vehicleAmountController = TextEditingController();
   final additionalFittingController = TextEditingController();
@@ -212,12 +239,34 @@ class AssignSaleViewModel extends ChangeNotifier {
     return null;
   }
 
-  /// Returns true if the created sale is pending (admin) confirmation.
+  /// Returns true if the created/edited sale is pending (admin) confirmation.
   Future<bool> submit() async {
     _loading = true;
     notifyListeners();
     try {
       final user = _auth.currentUser!;
+      // ── Edit an existing sale ─────────────────────────────────────────────
+      // Vehicle/customer are fixed; only the sale terms change. Super admin →
+      // applies at once; admin → held pending until a super admin approves.
+      if (_existingSale != null) {
+        return await _sales.editSale(
+          _existingSale.id,
+          saleDate: _saleDate!,
+          customerWhatsapp: whatsappController.text.trim(),
+          vehicleAmount: vehicleAmount,
+          additionalFitting: additionalFitting,
+          dlCharges: dlCharges,
+          documentCharges: documentCharges,
+          otherExpenses: otherExpenses,
+          downPayment: downPayment,
+          remainingAmount: showLoanFields ? remaining : 0,
+          hpAmount: (showLoanFields && hpEffective > 0) ? hpEffective : null,
+          remarks: remarksController.text.trim().isEmpty
+              ? null
+              : remarksController.text.trim(),
+          financerId: _financerId,
+        );
+      }
       await _sales.create(
         actorRole: user.role,
         actorId: user.id,

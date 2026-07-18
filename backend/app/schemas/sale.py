@@ -36,6 +36,24 @@ class SaleCreate(BaseModel):
     remarks: str | None = None
 
 
+class SaleEdit(BaseModel):
+    """Editable fields of an existing sale. A super admin's edit applies at once;
+    an admin's is held pending until a super admin approves. Vehicle/customer are
+    fixed — only the sale terms are editable here."""
+    vehicle_amount: float = 0
+    additional_fitting: float = 0
+    dl_charges: float = 0
+    document_charges: float = 0
+    other_expenses: float = 0
+    amount_received: float = 0  # down payment
+    remaining_amount: float = 0  # derived on the client; server recomputes too
+    hp_amount: float | None = None
+    sale_date: date | None = None
+    customer_whatsapp: str | None = None
+    financer_id: int | None = None
+    remarks: str | None = None
+
+
 class ReminderCreate(BaseModel):
     """Admin schedules a collection reminder (date + amount) on a sale."""
     due_date: date
@@ -132,5 +150,9 @@ class SaleOut(BaseModel):
     seize_cancel_remarks: str | None = None
     sold: bool = False
     remarks: str | None = None
+    # Pending edit (admin proposed an edit awaiting super-admin approval).
+    pending_edit: dict | None = None
+    edit_stage: str | None = None
+    edit_requested_by: int | None = None
     installments: list[InstallmentOut] = []
     payments: list[PaymentOut] = []
