@@ -90,7 +90,7 @@ class _VehiclesListView extends StatelessWidget {
                 padding: EdgeInsets.fromLTRB(context.screenHPadding,
                     AppSpacing.lg, context.screenHPadding, AppSpacing.md),
                 child: TabBarNavy(
-                  tabs: const ['Sold', 'Not sold'],
+                  tabs: const ['Not sold', 'Sold'],
                   index: vm.tab,
                   onChanged: (i) => vm.tab = i,
                 ),
@@ -145,8 +145,8 @@ class _VehiclesListView extends StatelessWidget {
                             padding: const EdgeInsets.only(top: 40),
                             child: EmptyState(
                               title: vm.tab == 0
-                                  ? 'No sold vehicles'
-                                  : 'No unsold vehicles',
+                                  ? 'No unsold vehicles'
+                                  : 'No sold vehicles',
                               subtitle: 'Tap “Create” to add an auto-rickshaw.',
                               ctaLabel: 'Create vehicle',
                               onCta: () => _openCreate(context),
@@ -213,9 +213,9 @@ class _VehicleCard extends StatelessWidget {
       searchable: true,
       searchHint: 'Search by name or phone',
       addLabel: 'New customer',
-      // "+" → create a new customer, then sell to them from the picker.
+      // "+" → create a new customer, then go straight to the sell form.
       onAdd: () => navigator.push(MaterialPageRoute(
-        builder: (_) => const CreateCustomerScreen(),
+        builder: (_) => CreateCustomerScreen(sellVehicleId: vehicle.id),
       )),
       options: listable
           .map((c) => SheetOption(

@@ -72,7 +72,7 @@ class VehiclesListViewModel extends ChangeNotifier {
   }
 
   List<Vehicle> get _filtered {
-    final base = _tab == 0 ? _vehicles.sold() : _vehicles.notSold();
+    final base = _tab == 0 ? _vehicles.notSold() : _vehicles.sold();
     if (_query.isEmpty) return base;
     return base
         .where((v) =>

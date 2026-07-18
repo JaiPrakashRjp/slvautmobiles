@@ -311,7 +311,7 @@ class VehicleDetailScreen extends StatelessWidget {
       searchHint: 'Search by name or phone',
       addLabel: 'New customer',
       onAdd: () => navigator.push(MaterialPageRoute(
-        builder: (_) => const CreateCustomerScreen(),
+        builder: (_) => CreateCustomerScreen(sellVehicleId: vehicleId),
       )),
       options: listable
           .map((c) => SheetOption(

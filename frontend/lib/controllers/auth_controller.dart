@@ -38,26 +38,26 @@ class AuthController extends ChangeNotifier {
   /// Restore a saved session on app startup, if the login is under 24 hours old.
   /// Returns true when a valid session was restored.
   Future<bool> restore() async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString(_kToken);
-    final userJson = prefs.getString(_kUser);
-    final loginAtMs = prefs.getInt(_kLoginAt);
-    if (token == null || userJson == null || loginAtMs == null) return false;
-
-    final loginAt = DateTime.fromMillisecondsSinceEpoch(loginAtMs);
-    if (DateTime.now().difference(loginAt) >= _sessionDuration) {
-      // Session older than 24 hours — expired.
-      await _clear();
-      return false;
-    }
     try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString(_kToken);
+      final userJson = prefs.getString(_kUser);
+      final loginAtMs = prefs.getInt(_kLoginAt);
+      if (token == null || userJson == null || loginAtMs == null) return false;
+
+      final loginAt = DateTime.fromMillisecondsSinceEpoch(loginAtMs);
+      if (DateTime.now().difference(loginAt) >= _sessionDuration) {
+        // Session older than 24 hours — expired.
+        await _clear();
+        return false;
+      }
       ApiClient.authToken = token;
       _current = _userFromJson(jsonDecode(userJson) as Map<String, dynamic>);
       notifyListeners();
       unawaited(PushService.registerToken());
       return true;
     } catch (_) {
-      await _clear();
+      // No/unavailable storage → just start signed out (never blocks startup).
       return false;
     }
   }
@@ -79,11 +79,14 @@ class AuthController extends ChangeNotifier {
       ApiClient.authToken = token;
       _current = _userFromJson(user);
       notifyListeners();
-      // Persist the session for 24 hours (survives app restart).
-      final prefs = await SharedPreferences.getInstance();
-      if (token != null) await prefs.setString(_kToken, token);
-      await prefs.setString(_kUser, jsonEncode(user));
-      await prefs.setInt(_kLoginAt, DateTime.now().millisecondsSinceEpoch);
+      // Persist the session for 24 hours (survives app restart). A storage
+      // failure must not fail the login — the user is still signed in for now.
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        if (token != null) await prefs.setString(_kToken, token);
+        await prefs.setString(_kUser, jsonEncode(user));
+        await prefs.setInt(_kLoginAt, DateTime.now().millisecondsSinceEpoch);
+      } catch (_) {}
       // Register this device for push now that we're authenticated.
       unawaited(PushService.registerToken());
       return true;
@@ -105,10 +108,12 @@ class AuthController extends ChangeNotifier {
   /// Clear the persisted session + in-memory token.
   Future<void> _clear() async {
     ApiClient.authToken = null;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_kToken);
-    await prefs.remove(_kUser);
-    await prefs.remove(_kLoginAt);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_kToken);
+      await prefs.remove(_kUser);
+      await prefs.remove(_kLoginAt);
+    } catch (_) {}
   }
 
   AppUser _userFromJson(Map<String, dynamic> j) {

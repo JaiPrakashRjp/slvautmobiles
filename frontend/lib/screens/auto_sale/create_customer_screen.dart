@@ -23,13 +23,18 @@ import '../../widgets/option_sheet.dart';
 import '../../widgets/picker_field.dart';
 import '../../widgets/primary_button.dart';
 import '../document_preview_screen.dart';
+import 'assign_sale_screen.dart';
 
 /// Create / edit customer — required Name / Mobile / Address / Documents /
 /// Assurity person details. Pass [existing] to open in edit mode.
 class CreateCustomerScreen extends StatelessWidget {
-  const CreateCustomerScreen({super.key, this.existing});
+  const CreateCustomerScreen({super.key, this.existing, this.sellVehicleId});
 
   final Customer? existing;
+
+  /// When set (opened from the "+ New customer" in the sell picker), a
+  /// successful create continues straight to the sell form for this vehicle.
+  final String? sellVehicleId;
 
   @override
   Widget build(BuildContext context) {
@@ -39,13 +44,15 @@ class CreateCustomerScreen extends StatelessWidget {
         context.read<AuthController>(),
         existing: existing,
       ),
-      child: const _CreateCustomerView(),
+      child: _CreateCustomerView(sellVehicleId: sellVehicleId),
     );
   }
 }
 
 class _CreateCustomerView extends StatefulWidget {
-  const _CreateCustomerView();
+  const _CreateCustomerView({this.sellVehicleId});
+
+  final String? sellVehicleId;
 
   @override
   State<_CreateCustomerView> createState() => _CreateCustomerViewState();
@@ -295,6 +302,40 @@ class _CreateCustomerViewState extends State<_CreateCustomerView> {
           : docsMissing
               ? 'Add at least one document'
               : 'Please fix the highlighted fields');
+      return;
+    }
+
+    // Sell-continuation: opened from the sell picker's "+ New customer". Await
+    // the create, then go straight to the sell form for this vehicle (or explain
+    // if the new customer is pending super-admin approval).
+    final sellVehicleId = widget.sellVehicleId;
+    if (sellVehicleId != null && !vm.isEditing) {
+      final messenger = ScaffoldMessenger.of(context);
+      final navigator = Navigator.of(context);
+      setState(() => _submitting = true);
+      try {
+        final result = await vm.submit();
+        if (!mounted) return;
+        if (result.pending || result.customerId == null) {
+          navigator.pop();
+          messenger.showSnackBar(const SnackBar(
+            content: Text(
+                'Customer created — awaiting approval before you can sell.'),
+          ));
+        } else {
+          navigator.pushReplacement(MaterialPageRoute(
+            builder: (_) => AssignSaleScreen(
+              customerId: result.customerId!,
+              initialVehicleId: sellVehicleId,
+            ),
+          ));
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() => _submitting = false);
+          messenger.showSnackBar(SnackBar(content: Text('Could not save: $e')));
+        }
+      }
       return;
     }
 
