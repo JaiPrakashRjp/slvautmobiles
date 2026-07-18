@@ -112,6 +112,7 @@ class SaleService:
             other_expenses=data.other_expenses,
             hp_amount=hp_amount,
             customer_whatsapp=data.customer_whatsapp,
+            remarks=data.remarks,
             sale_status=SaleLifecycle.active,
             status=data.status or initial_status(actor_role),
             created_by=created_by,

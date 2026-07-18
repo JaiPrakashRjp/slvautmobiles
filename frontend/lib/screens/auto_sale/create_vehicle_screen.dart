@@ -404,6 +404,19 @@ class _CreateVehicleViewState extends State<_CreateVehicleView> {
         validator: (v) => Validators.required(v, field: 'Chassis number'),
       ),
       const SizedBox(height: AppSpacing.lg),
+      // Vehicle (registration) number — shown for every vehicle. Required for a
+      // second-hand vehicle; optional for a first-hand one (may be unregistered).
+      AppTextField(
+        label: 'Vehicle number',
+        required: vm.isSecondHand,
+        hint: 'KA-01-AB-1234',
+        controller: vm.regNoController,
+        textInputAction: TextInputAction.next,
+        validator: vm.isSecondHand
+            ? (v) => Validators.required(v, field: 'Vehicle number')
+            : null,
+      ),
+      const SizedBox(height: AppSpacing.lg),
       AppTextField(
         label: 'Vehicle model',
         required: true,
@@ -487,15 +500,6 @@ class _CreateVehicleViewState extends State<_CreateVehicleView> {
       const SizedBox(height: AppSpacing.lg),
       const _SectionLabel('Second hand details'),
       const SizedBox(height: AppSpacing.md),
-      AppTextField(
-        label: 'Vehicle number',
-        required: true,
-        hint: 'KA-01-AB-1234',
-        controller: vm.regNoController,
-        textInputAction: TextInputAction.next,
-        validator: (v) => Validators.required(v, field: 'Vehicle number'),
-      ),
-      const SizedBox(height: AppSpacing.lg),
       PickerField(
         label: 'Insurance date',
         required: true,

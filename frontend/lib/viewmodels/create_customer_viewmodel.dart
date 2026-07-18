@@ -84,7 +84,8 @@ class CreateCustomerViewModel extends ChangeNotifier {
   /// Creates or updates the customer. On create, uploads the picked documents.
   /// Returns whether the result is pending confirmation plus any docs that
   /// failed to upload. Throws if saving the record fails.
-  Future<({bool pending, List<String> failedDocs})> submit() async {
+  Future<({bool pending, List<String> failedDocs, String? customerId})>
+      submit() async {
     final user = _auth.currentUser!;
     final failedDocs = <String>[];
 
@@ -102,7 +103,7 @@ class CreateCustomerViewModel extends ChangeNotifier {
         assurityMobile: assurityMobileController.text.trim(),
         remarks: remarksController.text.trim().isEmpty ? null : remarksController.text.trim(),
       );
-      return (pending: false, failedDocs: failedDocs);
+      return (pending: false, failedDocs: failedDocs, customerId: _existing.id);
     }
 
     final customer = await _customers.create(
@@ -127,7 +128,11 @@ class CreateCustomerViewModel extends ChangeNotifier {
     await _tryUpload(customer.id, 'assurity_id_proof', _assurityIdProof,
         'Assurity ID proof', failedDocs);
 
-    return (pending: !user.isSuperAdmin, failedDocs: failedDocs);
+    return (
+      pending: !user.isSuperAdmin,
+      failedDocs: failedDocs,
+      customerId: customer.id,
+    );
   }
 
   Future<void> _tryUpload(String customerId, String docTypeWire, PickedDoc? doc,

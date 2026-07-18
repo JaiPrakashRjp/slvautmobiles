@@ -69,6 +69,42 @@ class NotificationService:
         )
 
     @staticmethod
+    def create_doc_expiry(
+        db: Session,
+        *,
+        vehicle_id: int,
+        title: str,
+        message: str = "",
+    ) -> None:
+        """Notify all staff that a vehicle document (insurance / FC / permit) is
+        expiring — in-app + FCM. Tapping opens the vehicle so they can renew and
+        update the date. Best-effort push."""
+        staff_ids = [u.id for u in UserDAO.active_staff(db)]
+        for uid in staff_ids:
+            NotificationDAO.add(
+                db,
+                Notification(
+                    recipient_user_id=uid,
+                    type=NotificationType.info,
+                    title=title,
+                    message=message,
+                    entity_type=NotificationEntity.vehicle,
+                    entity_id=vehicle_id,
+                ),
+            )
+        tokens = DeviceTokenDAO.tokens_for_users(db, staff_ids)
+        FcmService.send(
+            tokens,
+            title=title,
+            body=message or "Tap to view the vehicle",
+            data={
+                "type": "doc_expiry",
+                "entity_type": "vehicle",
+                "entity_id": vehicle_id,
+            },
+        )
+
+    @staticmethod
     def create_reminder(
         db: Session,
         *,

@@ -16,6 +16,7 @@ class Formatters {
 
   static final DateFormat _date = DateFormat('dd MMM yyyy', 'en_IN');
   static final DateFormat _dateTime = DateFormat('dd MMM yyyy, h:mm a', 'en_IN');
+  static final DateFormat _monthYear = DateFormat('MMMM yyyy', 'en_IN');
 
   /// `₹1,80,000`
   static String currency(num value) => _inr.format(value);
@@ -25,6 +26,9 @@ class Formatters {
 
   /// `28 Jun 2026`
   static String date(DateTime d) => _date.format(d);
+
+  /// `July 2026`
+  static String monthYear(DateTime d) => _monthYear.format(d);
 
   /// `28 Jun 2026, 4:30 PM`
   static String dateTime(DateTime d) => _dateTime.format(d);

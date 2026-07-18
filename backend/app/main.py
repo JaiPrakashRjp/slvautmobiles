@@ -8,6 +8,7 @@ from app.controllers.customer_controller import router as customers_router
 from app.controllers.device_controller import router as devices_router
 from app.controllers.financer_controller import router as financers_router
 from app.controllers.notification_controller import router as notifications_router
+from app.controllers.report_controller import router as reports_router
 from app.controllers.sale_controller import router as sales_router
 from app.controllers.sale_financer_controller import router as sale_financers_router
 from app.controllers.search_controller import router as search_router
@@ -36,6 +37,7 @@ app.include_router(vehicles_router)
 app.include_router(customers_router)
 app.include_router(sales_router)
 app.include_router(notifications_router)
+app.include_router(reports_router)
 app.include_router(financers_router)
 app.include_router(devices_router)
 app.include_router(sale_financers_router)

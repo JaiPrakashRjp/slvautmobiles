@@ -6,6 +6,7 @@ import 'package:printing/printing.dart';
 
 import '../models/customer.dart';
 import '../models/installment.dart';
+import '../models/monthly_report.dart';
 import '../models/loan.dart';
 import '../models/sale.dart';
 import '../models/vehicle.dart';
@@ -13,6 +14,14 @@ import '../utils/formatters.dart';
 
 abstract class PdfService {
   Future<void> previewInvoice({
+    required Sale sale,
+    required Customer customer,
+    required Vehicle vehicle,
+  });
+
+  /// Build the invoice PDF and hand it straight to the OS share sheet
+  /// (WhatsApp / email / Drive …).
+  Future<void> shareInvoice({
     required Sale sale,
     required Customer customer,
     required Vehicle vehicle,
@@ -35,6 +44,12 @@ abstract class PdfService {
     required Loan loan,
     required Customer customer,
   });
+
+  /// Business report over a period (month or custom range): sold/unsold,
+  /// customers, dues. [previewMonthlyReport] opens the print preview;
+  /// [shareMonthlyReport] hands the PDF to the OS share sheet.
+  Future<void> previewMonthlyReport(MonthlyReport report);
+  Future<void> shareMonthlyReport(MonthlyReport report);
 }
 
 class RealPdfService implements PdfService {
@@ -276,6 +291,30 @@ class RealPdfService implements PdfService {
     required Customer customer,
     required Vehicle vehicle,
   }) async {
+    final doc =
+        await _invoiceDoc(sale: sale, customer: customer, vehicle: vehicle);
+    await Printing.layoutPdf(onLayout: (_) => doc.save());
+  }
+
+  @override
+  Future<void> shareInvoice({
+    required Sale sale,
+    required Customer customer,
+    required Vehicle vehicle,
+  }) async {
+    final doc =
+        await _invoiceDoc(sale: sale, customer: customer, vehicle: vehicle);
+    await Printing.sharePdf(
+      bytes: await doc.save(),
+      filename: 'invoice-${sale.invoiceNo ?? sale.id}.pdf',
+    );
+  }
+
+  Future<pw.Document> _invoiceDoc({
+    required Sale sale,
+    required Customer customer,
+    required Vehicle vehicle,
+  }) async {
     final logo = await _loadLogo();
     final branch = vehicle.branch?.label ?? customer.branch?.label;
     final doc = pw.Document();
@@ -385,7 +424,7 @@ class RealPdfService implements PdfService {
         ],
       ),
     ));
-    await Printing.layoutPdf(onLayout: (_) => doc.save());
+    return doc;
   }
 
   /// Invoice header: logo on the left, business details (name / phone / GSTIN /
@@ -692,4 +731,222 @@ class RealPdfService implements PdfService {
     ));
     await Printing.layoutPdf(onLayout: (_) => doc.save());
   }
+
+  // ── Monthly / period report ─────────────────────────────────────────────
+
+  @override
+  Future<void> previewMonthlyReport(MonthlyReport report) async {
+    final doc = await _monthlyReportDoc(report);
+    await Printing.layoutPdf(onLayout: (_) => doc.save());
+  }
+
+  @override
+  Future<void> shareMonthlyReport(MonthlyReport report) async {
+    final doc = await _monthlyReportDoc(report);
+    await Printing.sharePdf(
+      bytes: await doc.save(),
+      filename: 'report-${report.label.replaceAll(' ', '-')}.pdf',
+    );
+  }
+
+  Future<pw.Document> _monthlyReportDoc(MonthlyReport r) async {
+    final logo = await _loadLogo();
+    final doc = pw.Document();
+    doc.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.fromLTRB(28, 22, 28, 28),
+        header: (_) => _reportHeader(logo, r.label),
+        build: (_) => [
+          _label('OVERVIEW'),
+          _statGrid([
+            ('Vehicles sold', '${r.soldCount}', _curr(r.soldValue)),
+            ('Sales value', _curr(r.soldValue), 'this period'),
+            ('Unsold (in stock)', '${r.unsold.length}', 'current inventory'),
+            ('New customers', '${r.newCustomerCount}', 'added this period'),
+            ('Collected', _curr(r.collected), 'this period'),
+            ('Outstanding', _curr(r.outstanding), 'from these sales'),
+          ]),
+          _label('SALES THIS PERIOD'),
+          if (r.sales.isEmpty)
+            _emptyLine('No sales in this period.')
+          else
+            _table(
+              ['Date', 'Customer', 'Vehicle', 'Price', 'Received', 'Balance'],
+              [
+                for (final s in r.sales)
+                  [
+                    Formatters.date(s.date),
+                    s.customerName,
+                    s.vehicle,
+                    _curr(s.price),
+                    _curr(s.received),
+                    _curr(s.balance),
+                  ],
+                [
+                  'Total · ${r.soldCount}',
+                  '',
+                  '',
+                  _curr(r.soldValue),
+                  _curr(r.collected),
+                  _curr(r.outstanding),
+                ],
+              ],
+              rightAlign: const {3, 4, 5},
+              totalLastRow: true,
+            ),
+          _label('OUTSTANDING DUES'),
+          if (r.dues.isEmpty)
+            _emptyLine('Nothing outstanding from this period.')
+          else
+            _table(
+              ['Customer', 'Phone', 'Vehicle', 'Balance'],
+              [
+                for (final s in r.dues)
+                  [s.customerName, s.phone, s.vehicle, _curr(s.balance)],
+                ['Total outstanding', '', '', _curr(r.outstanding)],
+              ],
+              rightAlign: const {3},
+              totalLastRow: true,
+            ),
+          _label('UNSOLD VEHICLES (IN STOCK)'),
+          if (r.unsold.isEmpty)
+            _emptyLine('No vehicles in stock.')
+          else
+            _table(
+              ['Vehicle', 'Model', 'Type', 'Purchased'],
+              [
+                for (final v in r.unsold)
+                  [
+                    v.identifier,
+                    v.model,
+                    v.type,
+                    v.purchaseDate == null
+                        ? '—'
+                        : Formatters.date(v.purchaseDate!),
+                  ],
+              ],
+            ),
+        ],
+        footer: (ctx) => pw.Padding(
+          padding: const pw.EdgeInsets.only(top: 8),
+          child: pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Text('SLV Auto Consultant · Report',
+                  style:
+                      const pw.TextStyle(fontSize: 8, color: PdfColors.grey500)),
+              pw.Text('Page ${ctx.pageNumber} of ${ctx.pagesCount}',
+                  style:
+                      const pw.TextStyle(fontSize: 8, color: PdfColors.grey500)),
+            ],
+          ),
+        ),
+      ),
+    );
+    return doc;
+  }
+
+  pw.Widget _reportHeader(pw.ImageProvider? logo, String label) {
+    return pw.Container(
+      margin: const pw.EdgeInsets.only(bottom: 12),
+      padding: const pw.EdgeInsets.only(bottom: 10),
+      decoration: const pw.BoxDecoration(
+        border: pw.Border(bottom: pw.BorderSide(color: _navy, width: 1.5)),
+      ),
+      child: pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: pw.CrossAxisAlignment.center,
+        children: [
+          logo != null
+              ? pw.Image(logo, width: 44, height: 44, fit: pw.BoxFit.contain)
+              : pw.SizedBox(width: 44, height: 44),
+          pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.end,
+            children: [
+              pw.Text('SLV AUTO CONSULTANT',
+                  style: pw.TextStyle(
+                      fontSize: 15,
+                      fontWeight: pw.FontWeight.bold,
+                      color: _navy)),
+              pw.SizedBox(height: 2),
+              pw.Text('Monthly report  ·  $label',
+                  style: const pw.TextStyle(fontSize: 10, color: _gold)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  pw.Widget _statGrid(List<(String, String, String)> stats) {
+    pw.Widget box((String, String, String) s) => pw.Container(
+          padding: const pw.EdgeInsets.all(10),
+          decoration: pw.BoxDecoration(
+            color: _cream,
+            borderRadius: pw.BorderRadius.circular(8),
+          ),
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text(s.$2,
+                  style: pw.TextStyle(
+                      fontSize: 15,
+                      fontWeight: pw.FontWeight.bold,
+                      color: _navy)),
+              pw.SizedBox(height: 2),
+              pw.Text(s.$1,
+                  style:
+                      const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+              pw.Text(s.$3,
+                  style:
+                      const pw.TextStyle(fontSize: 8, color: PdfColors.grey500)),
+            ],
+          ),
+        );
+    final rows = <pw.Widget>[];
+    for (var i = 0; i < stats.length; i += 3) {
+      final chunk = stats.skip(i).take(3).toList();
+      rows.add(pw.Row(
+        children: [
+          for (var j = 0; j < 3; j++) ...[
+            pw.Expanded(child: j < chunk.length ? box(chunk[j]) : pw.SizedBox()),
+            if (j < 2) pw.SizedBox(width: 8),
+          ],
+        ],
+      ));
+      rows.add(pw.SizedBox(height: 8));
+    }
+    return pw.Column(children: rows);
+  }
+
+  pw.Widget _table(List<String> headers, List<List<String>> rows,
+      {Set<int> rightAlign = const {}, bool totalLastRow = false}) {
+    final aligns = <int, pw.Alignment>{
+      for (var i = 0; i < headers.length; i++)
+        i: rightAlign.contains(i)
+            ? pw.Alignment.centerRight
+            : pw.Alignment.centerLeft,
+    };
+    return pw.TableHelper.fromTextArray(
+      headers: headers,
+      data: rows,
+      border: null,
+      headerStyle: pw.TextStyle(
+          fontSize: 9, fontWeight: pw.FontWeight.bold, color: PdfColors.white),
+      headerDecoration: const pw.BoxDecoration(color: _navy),
+      cellStyle: const pw.TextStyle(fontSize: 9, color: _textMain),
+      cellAlignments: aligns,
+      cellHeight: 20,
+      oddRowDecoration: const pw.BoxDecoration(color: _cream),
+      rowDecoration:
+          const pw.BoxDecoration(color: PdfColor.fromInt(0xFFFBFAF6)),
+    );
+  }
+
+  pw.Widget _emptyLine(String text) => pw.Padding(
+        padding: const pw.EdgeInsets.symmetric(vertical: 6),
+        child: pw.Text(text,
+            style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey600)),
+      );
 }
