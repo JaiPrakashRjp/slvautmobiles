@@ -13,11 +13,15 @@ class DetailFieldCard extends StatelessWidget {
     required this.label,
     this.value,
     this.valueWidget,
+    this.valueColor,
   }) : assert(value != null || valueWidget != null);
 
   final String label;
   final String? value;
   final Widget? valueWidget;
+
+  /// Overrides the value text colour (e.g. red for an expired document date).
+  final Color? valueColor;
 
   @override
   Widget build(BuildContext context) {
@@ -30,7 +34,8 @@ class DetailFieldCard extends StatelessWidget {
           const SizedBox(height: AppSpacing.xs),
           valueWidget ??
               Text(value!,
-                  style: AppTextStyles.h2.copyWith(color: c.textMain)),
+                  style: AppTextStyles.h2
+                      .copyWith(color: valueColor ?? c.textMain)),
         ],
       ),
     );

@@ -26,6 +26,8 @@ class OptionSheet {
     T? selected,
     bool searchable = false,
     String searchHint = 'Search',
+    String? addLabel,
+    VoidCallback? onAdd,
   }) {
     final c = context.colors;
     return showModalBottomSheet<T>(
@@ -46,6 +48,8 @@ class OptionSheet {
                 selected: selected,
                 searchable: searchable,
                 searchHint: searchHint,
+                addLabel: addLabel,
+                onAdd: onAdd,
               ),
             ),
           ),
@@ -62,6 +66,8 @@ class _OptionSheetBody<T> extends StatefulWidget {
     required this.selected,
     required this.searchable,
     required this.searchHint,
+    this.addLabel,
+    this.onAdd,
   });
 
   final String title;
@@ -69,6 +75,8 @@ class _OptionSheetBody<T> extends StatefulWidget {
   final T? selected;
   final bool searchable;
   final String searchHint;
+  final String? addLabel;
+  final VoidCallback? onAdd;
 
   @override
   State<_OptionSheetBody<T>> createState() => _OptionSheetBodyState<T>();
@@ -94,8 +102,23 @@ class _OptionSheetBodyState<T> extends State<_OptionSheetBody<T>> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(widget.title,
-            style: AppTextStyles.h2.copyWith(color: c.textMain)),
+        Row(
+          children: [
+            Expanded(
+              child: Text(widget.title,
+                  style: AppTextStyles.h2.copyWith(color: c.textMain)),
+            ),
+            if (widget.onAdd != null)
+              TextButton.icon(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  widget.onAdd!();
+                },
+                icon: const Icon(Icons.add, size: 18),
+                label: Text(widget.addLabel ?? 'Add new'),
+              ),
+          ],
+        ),
         const SizedBox(height: AppSpacing.md),
         if (widget.searchable) ...[
           TextField(

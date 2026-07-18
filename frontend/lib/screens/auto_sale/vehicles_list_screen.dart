@@ -14,6 +14,7 @@ import '../../utils/app_text_styles.dart';
 import '../../utils/responsive.dart';
 import '../../viewmodels/vehicles_list_viewmodel.dart';
 import '../../widgets/app_card.dart';
+import '../../widgets/call_chip.dart';
 import '../../widgets/confirmation_dialog.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/gold_create_button.dart';
@@ -23,6 +24,7 @@ import '../../widgets/page_size_picker.dart';
 import '../../widgets/status_pill.dart';
 import '../../widgets/tab_bar_navy.dart';
 import 'assign_sale_screen.dart';
+import 'create_customer_screen.dart';
 import 'create_vehicle_screen.dart';
 import 'vehicle_detail_screen.dart';
 
@@ -36,6 +38,8 @@ class VehiclesListScreen extends StatelessWidget {
       create: (_) => VehiclesListViewModel(
         context.read<VehicleService>(),
         context.read<AuthController>(),
+        context.read<SaleService>(),
+        context.read<CustomerService>(),
       ),
       child: const _VehiclesListView(),
     );
@@ -58,6 +62,8 @@ class _VehiclesListView extends StatelessWidget {
     final vehicles = context.watch<VehicleService>();
     // Rebuild cards when sales change so the "Pending" badge appears/clears live.
     context.watch<SaleService>();
+    // Rebuild when customers load so the sold-vehicle owner name/phone shows.
+    context.watch<CustomerService>();
     final vm = context.watch<VehiclesListViewModel>();
 
     return Scaffold(
@@ -197,28 +203,40 @@ class _VehicleCard extends StatelessWidget {
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
     final customers = context.read<CustomerService>();
-    final eligible = customers.all().where((c) => c.isActive).toList();
-    if (eligible.isEmpty) {
-      messenger.showSnackBar(const SnackBar(
-        content:
-            Text('No verified customers yet. Add and confirm a customer first.'),
-      ));
-      return;
-    }
+    // Show active AND pending customers (not rejected). A pending one is marked
+    // and can't be sold to until the super admin approves it.
+    final listable =
+        customers.all().where((c) => c.isActive || c.isPending).toList();
     final customerId = await OptionSheet.show<String>(
       context,
       title: 'Sell to customer',
       searchable: true,
       searchHint: 'Search by name or phone',
-      options: eligible
+      addLabel: 'New customer',
+      // "+" → create a new customer, then sell to them from the picker.
+      onAdd: () => navigator.push(MaterialPageRoute(
+        builder: (_) => const CreateCustomerScreen(),
+      )),
+      options: listable
           .map((c) => SheetOption(
                 value: c.id,
                 label: c.fullName,
-                subtitle: c.phone,
+                subtitle: c.isActive
+                    ? c.phone
+                    : '${c.phone}  ·  Pending approval',
               ))
           .toList(),
     );
     if (customerId == null) return;
+    // Block selling to a still-pending customer.
+    final chosen = customers.byId(customerId);
+    if (chosen != null && !chosen.isActive) {
+      messenger.showSnackBar(const SnackBar(
+        content: Text(
+            'This customer is still pending approval. You can sell once it is approved.'),
+      ));
+      return;
+    }
     await navigator.push(MaterialPageRoute(
       builder: (_) => AssignSaleScreen(
         customerId: customerId,
@@ -279,6 +297,22 @@ class _VehicleCard extends StatelessWidget {
               const SizedBox(height: AppSpacing.xs),
               Text(vehicle.type.label,
                   style: AppTextStyles.body.copyWith(color: c.textSub)),
+              // Sold vehicle → show the buyer's name + a tappable call chip.
+              if (vm.owner(vehicle) != null) ...[
+                const SizedBox(height: AppSpacing.sm),
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(vm.owner(vehicle)!.fullName,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTextStyles.bodyStrong
+                              .copyWith(color: c.textMain)),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    CallChip(phone: vm.owner(vehicle)!.phone),
+                  ],
+                ),
+              ],
               if (vehicle.isRejected &&
                   (vehicle.rejectionReason?.isNotEmpty ?? false)) ...[
                 const SizedBox(height: AppSpacing.xs),
@@ -309,7 +343,9 @@ class _VehicleCard extends StatelessWidget {
                   onPressed: () => _sell(context),
                 ),
               ],
-              if (canModify) ...[
+              // Delete only for an independent vehicle (never part of any sale);
+              // a vehicle with sale history keeps the record, so no delete.
+              if (canModify && !vm.hasSale(vehicle.id)) ...[
                 const SizedBox(width: AppSpacing.sm),
                 IconButtonSoft(
                   icon: Icons.delete_outline,

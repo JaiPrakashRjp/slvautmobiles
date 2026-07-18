@@ -10,6 +10,7 @@ per installment due date).
 from datetime import datetime, timezone
 
 from app.db import SessionLocal
+from app.services.doc_expiry_service import DocExpiryService
 from app.services.reminder_service import ReminderService
 
 
@@ -17,8 +18,12 @@ def main() -> None:
     db = SessionLocal()
     try:
         created = ReminderService.run(db)
+        expiries = DocExpiryService.run(db)
         stamp = datetime.now(timezone.utc).isoformat()
-        print(f"[{stamp}] reminders: {len(created)} WhatsApp reminder(s) dispatched.")
+        print(
+            f"[{stamp}] reminders: {len(created)} WhatsApp reminder(s) dispatched; "
+            f"{expiries} document-expiry alert(s)."
+        )
     finally:
         db.close()
 

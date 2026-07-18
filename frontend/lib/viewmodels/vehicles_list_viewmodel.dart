@@ -1,20 +1,41 @@
 import 'package:flutter/material.dart';
 
 import '../controllers/auth_controller.dart';
+import '../models/customer.dart';
 import '../models/vehicle.dart';
+import '../services/customer_service.dart';
+import '../services/sale_service.dart';
 import '../services/vehicle_service.dart';
 
 /// Backs the vehicles list: Assigned / Unassigned tabs, search, pagination,
 /// and role-aware delete/approve actions.
 class VehiclesListViewModel extends ChangeNotifier {
-  VehiclesListViewModel(this._vehicles, this._auth) {
+  VehiclesListViewModel(
+      this._vehicles, this._auth, this._sales, this._customers) {
     // Pull fresh data when the list opens (shows the loading spinner).
     // Deferred so notifyListeners() doesn't fire during the widget build.
-    Future.microtask(_vehicles.refresh);
+    Future.microtask(() async {
+      await _vehicles.refresh();
+      await _sales.refresh();
+      await _customers.refresh();
+    });
   }
 
   final VehicleService _vehicles;
   final AuthController _auth;
+  final SaleService _sales;
+  final CustomerService _customers;
+
+  /// A vehicle that has ANY sale row (active, closed, cancelled/unsold or
+  /// seized) can't be deleted — that record still references it and holds the
+  /// previous customer + sale history. Only a truly independent (never-sold)
+  /// vehicle can be deleted.
+  bool hasSale(String vehicleId) =>
+      _sales.all().any((s) => s.vehicleId == vehicleId);
+
+  /// The current owner (assigned customer) of a sold vehicle, or null.
+  Customer? owner(Vehicle v) =>
+      v.assignedToCustomerId == null ? null : _customers.byId(v.assignedToCustomerId!);
 
   int _pageSize = 50;
 

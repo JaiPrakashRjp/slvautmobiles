@@ -28,9 +28,10 @@ class Settings:
     # knows the secret can mint tokens for any user/role, so keep it private.
     JWT_SECRET: str = os.getenv("JWT_SECRET", "dev-insecure-change-me")
     JWT_ALG: str = os.getenv("JWT_ALG", "HS256")
-    # Token lifetime. Long-lived (30 days) because the mobile app has no refresh
-    # flow — a user stays signed in until it expires or they sign out.
-    JWT_EXPIRE_MINUTES: int = int(os.getenv("JWT_EXPIRE_MINUTES", str(60 * 24 * 30)))
+    # Token lifetime — 24 hours. A user stays signed in for a day (across app
+    # restarts); after that the session expires and they must log in again. The
+    # Logout button ends it immediately.
+    JWT_EXPIRE_MINUTES: int = int(os.getenv("JWT_EXPIRE_MINUTES", str(60 * 24)))
 
     # ── WhatsApp (Meta Cloud API) ────────────────────────────────────────────
     # From the Meta app dashboard → WhatsApp → API Setup. The "API Setup" token

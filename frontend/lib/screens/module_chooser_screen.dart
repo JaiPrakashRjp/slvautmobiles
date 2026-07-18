@@ -18,6 +18,8 @@ import 'auto_sale/auto_sale_home_screen.dart';
 import 'auto_sale/customer_detail_screen.dart';
 import 'auto_sale/vehicle_detail_screen.dart';
 import 'loan/loan_home_screen.dart';
+import 'daily_report_screen.dart';
+import 'monthly_report_screen.dart';
 import 'notifications_screen.dart';
 import 'rental/rental_home_screen.dart';
 import 'sign_in_screen.dart';
@@ -78,6 +80,20 @@ class _ModuleChooserView extends StatelessWidget {
         title: const Text('Choose module'),
         actions: [
           const _NotificationsBell(),
+          IconButton(
+            tooltip: 'Daily report',
+            icon: const Icon(Icons.assignment_outlined),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const DailyReportScreen()),
+            ),
+          ),
+          IconButton(
+            tooltip: 'Monthly report',
+            icon: const Icon(Icons.insert_chart_outlined),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const MonthlyReportScreen()),
+            ),
+          ),
           IconButton(
             tooltip: 'Sign out',
             icon: const Icon(Icons.logout),

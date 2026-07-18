@@ -32,9 +32,12 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _route() async {
-    // Check for a newer published build while the splash animation plays.
+    // Restore a saved 24-hour session (if any) while the splash animation plays.
+    final restoreFuture = context.read<AuthController>().restore();
+    // Check for a newer published build too.
     final updateFuture = AppVersionService().check();
     await Future<void>.delayed(const Duration(milliseconds: 1500));
+    await restoreFuture;
     final update = await updateFuture;
 
     // Newer version out → fire a system-tray push; tapping it opens login.

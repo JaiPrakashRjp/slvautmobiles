@@ -674,7 +674,7 @@ class _SaleDetailViewState extends State<_SaleDetailView> {
       appBar: AppBar(
         title: const Text('Sale detail'),
         actions: [
-          if (sale != null && vm.customer != null && vm.vehicle != null)
+          if (sale != null && vm.customer != null && vm.vehicle != null) ...[
             IconButton(
               icon: const Icon(Icons.receipt_long_outlined),
               tooltip: 'Sale invoice',
@@ -684,6 +684,16 @@ class _SaleDetailViewState extends State<_SaleDetailView> {
                     vehicle: vm.vehicle!,
                   ),
             ),
+            IconButton(
+              icon: const Icon(Icons.share_outlined),
+              tooltip: 'Share invoice',
+              onPressed: () => context.read<PdfService>().shareInvoice(
+                    sale: sale,
+                    customer: vm.customer!,
+                    vehicle: vm.vehicle!,
+                  ),
+            ),
+          ],
         ],
       ),
       body: SafeArea(

@@ -29,6 +29,8 @@ import '../../widgets/status_pill.dart';
 import '../document_preview_screen.dart';
 import 'assign_sale_screen.dart';
 import 'create_vehicle_screen.dart';
+import 'create_customer_screen.dart';
+import 'customer_detail_screen.dart';
 import 'sale_detail_screen.dart';
 
 /// Vehicle detail — read-only fields + role-gate approve/reject + edit +
@@ -298,27 +300,37 @@ class VehicleDetailScreen extends StatelessWidget {
   Future<void> _sell(BuildContext context, CustomerService customers) async {
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
-    final eligible = customers.all().where((c) => c.isActive).toList();
-    if (eligible.isEmpty) {
-      messenger.showSnackBar(const SnackBar(
-        content: Text('No verified customers yet. Add and confirm a customer first.'),
-      ));
-      return;
-    }
+    // Active AND pending customers (not rejected); pending ones are marked and
+    // can't be sold to until the super admin approves them.
+    final listable =
+        customers.all().where((c) => c.isActive || c.isPending).toList();
     final customerId = await OptionSheet.show<String>(
       context,
       title: 'Sell to customer',
       searchable: true,
       searchHint: 'Search by name or phone',
-      options: eligible
+      addLabel: 'New customer',
+      onAdd: () => navigator.push(MaterialPageRoute(
+        builder: (_) => const CreateCustomerScreen(),
+      )),
+      options: listable
           .map((c) => SheetOption(
                 value: c.id,
                 label: c.fullName,
-                subtitle: c.phone,
+                subtitle:
+                    c.isActive ? c.phone : '${c.phone}  ·  Pending approval',
               ))
           .toList(),
     );
     if (customerId == null) return;
+    final chosen = customers.byId(customerId);
+    if (chosen != null && !chosen.isActive) {
+      messenger.showSnackBar(const SnackBar(
+        content: Text(
+            'This customer is still pending approval. You can sell once it is approved.'),
+      ));
+      return;
+    }
     await navigator.push(MaterialPageRoute(
       builder: (_) => AssignSaleScreen(
         customerId: customerId,
@@ -423,7 +435,15 @@ class VehicleDetailScreen extends StatelessWidget {
               ],
               if (vehicle.saleStatus == SaleStatus.sold) ...[
                 const SizedBox(height: AppSpacing.lg),
-                _SoldBanner(customerName: assignedName),
+                _SoldBanner(
+                  customerName: assignedName,
+                  onTap: vehicle.assignedToCustomerId == null
+                      ? null
+                      : () => Navigator.of(context).push(MaterialPageRoute(
+                            builder: (_) => CustomerDetailScreen(
+                                customerId: vehicle.assignedToCustomerId!),
+                          )),
+                ),
               ],
               if (sale != null) ...[
                 const SizedBox(height: AppSpacing.lg),
@@ -528,16 +548,23 @@ class VehicleDetailScreen extends StatelessWidget {
   /// All read-only fields for the vehicle (common + hand-specific).
   List<Widget> _detailRows(
       BuildContext context, Vehicle v, String assignedName, String? financerName) {
+    final c = context.colors;
     final rows = <Widget>[];
-    void card(String label, {String? value, Widget? widget}) {
+    void card(String label, {String? value, Widget? widget, Color? color}) {
       if (widget == null && (value == null || value.isEmpty)) return;
       rows.add(DetailFieldCard(
         label: label,
         value: widget == null ? value : null,
         valueWidget: widget,
+        valueColor: color,
       ));
       rows.add(const SizedBox(height: AppSpacing.md));
     }
+
+    // A document date is "expired" on/after its date — shown in red.
+    final today = DateUtils.dateOnly(DateTime.now());
+    bool expired(DateTime d) => !DateUtils.dateOnly(d).isAfter(today);
+    Color? dateColor(DateTime d) => expired(d) ? c.danger : null;
 
     card('Vehicle ID', value: v.displayId);
     card('Vehicle number', value: v.regNo.isEmpty ? '—' : v.regNo);
@@ -559,11 +586,17 @@ class VehicleDetailScreen extends StatelessWidget {
     card('Permit', value: v.permit ? 'Yes' : 'No');
     card('Insurance', value: v.insurance ? 'Yes' : 'No');
     if (v.insuranceDate != null) {
-      card('Insurance date', value: Formatters.date(v.insuranceDate!));
+      card('Insurance date',
+          value: Formatters.date(v.insuranceDate!),
+          color: dateColor(v.insuranceDate!));
     }
-    if (v.fcDate != null) card('FC date', value: Formatters.date(v.fcDate!));
+    if (v.fcDate != null) {
+      card('FC date',
+          value: Formatters.date(v.fcDate!), color: dateColor(v.fcDate!));
+    }
     if (v.permitDate != null) {
-      card('Permit date', value: Formatters.date(v.permitDate!));
+      card('Permit date',
+          value: Formatters.date(v.permitDate!), color: dateColor(v.permitDate!));
     }
     card('Financer', value: financerName);
     card('Status', widget: StatusPill.forEntity(v.status));
@@ -834,33 +867,45 @@ class _SeizedHistorySection extends StatelessWidget {
 
 /// Small confirmation strip shown when the vehicle has already been sold.
 class _SoldBanner extends StatelessWidget {
-  const _SoldBanner({required this.customerName});
+  const _SoldBanner({required this.customerName, this.onTap});
 
   final String customerName;
+
+  /// Tap → open the buyer's full customer detail (when known).
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: BoxDecoration(
-        color: c.success.withValues(alpha: 0.10),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: c.success.withValues(alpha: 0.5)),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.check_circle, color: c.success, size: 20),
-          const SizedBox(width: AppSpacing.sm),
-          Expanded(
-            child: Text(
-              customerName == 'Not assigned'
-                  ? 'This vehicle has been sold.'
-                  : 'Sold to $customerName.',
-              style: AppTextStyles.body.copyWith(color: c.textMain),
-            ),
+        child: Container(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          decoration: BoxDecoration(
+            color: c.success.withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: c.success.withValues(alpha: 0.5)),
           ),
-        ],
+          child: Row(
+            children: [
+              Icon(Icons.check_circle, color: c.success, size: 20),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(
+                  customerName == 'Not assigned'
+                      ? 'This vehicle has been sold.'
+                      : 'Sold to $customerName.',
+                  style: AppTextStyles.body.copyWith(color: c.textMain),
+                ),
+              ),
+              if (onTap != null)
+                Icon(Icons.chevron_right, color: c.textSub, size: 20),
+            ],
+          ),
+        ),
       ),
     );
   }

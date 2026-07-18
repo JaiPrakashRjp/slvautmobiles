@@ -1,19 +1,21 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../controllers/auth_controller.dart';
 import '../../models/customer.dart';
 import '../../models/doc_ref.dart';
 import '../../services/customer_service.dart';
+import '../../services/sale_service.dart';
 import '../../services/vehicle_service.dart';
 import '../../theme/app_colors.dart';
 import '../../utils/app_spacing.dart';
 import '../../utils/app_text_styles.dart';
-import '../../utils/formatters.dart';
 import '../../utils/responsive.dart';
 import '../../viewmodels/customers_list_viewmodel.dart';
 import '../../widgets/app_card.dart';
+import '../../widgets/call_chip.dart';
 import '../../widgets/confirmation_dialog.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/gold_create_button.dart';
@@ -35,6 +37,7 @@ class CustomersListScreen extends StatelessWidget {
         context.read<CustomerService>(),
         context.read<VehicleService>(),
         context.read<AuthController>(),
+        context.read<SaleService>(),
       ),
       child: const _CustomersListView(),
     );
@@ -53,6 +56,8 @@ class _CustomersListView extends StatelessWidget {
     final c = context.colors;
     final customers = context.watch<CustomerService>();
     context.watch<VehicleService>();
+    // Rebuild cards when sales change so the delete button hides/shows correctly.
+    context.watch<SaleService>();
     final vm = context.watch<CustomersListViewModel>();
 
     return Scaffold(
@@ -209,36 +214,71 @@ class _CustomerCard extends StatelessWidget {
     ));
   }
 
-  /// Tap the avatar → enlarged, zoomable photo in a dialog. Tap the image (or
-  /// outside) to close.
-  void _showPhoto(BuildContext context, String url) {
+  /// Tap the avatar → enlarged, zoomable photo in a dialog with a Share button.
+  /// Tap the image (or outside) to close.
+  void _showPhoto(BuildContext context, CustomerService customers, DocRef ref) {
+    final url = customers.documentUrl(ref.id);
     showDialog<void>(
       context: context,
       builder: (ctx) => Dialog(
         backgroundColor: Colors.transparent,
         insetPadding: const EdgeInsets.all(24),
-        child: GestureDetector(
-          onTap: () => Navigator.pop(ctx),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: InteractiveViewer(
-              child: CachedNetworkImage(
-                imageUrl: url,
-                fit: BoxFit.contain,
-                placeholder: (_, __) => const SizedBox(
-                  height: 240,
-                  child: Center(child: CircularProgressIndicator()),
-                ),
-                errorWidget: (_, __, ___) => const SizedBox(
-                  height: 240,
-                  child: Center(
-                      child: Icon(Icons.broken_image_outlined, size: 48)),
+        child: Stack(
+          children: [
+            GestureDetector(
+              onTap: () => Navigator.pop(ctx),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: InteractiveViewer(
+                  child: CachedNetworkImage(
+                    imageUrl: url,
+                    fit: BoxFit.contain,
+                    placeholder: (_, __) => const SizedBox(
+                      height: 240,
+                      child: Center(child: CircularProgressIndicator()),
+                    ),
+                    errorWidget: (_, __, ___) => const SizedBox(
+                      height: 240,
+                      child: Center(
+                          child: Icon(Icons.broken_image_outlined, size: 48)),
+                    ),
+                  ),
                 ),
               ),
             ),
-          ),
+            Positioned(
+              top: 8,
+              right: 8,
+              child: Material(
+                color: Colors.black54,
+                shape: const CircleBorder(),
+                child: IconButton(
+                  icon: const Icon(Icons.share, color: Colors.white),
+                  tooltip: 'Share photo',
+                  onPressed: () => _sharePhoto(customers, ref),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
+    );
+  }
+
+  /// Fetch the photo bytes and hand them to the OS share sheet.
+  Future<void> _sharePhoto(CustomerService customers, DocRef ref) async {
+    final bytes = await customers.documentBytes(ref.id);
+    if (bytes.isEmpty) return;
+    final name = ref.fileName.isEmpty ? 'photo.jpg' : ref.fileName;
+    final lower = name.toLowerCase();
+    final mime = lower.endsWith('.png')
+        ? 'image/png'
+        : lower.endsWith('.heic')
+            ? 'image/heic'
+            : 'image/jpeg';
+    await Share.shareXFiles(
+      [XFile.fromData(bytes, name: name, mimeType: mime)],
+      subject: '${customer.fullName} — photo',
     );
   }
 
@@ -268,8 +308,7 @@ class _CustomerCard extends StatelessWidget {
               GestureDetector(
                 onTap: photoRef == null
                     ? null
-                    : () =>
-                        _showPhoto(context, customers.documentUrl(photoRef.id)),
+                    : () => _showPhoto(context, customers, photoRef),
                 child: CircleAvatar(
                   radius: 22,
                   backgroundColor: c.bgSurface,
@@ -300,9 +339,10 @@ class _CustomerCard extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: AppSpacing.xs),
-                    Text(Formatters.phone(customer.phone),
-                        style:
-                            AppTextStyles.caption.copyWith(color: c.textSub)),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: CallChip(phone: customer.phone),
+                    ),
                     if (customer.isRejected &&
                         (customer.rejectionReason?.isNotEmpty ?? false)) ...[
                       const SizedBox(height: AppSpacing.xs),
@@ -340,14 +380,18 @@ class _CustomerCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(width: AppSpacing.sm),
-                IconButtonSoft(
-                  icon: Icons.delete_outline,
-                  tooltip: 'Delete',
-                  danger: true,
-                  compact: true,
-                  onPressed: () => _confirmDelete(context),
-                ),
+                // Delete only for a customer with no sales — one tied to a sale
+                // keeps that record, so no delete.
+                if (!vm.hasSale(customer.id)) ...[
+                  const SizedBox(width: AppSpacing.sm),
+                  IconButtonSoft(
+                    icon: Icons.delete_outline,
+                    tooltip: 'Delete',
+                    danger: true,
+                    compact: true,
+                    onPressed: () => _confirmDelete(context),
+                  ),
+                ],
               ],
             ],
           ),

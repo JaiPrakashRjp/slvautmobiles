@@ -3,23 +3,32 @@ import 'package:flutter/material.dart';
 import '../controllers/auth_controller.dart';
 import '../models/customer.dart';
 import '../services/customer_service.dart';
+import '../services/sale_service.dart';
 import '../services/vehicle_service.dart';
 
 /// Backs the customers list: Assigned / Not Assigned tabs + role-aware actions.
 /// A customer is "Assigned" when at least one vehicle is assigned to them.
 class CustomersListViewModel extends ChangeNotifier {
-  CustomersListViewModel(this._customers, this._vehicles, this._auth) {
+  CustomersListViewModel(
+      this._customers, this._vehicles, this._auth, this._sales) {
     // Pull fresh data when the list opens (shows the loading spinner).
     // Deferred so notifyListeners() doesn't fire during the widget build.
     Future.microtask(() async {
       await _customers.refresh();
       await _vehicles.refresh();
+      await _sales.refresh();
     });
   }
 
   final CustomerService _customers;
   final VehicleService _vehicles;
   final AuthController _auth;
+  final SaleService _sales;
+
+  /// A customer tied to ANY sale (any status) can't be deleted — the sale record
+  /// still references them. Only a customer with no sales can be deleted.
+  bool hasSale(String customerId) =>
+      _sales.all().any((s) => s.customerId == customerId);
 
   int _tab = 0; // 0 = With vehicle (assigned), 1 = Without
   int _page = 0;
