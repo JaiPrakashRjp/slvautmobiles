@@ -67,6 +67,23 @@ class SaleService:
         if module_id is None:
             raise HTTPException(status_code=400, detail=f"Unknown module '{data.module_code}'")
 
+        # Guard against a duplicate sale for the same vehicle (e.g. a double-tap
+        # on Confirm, or a resubmit). A vehicle may only have ONE live sale at a
+        # time — an existing active/pending sale that isn't cancelled/seized
+        # blocks a second one. A prior sale that was unsold/seized/rejected does
+        # NOT block a legitimate re-sale.
+        existing = [
+            s
+            for s in SaleDAO.list(db, vehicle_id=data.vehicle_id)
+            if s.status in (EntityStatus.active, EntityStatus.pending_confirmation)
+            and s.sale_status not in (SaleLifecycle.cancelled, SaleLifecycle.seized)
+        ]
+        if existing:
+            raise HTTPException(
+                status_code=409,
+                detail="This vehicle already has an active sale.",
+            )
+
         # Total = sum of the price breakdown.
         total = round(
             float(data.vehicle_amount)

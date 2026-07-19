@@ -162,6 +162,10 @@ class _AssignSaleView extends StatelessWidget {
   }
 
   Future<void> _confirm(BuildContext context, AssignSaleViewModel vm) async {
+    // Re-entrancy guard: submit() flips vm.loading synchronously before its
+    // first await, so a second tap in the same frame is dropped here — no
+    // duplicate sale from a double-tap.
+    if (vm.loading) return;
     final error = vm.validate();
     if (error != null) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
