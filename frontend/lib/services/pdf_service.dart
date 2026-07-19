@@ -27,6 +27,18 @@ abstract class PdfService {
     required Vehicle vehicle,
   });
 
+  /// Raw bytes of the sale invoice PDF (for the in-app preview + share).
+  Future<Uint8List> invoiceBytes({
+    required Sale sale,
+    required Customer customer,
+    required Vehicle vehicle,
+  });
+
+  /// Raw bytes of the second-hand vehicle purchase ("buyer") invoice — the
+  /// shop's record of buying a used vehicle from its previous owner. Always
+  /// built from the vehicle's current data, so any later edit is reflected.
+  Future<Uint8List> buyerInvoiceBytes({required Vehicle vehicle});
+
   Future<void> installmentReceipt({
     required Sale sale,
     required Customer customer,
@@ -310,6 +322,15 @@ class RealPdfService implements PdfService {
     );
   }
 
+  @override
+  Future<Uint8List> invoiceBytes({
+    required Sale sale,
+    required Customer customer,
+    required Vehicle vehicle,
+  }) async =>
+      (await _invoiceDoc(sale: sale, customer: customer, vehicle: vehicle))
+          .save();
+
   Future<pw.Document> _invoiceDoc({
     required Sale sale,
     required Customer customer,
@@ -414,6 +435,152 @@ class RealPdfService implements PdfService {
                               fontSize: 9, color: PdfColors.grey700)),
                     ),
                   ]),
+
+                  pw.Spacer(),
+                  _branchFooter(),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    ));
+    return doc;
+  }
+
+  // ── Buyer invoice (second-hand vehicle purchase) ────────────────────────────
+
+  @override
+  Future<Uint8List> buyerInvoiceBytes({required Vehicle vehicle}) async =>
+      (await _buyerInvoiceDoc(vehicle: vehicle)).save();
+
+  /// The shop's record of buying a used vehicle from its previous owner:
+  /// seller (previous owner) + vehicle details + the buying price (the main
+  /// figure). No signature block.
+  Future<pw.Document> _buyerInvoiceDoc({required Vehicle vehicle}) async {
+    final logo = await _loadLogo();
+    final v = vehicle;
+    final branch = v.branch?.label;
+    final hasExpense = v.buyingExpenses != null;
+    final doc = pw.Document();
+    doc.addPage(pw.Page(
+      pageFormat: PdfPageFormat.a4,
+      margin: pw.EdgeInsets.zero,
+      build: (_) => pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+        children: [
+          _invoiceHeader(logo),
+          pw.Container(
+            color: _gold,
+            alignment: pw.Alignment.center,
+            padding: const pw.EdgeInsets.symmetric(vertical: 4),
+            child: pw.Text('BUYER INVOICE',
+                style: pw.TextStyle(
+                    fontSize: 9,
+                    fontWeight: pw.FontWeight.bold,
+                    color: _navy,
+                    letterSpacing: 2)),
+          ),
+          pw.Expanded(
+            child: pw.Container(
+              color: _bgWarm,
+              padding: const pw.EdgeInsets.fromLTRB(28, 14, 28, 20),
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+                children: [
+                  // Seller (previous owner)  |  Purchase details
+                  pw.Row(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Expanded(
+                        child: pw.Column(
+                          crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+                          children: [
+                            _label('SELLER (PREVIOUS OWNER)'),
+                            _card([
+                              _row(
+                                  'Name',
+                                  (v.prevOwnerName?.isNotEmpty ?? false)
+                                      ? v.prevOwnerName!
+                                      : '—'),
+                              if (v.prevOwnerMobile?.isNotEmpty ?? false)
+                                _row('Mobile',
+                                    Formatters.phone(v.prevOwnerMobile!)),
+                              if (v.prevOwnerAddress?.isNotEmpty ?? false)
+                                _row('Address', v.prevOwnerAddress!),
+                            ]),
+                          ],
+                        ),
+                      ),
+                      pw.SizedBox(width: 12),
+                      pw.Expanded(
+                        child: pw.Column(
+                          crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+                          children: [
+                            _label('PURCHASE DETAILS'),
+                            _card([
+                              _row('Vehicle ID', v.displayId),
+                              if (v.purchaseDate != null)
+                                _row('Date', Formatters.date(v.purchaseDate!)),
+                              if (branch != null) _row('Branch', branch),
+                            ]),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  _label('VEHICLE'),
+                  _card([
+                    _row('Reg number', v.regNo.isNotEmpty ? v.regNo : '—'),
+                    if (v.chassisNo?.isNotEmpty ?? false)
+                      _row('Chassis number', v.chassisNo!),
+                    if (v.model?.isNotEmpty ?? false) _row('Model', v.model!),
+                    if (v.fuelType != null) _row('Fuel type', v.fuelType!.label),
+                    _row('RC', v.rc ? 'Yes' : 'No'),
+                    _row('Permit', v.permit ? 'Yes' : 'No'),
+                    _row('Insurance', v.insurance ? 'Yes' : 'No'),
+                    if (v.insuranceDate != null)
+                      _row('Insurance valid till',
+                          Formatters.date(v.insuranceDate!)),
+                    if (v.fcDate != null)
+                      _row('FC valid till', Formatters.date(v.fcDate!)),
+                    if (v.permitDate != null)
+                      _row('Permit valid till', Formatters.date(v.permitDate!)),
+                  ]),
+
+                  // Buying price — the main figure. Blank when not yet entered.
+                  _totalBar('BUYING PRICE',
+                      hasExpense ? _curr(v.buyingExpenses!) : 'Not entered'),
+
+                  if (hasExpense) ...[
+                    _label('AMOUNT IN WORDS'),
+                    _card([
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 9),
+                        child: pw.Text(
+                            _amountInWords(v.buyingExpenses!.round()),
+                            style: pw.TextStyle(
+                                fontSize: 10,
+                                fontWeight: pw.FontWeight.bold,
+                                color: _textMain)),
+                      ),
+                    ]),
+                  ],
+
+                  if (v.remarks?.isNotEmpty ?? false) ...[
+                    _label('REMARKS'),
+                    _card([
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 9),
+                        child: pw.Text(v.remarks!,
+                            style: const pw.TextStyle(
+                                fontSize: 9, color: PdfColors.grey700)),
+                      ),
+                    ]),
+                  ],
 
                   pw.Spacer(),
                   _branchFooter(),

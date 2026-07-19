@@ -29,6 +29,7 @@ import '../../widgets/role_gate_banner.dart';
 import '../../widgets/status_pill.dart';
 import 'assign_sale_screen.dart';
 import '../document_preview_screen.dart';
+import '../pdf_preview_screen.dart';
 
 // ── Receipt helpers (inline) ──────────────────────────────────────────────
 
@@ -695,23 +696,23 @@ class _SaleDetailViewState extends State<_SaleDetailView> {
               onPressed: () => _editSale(context, vm),
             ),
           if (sale != null && vm.customer != null && vm.vehicle != null) ...[
+            // Opens the invoice preview; share/print is available from there.
             IconButton(
               icon: const Icon(Icons.receipt_long_outlined),
               tooltip: 'Sale invoice',
-              onPressed: () => context.read<PdfService>().previewInvoice(
-                    sale: sale,
-                    customer: vm.customer!,
-                    vehicle: vm.vehicle!,
+              onPressed: () {
+                final pdf = context.read<PdfService>();
+                final c = vm.customer!;
+                final v = vm.vehicle!;
+                Navigator.of(context).push(MaterialPageRoute<void>(
+                  builder: (_) => PdfPreviewScreen(
+                    title: 'Sale invoice',
+                    fileName: 'invoice-${sale.invoiceNo ?? sale.id}.pdf',
+                    builder: () =>
+                        pdf.invoiceBytes(sale: sale, customer: c, vehicle: v),
                   ),
-            ),
-            IconButton(
-              icon: const Icon(Icons.share_outlined),
-              tooltip: 'Share invoice',
-              onPressed: () => context.read<PdfService>().shareInvoice(
-                    sale: sale,
-                    customer: vm.customer!,
-                    vehicle: vm.vehicle!,
-                  ),
+                ));
+              },
             ),
           ],
         ],
