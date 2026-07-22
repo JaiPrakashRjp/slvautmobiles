@@ -10,7 +10,6 @@ import '../../models/sale.dart';
 import '../../models/vehicle.dart';
 import '../../services/customer_service.dart';
 import '../../services/financer_service.dart';
-import '../../services/pdf_service.dart';
 import '../../services/sale_service.dart';
 import '../../services/vehicle_service.dart';
 import '../../theme/app_colors.dart';
@@ -28,7 +27,6 @@ import '../../widgets/role_gate_banner.dart';
 import '../../widgets/secondary_button.dart';
 import '../../widgets/status_pill.dart';
 import '../document_preview_screen.dart';
-import '../pdf_preview_screen.dart';
 import 'assign_sale_screen.dart';
 import 'create_vehicle_screen.dart';
 import 'create_customer_screen.dart';
@@ -386,23 +384,6 @@ class VehicleDetailScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Vehicle detail'),
         actions: [
-          // Buyer invoice — only for second-hand vehicles (the shop's record of
-          // buying the used vehicle). Opens the preview; share from there.
-          if (vehicle.type == VehicleType.secondHand)
-            IconButton(
-              icon: const Icon(Icons.receipt_long_outlined),
-              tooltip: 'Buyer invoice',
-              onPressed: () {
-                final pdf = context.read<PdfService>();
-                Navigator.of(context).push(MaterialPageRoute<void>(
-                  builder: (_) => PdfPreviewScreen(
-                    title: 'Buyer invoice',
-                    fileName: 'buyer-invoice-${vehicle.displayId}.pdf',
-                    builder: () => pdf.buyerInvoiceBytes(vehicle: vehicle),
-                  ),
-                ));
-              },
-            ),
           if (canModify)
             IconButton(
               icon: const Icon(Icons.edit_outlined),

@@ -9,6 +9,7 @@ import '../models/installment.dart';
 import '../models/monthly_report.dart';
 import '../models/loan.dart';
 import '../models/sale.dart';
+import '../models/second_hand_report.dart';
 import '../models/vehicle.dart';
 import '../utils/formatters.dart';
 
@@ -34,11 +35,6 @@ abstract class PdfService {
     required Vehicle vehicle,
   });
 
-  /// Raw bytes of the second-hand vehicle purchase ("buyer") invoice — the
-  /// shop's record of buying a used vehicle from its previous owner. Always
-  /// built from the vehicle's current data, so any later edit is reflected.
-  Future<Uint8List> buyerInvoiceBytes({required Vehicle vehicle});
-
   Future<void> installmentReceipt({
     required Sale sale,
     required Customer customer,
@@ -62,6 +58,12 @@ abstract class PdfService {
   /// [shareMonthlyReport] hands the PDF to the OS share sheet.
   Future<void> previewMonthlyReport(MonthlyReport report);
   Future<void> shareMonthlyReport(MonthlyReport report);
+
+  /// Second-hand vehicles bought in a period (vehicle + previous owner + buying
+  /// price + status). [secondHandReportBytes] backs the in-app preview;
+  /// [shareSecondHandReport] hands the PDF to the OS share/save sheet.
+  Future<Uint8List> secondHandReportBytes(SecondHandReport report);
+  Future<void> shareSecondHandReport(SecondHandReport report);
 }
 
 class RealPdfService implements PdfService {
@@ -435,152 +437,6 @@ class RealPdfService implements PdfService {
                               fontSize: 9, color: PdfColors.grey700)),
                     ),
                   ]),
-
-                  pw.Spacer(),
-                  _branchFooter(),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    ));
-    return doc;
-  }
-
-  // ── Buyer invoice (second-hand vehicle purchase) ────────────────────────────
-
-  @override
-  Future<Uint8List> buyerInvoiceBytes({required Vehicle vehicle}) async =>
-      (await _buyerInvoiceDoc(vehicle: vehicle)).save();
-
-  /// The shop's record of buying a used vehicle from its previous owner:
-  /// seller (previous owner) + vehicle details + the buying price (the main
-  /// figure). No signature block.
-  Future<pw.Document> _buyerInvoiceDoc({required Vehicle vehicle}) async {
-    final logo = await _loadLogo();
-    final v = vehicle;
-    final branch = v.branch?.label;
-    final hasExpense = v.buyingExpenses != null;
-    final doc = pw.Document();
-    doc.addPage(pw.Page(
-      pageFormat: PdfPageFormat.a4,
-      margin: pw.EdgeInsets.zero,
-      build: (_) => pw.Column(
-        crossAxisAlignment: pw.CrossAxisAlignment.stretch,
-        children: [
-          _invoiceHeader(logo),
-          pw.Container(
-            color: _gold,
-            alignment: pw.Alignment.center,
-            padding: const pw.EdgeInsets.symmetric(vertical: 4),
-            child: pw.Text('BUYER INVOICE',
-                style: pw.TextStyle(
-                    fontSize: 9,
-                    fontWeight: pw.FontWeight.bold,
-                    color: _navy,
-                    letterSpacing: 2)),
-          ),
-          pw.Expanded(
-            child: pw.Container(
-              color: _bgWarm,
-              padding: const pw.EdgeInsets.fromLTRB(28, 14, 28, 20),
-              child: pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.stretch,
-                children: [
-                  // Seller (previous owner)  |  Purchase details
-                  pw.Row(
-                    crossAxisAlignment: pw.CrossAxisAlignment.start,
-                    children: [
-                      pw.Expanded(
-                        child: pw.Column(
-                          crossAxisAlignment: pw.CrossAxisAlignment.stretch,
-                          children: [
-                            _label('SELLER (PREVIOUS OWNER)'),
-                            _card([
-                              _row(
-                                  'Name',
-                                  (v.prevOwnerName?.isNotEmpty ?? false)
-                                      ? v.prevOwnerName!
-                                      : '—'),
-                              if (v.prevOwnerMobile?.isNotEmpty ?? false)
-                                _row('Mobile',
-                                    Formatters.phone(v.prevOwnerMobile!)),
-                              if (v.prevOwnerAddress?.isNotEmpty ?? false)
-                                _row('Address', v.prevOwnerAddress!),
-                            ]),
-                          ],
-                        ),
-                      ),
-                      pw.SizedBox(width: 12),
-                      pw.Expanded(
-                        child: pw.Column(
-                          crossAxisAlignment: pw.CrossAxisAlignment.stretch,
-                          children: [
-                            _label('PURCHASE DETAILS'),
-                            _card([
-                              _row('Vehicle ID', v.displayId),
-                              if (v.purchaseDate != null)
-                                _row('Date', Formatters.date(v.purchaseDate!)),
-                              if (branch != null) _row('Branch', branch),
-                            ]),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-
-                  _label('VEHICLE'),
-                  _card([
-                    _row('Reg number', v.regNo.isNotEmpty ? v.regNo : '—'),
-                    if (v.chassisNo?.isNotEmpty ?? false)
-                      _row('Chassis number', v.chassisNo!),
-                    if (v.model?.isNotEmpty ?? false) _row('Model', v.model!),
-                    if (v.fuelType != null) _row('Fuel type', v.fuelType!.label),
-                    _row('RC', v.rc ? 'Yes' : 'No'),
-                    _row('Permit', v.permit ? 'Yes' : 'No'),
-                    _row('Insurance', v.insurance ? 'Yes' : 'No'),
-                    if (v.insuranceDate != null)
-                      _row('Insurance valid till',
-                          Formatters.date(v.insuranceDate!)),
-                    if (v.fcDate != null)
-                      _row('FC valid till', Formatters.date(v.fcDate!)),
-                    if (v.permitDate != null)
-                      _row('Permit valid till', Formatters.date(v.permitDate!)),
-                  ]),
-
-                  // Buying price — the main figure. Blank when not yet entered.
-                  _totalBar('BUYING PRICE',
-                      hasExpense ? _curr(v.buyingExpenses!) : 'Not entered'),
-
-                  if (hasExpense) ...[
-                    _label('AMOUNT IN WORDS'),
-                    _card([
-                      pw.Padding(
-                        padding: const pw.EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 9),
-                        child: pw.Text(
-                            _amountInWords(v.buyingExpenses!.round()),
-                            style: pw.TextStyle(
-                                fontSize: 10,
-                                fontWeight: pw.FontWeight.bold,
-                                color: _textMain)),
-                      ),
-                    ]),
-                  ],
-
-                  if (v.remarks?.isNotEmpty ?? false) ...[
-                    _label('REMARKS'),
-                    _card([
-                      pw.Padding(
-                        padding: const pw.EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 9),
-                        child: pw.Text(v.remarks!,
-                            style: const pw.TextStyle(
-                                fontSize: 9, color: PdfColors.grey700)),
-                      ),
-                    ]),
-                  ],
 
                   pw.Spacer(),
                   _branchFooter(),
@@ -1014,7 +870,109 @@ class RealPdfService implements PdfService {
     return doc;
   }
 
-  pw.Widget _reportHeader(pw.ImageProvider? logo, String label) {
+  // ── Second-hand vehicles report ─────────────────────────────────────────
+
+  @override
+  Future<Uint8List> secondHandReportBytes(SecondHandReport report) async =>
+      (await _secondHandReportDoc(report)).save();
+
+  @override
+  Future<void> shareSecondHandReport(SecondHandReport report) async {
+    final doc = await _secondHandReportDoc(report);
+    await Printing.sharePdf(
+      bytes: await doc.save(),
+      filename: 'second-hand-${report.label.replaceAll(' ', '-')}.pdf',
+    );
+  }
+
+  Future<pw.Document> _secondHandReportDoc(SecondHandReport r) async {
+    final logo = await _loadLogo();
+    final doc = pw.Document();
+    doc.addPage(
+      pw.MultiPage(
+        // Landscape — the row carries vehicle, previous owner + mobile, buying
+        // price, status and the buyer's mobile, which needs the extra width.
+        pageFormat: PdfPageFormat.a4.landscape,
+        margin: const pw.EdgeInsets.fromLTRB(28, 22, 28, 28),
+        header: (_) =>
+            _reportHeader(logo, r.label, kind: 'Second-hand vehicles'),
+        build: (_) => [
+          _label('OVERVIEW'),
+          _statGrid([
+            ('Vehicles bought', '${r.count}', 'this period'),
+            ('Total buying price', _curr(r.totalBuying), 'this period'),
+            ('Sold', '${r.soldCount}', 'of these'),
+            ('In stock', '${r.inStockCount}', 'of these'),
+          ]),
+          _label('SECOND-HAND VEHICLES BOUGHT'),
+          if (r.rows.isEmpty)
+            _emptyLine('No second-hand vehicles bought in this period.')
+          else
+            _table(
+              [
+                'Date',
+                'Vehicle',
+                'Model',
+                'Bought from',
+                'Seller phone',
+                'Buying',
+                'Status',
+                'Sold to',
+                'Customer phone',
+              ],
+              [
+                for (final row in r.rows)
+                  [
+                    row.purchaseDate == null
+                        ? '—'
+                        : Formatters.date(row.purchaseDate!),
+                    row.vehicle,
+                    row.model,
+                    row.prevOwnerName,
+                    row.prevOwnerMobile.isEmpty
+                        ? '—'
+                        : Formatters.phone(row.prevOwnerMobile),
+                    _curr(row.buyingPrice),
+                    row.sold ? 'Sold' : 'In stock',
+                    (row.sold && (row.buyerName?.isNotEmpty ?? false))
+                        ? row.buyerName!
+                        : '—',
+                    (row.sold && (row.buyerMobile?.isNotEmpty ?? false))
+                        ? Formatters.phone(row.buyerMobile!)
+                        : '—',
+                  ],
+                [
+                  'Total · ${r.count}',
+                  '', '', '', '',
+                  _curr(r.totalBuying),
+                  '', '', '',
+                ],
+              ],
+              rightAlign: const {5},
+              totalLastRow: true,
+            ),
+        ],
+        footer: (ctx) => pw.Padding(
+          padding: const pw.EdgeInsets.only(top: 8),
+          child: pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Text('SLV Auto Consultant · Second-hand vehicles',
+                  style:
+                      const pw.TextStyle(fontSize: 8, color: PdfColors.grey500)),
+              pw.Text('Page ${ctx.pageNumber} of ${ctx.pagesCount}',
+                  style:
+                      const pw.TextStyle(fontSize: 8, color: PdfColors.grey500)),
+            ],
+          ),
+        ),
+      ),
+    );
+    return doc;
+  }
+
+  pw.Widget _reportHeader(pw.ImageProvider? logo, String label,
+      {String kind = 'Monthly report'}) {
     return pw.Container(
       margin: const pw.EdgeInsets.only(bottom: 12),
       padding: const pw.EdgeInsets.only(bottom: 10),
@@ -1037,7 +995,7 @@ class RealPdfService implements PdfService {
                       fontWeight: pw.FontWeight.bold,
                       color: _navy)),
               pw.SizedBox(height: 2),
-              pw.Text('Monthly report  ·  $label',
+              pw.Text('$kind  ·  $label',
                   style: const pw.TextStyle(fontSize: 10, color: _gold)),
             ],
           ),

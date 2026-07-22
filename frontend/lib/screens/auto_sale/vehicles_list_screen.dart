@@ -23,6 +23,9 @@ import '../../widgets/option_sheet.dart';
 import '../../widgets/page_size_picker.dart';
 import '../../widgets/status_pill.dart';
 import '../../widgets/tab_bar_navy.dart';
+import '../daily_report_screen.dart';
+import '../monthly_report_screen.dart';
+import '../second_hand_report_screen.dart';
 import 'assign_sale_screen.dart';
 import 'create_customer_screen.dart';
 import 'create_vehicle_screen.dart';
@@ -76,6 +79,27 @@ class _VehiclesListView extends StatelessWidget {
           onPressed: () => Navigator.of(context).pop(),
         ),
         actions: [
+          IconButton(
+            tooltip: 'Daily report',
+            icon: const Icon(Icons.assignment_outlined),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const DailyReportScreen()),
+            ),
+          ),
+          IconButton(
+            tooltip: 'Monthly report',
+            icon: const Icon(Icons.insert_chart_outlined),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const MonthlyReportScreen()),
+            ),
+          ),
+          IconButton(
+            tooltip: 'Second-hand vehicles',
+            icon: const Icon(Icons.directions_car_outlined),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const SecondHandReportScreen()),
+            ),
+          ),
           GoldCreateButton(iconOnly: true, onPressed: () => _openCreate(context)),
         ],
       ),
