@@ -17,10 +17,10 @@ jobs:
         id: api
         run: |
           if [ "${{ github.ref_name }}" = "main" ] || [[ "${{ github.ref_name }}" == v* ]]; then
-            echo "url=http://${{ secrets.SERVER_HOST }}"       >> $GITHUB_OUTPUT
+            echo "url=http://187.127.186.206"                  >> $GITHUB_OUTPUT
             echo "label=prod"                                  >> $GITHUB_OUTPUT
           else
-            echo "url=http://${{ secrets.SERVER_HOST }}:8080"  >> $GITHUB_OUTPUT
+            echo "url=http://187.127.186.206:8080"             >> $GITHUB_OUTPUT
             echo "label=dev"                                   >> $GITHUB_OUTPUT
           fi
 
