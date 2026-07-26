@@ -4,7 +4,9 @@ import 'package:provider/provider.dart';
 import '../../controllers/auth_controller.dart';
 import '../../services/customer_service.dart';
 import '../../services/loan_service.dart';
+import '../../services/rental_customer_service.dart';
 import '../../services/rental_service.dart';
+import '../../services/rental_vehicle_service.dart';
 import '../../services/sale_service.dart';
 import '../../services/user_service.dart';
 import '../../services/vehicle_service.dart';
@@ -18,6 +20,8 @@ import '../../widgets/confirmation_dialog.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/primary_button.dart';
 import '../../widgets/secondary_button.dart';
+import '../auto_sale/create_customer_screen.dart';
+import '../auto_sale/create_vehicle_screen.dart';
 import '../auto_sale/customer_detail_screen.dart';
 import '../auto_sale/sale_detail_screen.dart';
 import '../auto_sale/vehicle_detail_screen.dart';
@@ -74,7 +78,9 @@ class _PendingApprovalsScreenState extends State<PendingApprovalsScreen> {
   Future<void> _refresh() async {
     await Future.wait([
       context.read<CustomerService>().refresh(),
+      context.read<RentalCustomerService>().refresh(),
       context.read<VehicleService>().refresh(),
+      context.read<RentalVehicleService>().refresh(),
       context.read<SaleService>().refresh(),
     ]);
     if (mounted) setState(() => _loading = false);
@@ -86,7 +92,9 @@ class _PendingApprovalsScreenState extends State<PendingApprovalsScreen> {
     final actorId = context.read<AuthController>().currentUser?.id ?? 'u_super';
 
     final customers = context.watch<CustomerService>();
+    final rentalCustomers = context.watch<RentalCustomerService>();
     final vehicles = context.watch<VehicleService>();
+    final rentalVehicles = context.watch<RentalVehicleService>();
     final sales = context.watch<SaleService>();
     final rentals = context.watch<RentalService>();
     final loans = context.watch<LoanService>();
@@ -116,6 +124,21 @@ class _PendingApprovalsScreenState extends State<PendingApprovalsScreen> {
         )),
       ));
     }
+    // Rental vehicles created by an admin (independent rental module pool).
+    for (final v in rentalVehicles.all().where((v) => v.isPending)) {
+      items.add(_PendingItem(
+        type: 'Rental vehicle',
+        title: 'Rental vehicle ${v.regNo.isNotEmpty ? v.regNo : (v.chassisNo ?? '')}',
+        subtitle: addedBy(v.createdBy),
+        createdAt: v.createdAt,
+        onApprove: () => rentalVehicles.confirm(v.id, actorId),
+        onReject: (r) => rentalVehicles.reject(v.id, r, actorId),
+        onView: () => Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) =>
+              CreateVehicleScreen(existing: v, service: rentalVehicles),
+        )),
+      ));
+    }
     for (final cust in customers.all().where((c) => c.isPending)) {
       items.add(_PendingItem(
         type: 'Customer',
@@ -126,6 +149,21 @@ class _PendingApprovalsScreenState extends State<PendingApprovalsScreen> {
         onReject: (r) => customers.reject(cust.id, r, actorId),
         onView: () => Navigator.of(context).push(MaterialPageRoute(
           builder: (_) => CustomerDetailScreen(customerId: cust.id),
+        )),
+      ));
+    }
+    // Rental customers created by an admin (independent rental module list).
+    for (final cust in rentalCustomers.all().where((c) => c.isPending)) {
+      items.add(_PendingItem(
+        type: 'Rental customer',
+        title: 'Rental customer ${cust.fullName}',
+        subtitle: addedBy(cust.createdBy),
+        createdAt: cust.createdAt,
+        onApprove: () => rentalCustomers.confirm(cust.id, actorId),
+        onReject: (r) => rentalCustomers.reject(cust.id, r, actorId),
+        onView: () => Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) =>
+              CreateCustomerScreen(existing: cust, service: rentalCustomers),
         )),
       ));
     }

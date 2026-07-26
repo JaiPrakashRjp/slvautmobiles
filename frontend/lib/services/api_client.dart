@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -27,6 +28,38 @@ class ApiClient {
 
   final http.Client _client;
   static const _jsonHeaders = {'Content-Type': 'application/json'};
+
+  /// Max time to wait for any single request before giving up. Without this, a
+  /// request to an unreachable server (wrong host, a port/service that is down,
+  /// no connectivity) hangs indefinitely and the whole app appears frozen. With
+  /// it, the user gets a clear error in seconds instead.
+  static const Duration _timeout = Duration(seconds: 15);
+
+  /// Shown when the server can't be reached at all (as opposed to the server
+  /// replying with an error, which surfaces the backend's own message).
+  static const String _unreachableMsg =
+      "Couldn't reach the server. Check your internet connection and try again.";
+
+  /// Runs a network call with [_timeout] and maps low-level connectivity
+  /// failures (timeout, no route, DNS failure, TLS handshake error) to an
+  /// [ApiException] with statusCode 0, so callers handle "server unreachable"
+  /// the same way they handle any other API error — never a raw platform
+  /// exception, never an indefinite hang. Kept free of `dart:io` so the client
+  /// still compiles for web.
+  Future<http.Response> _run(Future<http.Response> Function() send) async {
+    try {
+      return await send().timeout(_timeout);
+    } on TimeoutException {
+      throw ApiException(0, _unreachableMsg);
+    } on http.ClientException {
+      throw ApiException(0, _unreachableMsg);
+    } catch (_) {
+      // SocketException / HandshakeException etc. (mobile & desktop). Matched
+      // without importing dart:io to keep web builds working. The request
+      // closure only performs the network call, so nothing else lands here.
+      throw ApiException(0, _unreachableMsg);
+    }
+  }
 
   /// Bearer token for the signed-in user. Set by [AuthController] after a
   /// successful login and cleared on sign-out. It is shared across every
@@ -58,7 +91,8 @@ class ApiClient {
   String absoluteUrl(String path) => _uri(path).toString();
 
   Future<dynamic> get(String path, {Map<String, dynamic>? query}) async {
-    final res = await _client.get(_uri(path, query), headers: _headers());
+    final uri = _uri(path, query);
+    final res = await _run(() => _client.get(uri, headers: _headers()));
     return _decode(res);
   }
 
@@ -67,10 +101,10 @@ class ApiClient {
     Object? body,
     Map<String, dynamic>? query,
   }) async {
-    final res = await _client.post(
-      _uri(path, query),
-      headers: _headers(_jsonHeaders),
-      body: jsonEncode(body ?? {}),
+    final uri = _uri(path, query);
+    final encoded = jsonEncode(body ?? {});
+    final res = await _run(
+      () => _client.post(uri, headers: _headers(_jsonHeaders), body: encoded),
     );
     return _decode(res);
   }
@@ -80,10 +114,10 @@ class ApiClient {
     Object? body,
     Map<String, dynamic>? query,
   }) async {
-    final res = await _client.patch(
-      _uri(path, query),
-      headers: _headers(_jsonHeaders),
-      body: jsonEncode(body ?? {}),
+    final uri = _uri(path, query);
+    final encoded = jsonEncode(body ?? {});
+    final res = await _run(
+      () => _client.patch(uri, headers: _headers(_jsonHeaders), body: encoded),
     );
     return _decode(res);
   }
@@ -93,16 +127,17 @@ class ApiClient {
     Object? body,
     Map<String, dynamic>? query,
   }) async {
-    final res = await _client.put(
-      _uri(path, query),
-      headers: _headers(_jsonHeaders),
-      body: jsonEncode(body ?? {}),
+    final uri = _uri(path, query);
+    final encoded = jsonEncode(body ?? {});
+    final res = await _run(
+      () => _client.put(uri, headers: _headers(_jsonHeaders), body: encoded),
     );
     return _decode(res);
   }
 
   Future<void> delete(String path) async {
-    final res = await _client.delete(_uri(path), headers: _headers());
+    final uri = _uri(path);
+    final res = await _run(() => _client.delete(uri, headers: _headers()));
     _decode(res);
   }
 
@@ -137,7 +172,9 @@ class ApiClient {
         filename: filename,
         contentType: mimeType != null ? MediaType.parse(mimeType) : null,
       ));
-    final res = await http.Response.fromStream(await _client.send(req));
+    final res = await _run(
+      () async => http.Response.fromStream(await _client.send(req)),
+    );
     return _decode(res);
   }
 

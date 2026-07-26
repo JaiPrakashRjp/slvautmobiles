@@ -1,25 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../controllers/auth_controller.dart';
 import '../../models/customer.dart';
-import '../../models/enums.dart';
-import '../../models/rental.dart';
-import '../../services/rental_service.dart';
+import '../../services/rental_customer_service.dart';
 import '../../theme/app_colors.dart';
 import '../../utils/app_spacing.dart';
 import '../../utils/app_text_styles.dart';
-import '../../utils/formatters.dart';
 import '../../utils/responsive.dart';
 import '../../widgets/app_card.dart';
+import '../../widgets/call_chip.dart';
+import '../../widgets/confirmation_dialog.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/gold_create_button.dart';
 import '../../widgets/icon_button_soft.dart';
 import '../../widgets/status_pill.dart';
-import '../../widgets/tab_bar_navy.dart';
-import 'assign_rental_screen.dart';
-import 'rental_customer_detail_screen.dart';
+import '../auto_sale/create_customer_screen.dart';
 
-/// Rental customers — mockup 14. Active / Inactive renters.
+/// Rental customers — the rental module's own independent customer list
+/// (module = rental). Same create / edit / KYC / approval functionality as the
+/// sale customers, wired to the rental-scoped [RentalCustomerService].
 class RentalCustomersScreen extends StatefulWidget {
   const RentalCustomersScreen({super.key});
 
@@ -28,23 +28,35 @@ class RentalCustomersScreen extends StatefulWidget {
 }
 
 class _RentalCustomersScreenState extends State<RentalCustomersScreen> {
-  int _tab = 0; // 0 = Active, 1 = Inactive
+  String _query = '';
 
-  static final DateTime _today = DateTime(2026, 6, 2);
+  @override
+  void initState() {
+    super.initState();
+    // Auto-refresh on open so newly-added customers / approvals show.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) context.read<RentalCustomerService>().refresh();
+    });
+  }
+
+  Future<void> _openCreate(BuildContext context) {
+    final service = context.read<RentalCustomerService>();
+    return Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => CreateCustomerScreen(service: service),
+    ));
+  }
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    final rentals = context.watch<RentalService>();
+    final customers = context.watch<RentalCustomerService>();
 
-    final active = rentals.activeRentals();
-    final activeCustomerIds = active.map((r) => r.customerId).toSet();
-    final items = _tab == 0
-        ? rentals.verifiedRenters().where((r) => activeCustomerIds.contains(r.id))
-        : rentals
-            .verifiedRenters()
-            .where((r) => !activeCustomerIds.contains(r.id));
-    final list = items.toList();
+    final q = _query.trim().toLowerCase();
+    final list = customers.all().where((cust) {
+      if (q.isEmpty) return true;
+      return cust.fullName.toLowerCase().contains(q) ||
+          cust.phone.toLowerCase().contains(q);
+    }).toList();
 
     return Scaffold(
       backgroundColor: c.bgCanvas,
@@ -54,9 +66,7 @@ class _RentalCustomersScreenState extends State<RentalCustomersScreen> {
         actions: [
           GoldCreateButton(
             iconOnly: true,
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const AssignRentalScreen()),
-            ),
+            onPressed: () => _openCreate(context),
           ),
         ],
       ),
@@ -69,38 +79,55 @@ class _RentalCustomersScreenState extends State<RentalCustomersScreen> {
             children: [
               Padding(
                 padding: EdgeInsets.fromLTRB(context.screenHPadding,
-                    AppSpacing.lg, context.screenHPadding, AppSpacing.md),
-                child: TabBarNavy(
-                  tabs: const ['Active', 'Inactive'],
-                  index: _tab,
-                  onChanged: (i) => setState(() => _tab = i),
+                    AppSpacing.lg, context.screenHPadding, AppSpacing.sm),
+                child: TextField(
+                  onChanged: (v) => setState(
+                      () => _query = v.trim().length >= 3 ? v : ''),
+                  decoration: InputDecoration(
+                    hintText: 'Search name / phone…',
+                    prefixIcon: const Icon(Icons.search, size: 20),
+                    isDense: true,
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                  ),
                 ),
               ),
               Expanded(
-                child: list.isEmpty
-                    ? EmptyState(
-                        icon: Icons.people_outline,
-                        title: _tab == 0
-                            ? 'No active renters'
-                            : 'No inactive renters',
-                        subtitle: 'Assign a vehicle to start a rental.',
-                      )
-                    : ListView(
-                        padding: EdgeInsets.fromLTRB(context.screenHPadding, 0,
-                            context.screenHPadding, AppSpacing.xl),
-                        children: [
-                          for (final cust in list)
-                            Padding(
-                              padding:
-                                  const EdgeInsets.only(bottom: AppSpacing.lg),
-                              child: _RentalCustomerCard(
-                                customer: cust,
-                                rental: rentals.activeRentalForCustomer(cust.id),
-                                now: _today,
-                              ),
+                child: RefreshIndicator(
+                  onRefresh: customers.refresh,
+                  child: (customers.loading && list.isEmpty)
+                      ? const Center(child: CircularProgressIndicator())
+                      : list.isEmpty
+                          ? ListView(
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              children: [
+                                const SizedBox(height: 60),
+                                EmptyState(
+                                  icon: Icons.people_outline,
+                                  title: 'No rental customers yet',
+                                  subtitle: 'Tap “+” to add a customer.',
+                                  ctaLabel: 'Add customer',
+                                  onCta: () => _openCreate(context),
+                                ),
+                              ],
+                            )
+                          : ListView(
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              padding: EdgeInsets.fromLTRB(
+                                  context.screenHPadding,
+                                  0,
+                                  context.screenHPadding,
+                                  AppSpacing.xl),
+                              children: [
+                                for (final cust in list)
+                                  Padding(
+                                    padding: const EdgeInsets.only(
+                                        bottom: AppSpacing.lg),
+                                    child: _RentalCustomerCard(customer: cust),
+                                  ),
+                              ],
                             ),
-                        ],
-                      ),
+                ),
               ),
             ],
           ),
@@ -111,91 +138,146 @@ class _RentalCustomersScreenState extends State<RentalCustomersScreen> {
 }
 
 class _RentalCustomerCard extends StatelessWidget {
-  const _RentalCustomerCard({
-    required this.customer,
-    required this.rental,
-    required this.now,
-  });
+  const _RentalCustomerCard({required this.customer});
 
   final Customer customer;
-  final Rental? rental;
-  final DateTime now;
+
+  Future<void> _edit(BuildContext context) {
+    final service = context.read<RentalCustomerService>();
+    return Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => CreateCustomerScreen(existing: customer, service: service),
+    ));
+  }
+
+  Future<void> _confirmDelete(BuildContext context) async {
+    final service = context.read<RentalCustomerService>();
+    final ok = await ConfirmationDialog.show(
+      context,
+      title: 'Delete customer',
+      message: 'Remove ${customer.fullName}? This cannot be undone.',
+      confirmLabel: 'Delete',
+      danger: true,
+    );
+    if (ok == true) service.delete(customer.id);
+  }
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    final rentals = context.read<RentalService>();
-    final vehicle =
-        rental == null ? null : rentals.vehicleById(rental!.vehicleId);
-    final unit = rental == null
-        ? ''
-        : switch (rental!.basis) {
-            RentalBasis.daily => '/day',
-            RentalBasis.weekly => '/wk',
-            RentalBasis.monthly => '/mo',
-          };
-    final dueLabel = rental?.dueLabel(now) ?? 'Inactive';
-    final onTime = dueLabel == 'On time';
+    final auth = context.read<AuthController>();
+    final service = context.read<RentalCustomerService>();
+    final actorId = auth.currentUser?.id ?? '';
+    final canModify = auth.isSuperAdmin || customer.createdBy == actorId;
+    final canReview = auth.isSuperAdmin && customer.isPending;
 
     return AppCard(
-      accentLeft: rental != null,
-      onTap: rental == null
-          ? null
-          : () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) =>
-                      RentalCustomerDetailScreen(customerId: customer.id),
-                ),
-              ),
+      onTap: () => _edit(context),
+      accentLeft: customer.isRejected,
+      accentColor: customer.isRejected ? c.danger : null,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(customer.fullName,
-              style: AppTextStyles.h2.copyWith(color: c.textMain)),
-          const SizedBox(height: 2),
-          if (rental != null)
-            Text('${vehicle?.regNo ?? ''} · ${rental!.basis.label}',
-                style: AppTextStyles.body.copyWith(color: c.textSub)),
-          const SizedBox(height: AppSpacing.sm),
           Row(
             children: [
-              if (rental != null)
-                Expanded(
-                  child: Text(
-                    '${Formatters.currency(rental!.rent)}$unit',
-                    style: AppTextStyles.bodyStrong.copyWith(color: c.textMain),
-                  ),
-                )
-              else
-                const Spacer(),
-              if (rental != null)
-                StatusPill(
-                  label: dueLabel,
-                  variant: onTime ? PillVariant.success : PillVariant.warning,
+              CircleAvatar(
+                radius: 22,
+                backgroundColor: c.bgSurface,
+                child: Icon(Icons.person_outline, color: c.textSub),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: AppSpacing.sm,
+                      runSpacing: 4,
+                      children: [
+                        Text(customer.fullName,
+                            style:
+                                AppTextStyles.h2.copyWith(color: c.textMain)),
+                        StatusPill.forEntity(customer.status),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: CallChip(phone: customer.phone),
+                    ),
+                    if (customer.isRejected &&
+                        (customer.rejectionReason?.isNotEmpty ?? false)) ...[
+                      const SizedBox(height: AppSpacing.xs),
+                      Text('Rejected: ${customer.rejectionReason}',
+                          style:
+                              AppTextStyles.caption.copyWith(color: c.danger)),
+                    ],
+                  ],
                 ),
+              ),
             ],
           ),
-          const SizedBox(height: AppSpacing.md),
+          if (canReview) ...[
+            const SizedBox(height: AppSpacing.sm),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () async {
+                      final reason = await ConfirmationDialog.show(
+                        context,
+                        title: 'Reject customer',
+                        message: 'Give the staff member a reason.',
+                        confirmLabel: 'Reject',
+                        danger: true,
+                        requireReason: true,
+                      );
+                      if (reason is String && reason.isNotEmpty) {
+                        service.reject(customer.id, reason, actorId);
+                      }
+                    },
+                    child: const Text('Reject'),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: () => service.confirm(customer.id, actorId),
+                    child: const Text('Approve'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+          const SizedBox(height: AppSpacing.sm),
+          Divider(height: 1, color: c.borderColor),
+          const SizedBox(height: AppSpacing.sm),
           Row(
+            mainAxisAlignment: MainAxisAlignment.end,
             children: [
               IconButtonSoft(
                 icon: Icons.visibility_outlined,
-                tooltip: 'View',
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) =>
-                        RentalCustomerDetailScreen(customerId: customer.id),
-                  ),
-                ),
+                tooltip: 'View / edit',
+                compact: true,
+                onPressed: () => _edit(context),
               ),
-              const SizedBox(width: AppSpacing.sm),
-              if (rental != null)
+              if (canModify) ...[
+                const SizedBox(width: AppSpacing.sm),
+                IconButtonSoft(
+                  icon: Icons.edit_outlined,
+                  tooltip: 'Edit',
+                  compact: true,
+                  onPressed: () => _edit(context),
+                ),
+                const SizedBox(width: AppSpacing.sm),
                 IconButtonSoft(
                   icon: Icons.delete_outline,
-                  tooltip: 'End rental',
+                  tooltip: 'Delete',
                   danger: true,
-                  onPressed: () => rentals.endRental(rental!.id),
+                  compact: true,
+                  onPressed: () => _confirmDelete(context),
                 ),
+              ],
             ],
           ),
         ],
@@ -203,4 +285,3 @@ class _RentalCustomerCard extends StatelessWidget {
     );
   }
 }
-

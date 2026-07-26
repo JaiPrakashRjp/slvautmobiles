@@ -414,14 +414,16 @@ class VehicleDetailScreen extends StatelessWidget {
                 const SizedBox(height: AppSpacing.lg),
               ],
               ..._detailRows(context, vehicle, assignedName, financerName),
-              if (vehicle.type == VehicleType.secondHand) ...[
+              if (vehicle.type == VehicleType.secondHand)
                 ..._prevOwnerRows(context, vehicle),
-                const SizedBox(height: AppSpacing.lg),
-                Text('Documents',
-                    style: AppTextStyles.label.copyWith(color: c.textSub)),
-                const SizedBox(height: AppSpacing.sm),
-                ..._docTiles(context, vehicles, vehicle),
-              ],
+              // Vehicle documents (RC / FC / Insurance / Permit / …) — shown for
+              // every vehicle and at every stage, including after it is sold, so
+              // a missing document surfaces its upload button right here.
+              const SizedBox(height: AppSpacing.lg),
+              Text('Documents',
+                  style: AppTextStyles.label.copyWith(color: c.textSub)),
+              const SizedBox(height: AppSpacing.sm),
+              ..._docTiles(context, vehicles, vehicle),
               if (canModify &&
                   vehicle.isActive &&
                   vehicle.saleStatus == SaleStatus.notSold &&
@@ -668,7 +670,9 @@ class VehicleDetailScreen extends StatelessWidget {
 
     return [
       for (final d in VehicleDocType.values) tile(d.wire, d.label),
-      for (final e in _prevOwnerDocs.entries) tile(e.key, e.value),
+      // Previous-owner documents only apply to a second-hand vehicle.
+      if (vehicle.type == VehicleType.secondHand)
+        for (final e in _prevOwnerDocs.entries) tile(e.key, e.value),
     ];
   }
 }

@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../controllers/auth_controller.dart';
 import '../../models/vehicle.dart';
-import '../../services/rental_service.dart';
+import '../../services/rental_vehicle_service.dart';
 import '../../theme/app_colors.dart';
 import '../../utils/app_spacing.dart';
 import '../../utils/app_text_styles.dart';
@@ -13,10 +14,10 @@ import '../../widgets/confirmation_dialog.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/gold_create_button.dart';
 import '../../widgets/icon_button_soft.dart';
+import '../../widgets/status_pill.dart';
 import '../../widgets/tab_bar_navy.dart';
-import 'assign_rental_screen.dart';
+import '../auto_sale/create_vehicle_screen.dart';
 import 'rental_customers_screen.dart';
-import 'rental_vehicle_detail_screen.dart';
 
 /// Auto Rental module shell — Vehicle / Customer tabs (mockups 11 & 14).
 class RentalHomeScreen extends StatefulWidget {
@@ -83,7 +84,8 @@ class _RentalHomeScreenState extends State<RentalHomeScreen> {
   }
 }
 
-/// Vehicle tab — Rented / Not Rented (mockup 11).
+/// Vehicle tab — Not rented / Rented, backed by the rental-scoped vehicle pool
+/// (module = rental). Same create / documents / approval as the sale vehicles.
 class _RentalVehiclesTab extends StatefulWidget {
   const _RentalVehiclesTab();
 
@@ -92,15 +94,23 @@ class _RentalVehiclesTab extends StatefulWidget {
 }
 
 class _RentalVehiclesTabState extends State<_RentalVehiclesTab> {
-  int _tab = 0; // 0 = Rented, 1 = Not Rented
+  int _tab = 0; // 0 = Not rented, 1 = Rented
+
+  @override
+  void initState() {
+    super.initState();
+    // Auto-refresh on open so newly-added vehicles / approvals show.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) context.read<RentalVehicleService>().refresh();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    final rentals = context.watch<RentalService>();
-    final vehicles =
-        _tab == 0 ? rentals.rentedVehicles() : rentals.notRentedVehicles();
-    final serviceDue = rentals.serviceDueWithin(7);
+    final vehiclesSvc = context.watch<RentalVehicleService>();
+    // Not rented = idle (unassigned); Rented = currently out on rent (assigned).
+    final list = _tab == 0 ? vehiclesSvc.unassigned() : vehiclesSvc.assigned();
 
     return Scaffold(
       backgroundColor: c.bgCanvas,
@@ -111,7 +121,9 @@ class _RentalVehiclesTabState extends State<_RentalVehiclesTab> {
           GoldCreateButton(
             iconOnly: true,
             onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const AssignRentalScreen()),
+              MaterialPageRoute(
+                builder: (_) => CreateVehicleScreen(service: vehiclesSvc),
+              ),
             ),
           ),
         ],
@@ -123,61 +135,52 @@ class _RentalVehiclesTabState extends State<_RentalVehiclesTab> {
           phone: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (serviceDue.isNotEmpty)
-                Padding(
-                  padding: EdgeInsets.fromLTRB(context.screenHPadding,
-                      AppSpacing.lg, context.screenHPadding, 0),
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(AppSpacing.md),
-                    decoration: BoxDecoration(
-                      color: c.warningTint,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: c.warning.withValues(alpha: 0.4)),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.build_outlined, size: 18, color: c.warning),
-                        const SizedBox(width: AppSpacing.sm),
-                        Expanded(
-                          child: Text(
-                            '${serviceDue.length} vehicle${serviceDue.length == 1 ? '' : 's'} due for service within 7 days',
-                            style: AppTextStyles.label.copyWith(color: c.warning),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
               Padding(
                 padding: EdgeInsets.fromLTRB(context.screenHPadding,
                     AppSpacing.lg, context.screenHPadding, AppSpacing.md),
                 child: TabBarNavy(
-                  tabs: const ['Rented', 'Not rented'],
+                  tabs: const ['Not rented', 'Rented'],
                   index: _tab,
                   onChanged: (i) => setState(() => _tab = i),
                 ),
               ),
               Expanded(
-                child: vehicles.isEmpty
-                    ? EmptyState(
-                        title: _tab == 0
-                            ? 'No rented vehicles'
-                            : 'No idle vehicles',
-                        subtitle: 'Tap “+” to assign a vehicle on rent.',
-                      )
-                    : ListView(
-                        padding: EdgeInsets.fromLTRB(context.screenHPadding, 0,
-                            context.screenHPadding, AppSpacing.xl),
-                        children: [
-                          for (final v in vehicles)
-                            Padding(
-                              padding:
-                                  const EdgeInsets.only(bottom: AppSpacing.lg),
-                              child: _RentalVehicleCard(vehicle: v),
+                child: RefreshIndicator(
+                  onRefresh: vehiclesSvc.refresh,
+                  child: (vehiclesSvc.loading && list.isEmpty)
+                      ? const Center(child: CircularProgressIndicator())
+                      : list.isEmpty
+                          ? ListView(
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              children: [
+                                const SizedBox(height: 60),
+                                EmptyState(
+                                  icon: Icons.electric_rickshaw,
+                                  title: _tab == 0
+                                      ? 'No idle vehicles'
+                                      : 'No rented vehicles',
+                                  subtitle:
+                                      'Tap “+” to add a rental vehicle.',
+                                ),
+                              ],
+                            )
+                          : ListView(
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              padding: EdgeInsets.fromLTRB(
+                                  context.screenHPadding,
+                                  0,
+                                  context.screenHPadding,
+                                  AppSpacing.xl),
+                              children: [
+                                for (final v in list)
+                                  Padding(
+                                    padding: const EdgeInsets.only(
+                                        bottom: AppSpacing.lg),
+                                    child: _RentalVehicleCard(vehicle: v),
+                                  ),
+                              ],
                             ),
-                        ],
-                      ),
+                ),
               ),
             ],
           ),
@@ -192,50 +195,113 @@ class _RentalVehicleCard extends StatelessWidget {
 
   final Vehicle vehicle;
 
+  Future<void> _edit(BuildContext context) {
+    final service = context.read<RentalVehicleService>();
+    return Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => CreateVehicleScreen(existing: vehicle, service: service),
+    ));
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    final rentals = context.read<RentalService>();
+    final auth = context.read<AuthController>();
+    final service = context.read<RentalVehicleService>();
+    final actorId = auth.currentUser?.id ?? '';
+    final canModify = auth.isSuperAdmin || vehicle.createdBy == actorId;
+    final canReview = auth.isSuperAdmin && vehicle.isPending;
+    final title =
+        vehicle.regNo.isNotEmpty ? vehicle.regNo : (vehicle.chassisNo ?? '—');
+
     return AppCard(
+      onTap: () => _edit(context),
+      accentLeft: vehicle.isRejected,
+      accentColor: vehicle.isRejected ? c.danger : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(vehicle.regNo,
-              style: AppTextStyles.h2.copyWith(color: c.textMain)),
+          Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: AppSpacing.sm,
+            runSpacing: 4,
+            children: [
+              Text(title, style: AppTextStyles.h2.copyWith(color: c.textMain)),
+              StatusPill.forEntity(vehicle.status),
+            ],
+          ),
           const SizedBox(height: AppSpacing.xs),
-          Text('Bajaj RE · Three-wheeler',
+          Text('${vehicle.model ?? '—'} · ${vehicle.type.label}',
               style: AppTextStyles.body.copyWith(color: c.textSub)),
-          const SizedBox(height: AppSpacing.md),
+          if (vehicle.isRejected &&
+              (vehicle.rejectionReason?.isNotEmpty ?? false)) ...[
+            const SizedBox(height: AppSpacing.xs),
+            Text('Rejected: ${vehicle.rejectionReason}',
+                style: AppTextStyles.caption.copyWith(color: c.danger)),
+          ],
+          if (canReview) ...[
+            const SizedBox(height: AppSpacing.sm),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () async {
+                      final reason = await ConfirmationDialog.show(
+                        context,
+                        title: 'Reject vehicle',
+                        message: 'Give the staff member a reason.',
+                        confirmLabel: 'Reject',
+                        danger: true,
+                        requireReason: true,
+                      );
+                      if (reason is String && reason.isNotEmpty) {
+                        service.reject(vehicle.id, reason, actorId);
+                      }
+                    },
+                    child: const Text('Reject'),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: () => service.confirm(vehicle.id, actorId),
+                    child: const Text('Approve'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+          const SizedBox(height: AppSpacing.sm),
+          Divider(height: 1, color: c.borderColor),
+          const SizedBox(height: AppSpacing.sm),
           Row(
+            mainAxisAlignment: MainAxisAlignment.end,
             children: [
               IconButtonSoft(
                 icon: Icons.visibility_outlined,
-                tooltip: 'View',
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) =>
-                        RentalVehicleDetailScreen(vehicleId: vehicle.id),
-                  ),
+                tooltip: 'View / edit',
+                compact: true,
+                onPressed: () => _edit(context),
+              ),
+              if (canModify) ...[
+                const SizedBox(width: AppSpacing.sm),
+                IconButtonSoft(
+                  icon: Icons.delete_outline,
+                  tooltip: 'Delete',
+                  danger: true,
+                  compact: true,
+                  onPressed: () async {
+                    final ok = await ConfirmationDialog.show(
+                      context,
+                      title: 'Delete vehicle',
+                      message:
+                          'Remove this vehicle? This cannot be undone.',
+                      confirmLabel: 'Delete',
+                      danger: true,
+                    );
+                    if (ok == true) service.delete(vehicle.id);
+                  },
                 ),
-              ),
-              const SizedBox(width: AppSpacing.sm),
-              IconButtonSoft(
-                icon: Icons.delete_outline,
-                tooltip: 'End rental',
-                danger: true,
-                onPressed: () async {
-                  final active = rentals.activeRentalForVehicle(vehicle.id);
-                  if (active == null) return;
-                  final ok = await ConfirmationDialog.show(
-                    context,
-                    title: 'End rental',
-                    message: 'End the rental on ${vehicle.regNo}?',
-                    confirmLabel: 'End rental',
-                    danger: true,
-                  );
-                  if (ok == true) rentals.endRental(active.id);
-                },
-              ),
+              ],
             ],
           ),
         ],
