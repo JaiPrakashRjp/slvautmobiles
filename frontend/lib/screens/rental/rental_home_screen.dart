@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 
 import '../../controllers/auth_controller.dart';
 import '../../models/vehicle.dart';
+import '../../services/api_rental_service.dart';
+import '../../services/rental_customer_service.dart';
 import '../../services/rental_vehicle_service.dart';
 import '../../theme/app_colors.dart';
 import '../../utils/app_spacing.dart';
@@ -14,10 +16,14 @@ import '../../widgets/confirmation_dialog.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/gold_create_button.dart';
 import '../../widgets/icon_button_soft.dart';
+import '../../widgets/option_sheet.dart';
 import '../../widgets/status_pill.dart';
 import '../../widgets/tab_bar_navy.dart';
-import '../auto_sale/create_vehicle_screen.dart';
+import '../auto_sale/create_customer_screen.dart';
+import 'assign_rent_screen.dart';
+import 'rent_detail_screen.dart';
 import 'rental_customers_screen.dart';
+import 'rental_vehicle_form_screen.dart';
 
 /// Auto Rental module shell — Vehicle / Customer tabs (mockups 11 & 14).
 class RentalHomeScreen extends StatefulWidget {
@@ -122,7 +128,7 @@ class _RentalVehiclesTabState extends State<_RentalVehiclesTab> {
             iconOnly: true,
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute(
-                builder: (_) => CreateVehicleScreen(service: vehiclesSvc),
+                builder: (_) => const RentalVehicleFormScreen(),
               ),
             ),
           ),
@@ -196,9 +202,54 @@ class _RentalVehicleCard extends StatelessWidget {
   final Vehicle vehicle;
 
   Future<void> _edit(BuildContext context) {
-    final service = context.read<RentalVehicleService>();
     return Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => CreateVehicleScreen(existing: vehicle, service: service),
+      builder: (_) => RentalVehicleFormScreen(existing: vehicle),
+    ));
+  }
+
+  /// Rent this vehicle: pick a rental customer (with + new customer), then open
+  /// the rent form with the vehicle pre-selected.
+  Future<void> _rent(BuildContext context) async {
+    final customers = context.read<RentalCustomerService>();
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    final listable =
+        customers.all().where((c) => c.isActive || c.isPending).toList();
+    final customerId = await OptionSheet.show<String>(
+      context,
+      title: 'Rent to customer',
+      searchable: true,
+      searchHint: 'Search by name or phone',
+      addLabel: 'New customer',
+      onAdd: () => navigator.push(MaterialPageRoute(
+        builder: (_) => CreateCustomerScreen(service: customers),
+      )),
+      options: listable
+          .map((c) => SheetOption(
+                value: c.id,
+                label: c.fullName,
+                subtitle:
+                    c.isActive ? c.phone : '${c.phone}  ·  Pending approval',
+              ))
+          .toList(),
+    );
+    if (customerId == null) return;
+    final chosen = customers.byId(customerId);
+    if (chosen != null && !chosen.isActive) {
+      messenger.showSnackBar(const SnackBar(
+          content: Text(
+              'This customer is pending approval. Rent once it is approved.')));
+      return;
+    }
+    await navigator.push(MaterialPageRoute(
+      builder: (_) =>
+          AssignRentScreen(customerId: customerId, vehicleId: vehicle.id),
+    ));
+  }
+
+  void _openRental(BuildContext context, String rentalId) {
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => RentDetailScreen(rentalId: rentalId),
     ));
   }
 
@@ -269,6 +320,39 @@ class _RentalVehicleCard extends StatelessWidget {
                 ),
               ],
             ),
+          ],
+          // Rent this vehicle (Not rented) or open the active rental (Rented).
+          if (vehicle.isActive) ...[
+            const SizedBox(height: AppSpacing.sm),
+            Builder(builder: (context) {
+              final rental =
+                  context.watch<RentalAgreementService>().forVehicle(vehicle.id);
+              final active = rental != null &&
+                  (rental.rentalStatus == 'active' ||
+                      rental.rentalStatus == 'completed') &&
+                  rental.isActive;
+              if (active) {
+                return SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () => _openRental(context, rental.id),
+                    icon: const Icon(Icons.receipt_long_outlined, size: 18),
+                    label: const Text('View rental'),
+                  ),
+                );
+              }
+              if (canModify && !vehicle.isAssigned) {
+                return SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: () => _rent(context),
+                    icon: const Icon(Icons.vpn_key_outlined, size: 18),
+                    label: const Text('Rent this vehicle'),
+                  ),
+                );
+              }
+              return const SizedBox.shrink();
+            }),
           ],
           const SizedBox(height: AppSpacing.sm),
           Divider(height: 1, color: c.borderColor),

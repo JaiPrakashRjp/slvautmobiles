@@ -12,18 +12,27 @@ import '../services/vehicle_service.dart';
 /// is selected. See the vehicle-form spec. When [existing] is passed the form
 /// is in EDIT mode: fields are pre-filled and submit() PATCHes instead.
 class CreateVehicleViewModel extends ChangeNotifier {
-  CreateVehicleViewModel(this._vehicles, this._auth, {Vehicle? existing})
+  CreateVehicleViewModel(this._vehicles, this._auth,
+      {Vehicle? existing, this.rental = false})
       : _existing = existing {
     if (existing != null) {
       _prefill(existing);
     } else {
       _status = Gate.initialStatus(_auth.currentUser?.role ?? Role.admin);
     }
+    // A rental vehicle is handled as "second hand" mode internally so the
+    // reg-number + Insurance/FC/Permit-date fields apply. Owned-hand and
+    // chassis number are not collected on the rental form.
+    if (rental && _hand == null) _hand = VehicleType.secondHand;
   }
 
   final VehicleService _vehicles;
   final AuthController _auth;
   final Vehicle? _existing;
+
+  /// True when backing the rental vehicle form (module = rental): a reduced
+  /// field set, owned-hand forced to second-hand, chassis not required.
+  final bool rental;
 
   bool get isEditing => _existing != null;
 

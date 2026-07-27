@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../controllers/auth_controller.dart';
 import '../../services/customer_service.dart';
 import '../../services/loan_service.dart';
+import '../../services/api_rental_service.dart';
 import '../../services/rental_customer_service.dart';
 import '../../services/rental_service.dart';
 import '../../services/rental_vehicle_service.dart';
@@ -21,7 +22,8 @@ import '../../widgets/empty_state.dart';
 import '../../widgets/primary_button.dart';
 import '../../widgets/secondary_button.dart';
 import '../auto_sale/create_customer_screen.dart';
-import '../auto_sale/create_vehicle_screen.dart';
+import '../rental/rent_detail_screen.dart';
+import '../rental/rental_vehicle_form_screen.dart';
 import '../auto_sale/customer_detail_screen.dart';
 import '../auto_sale/sale_detail_screen.dart';
 import '../auto_sale/vehicle_detail_screen.dart';
@@ -81,6 +83,7 @@ class _PendingApprovalsScreenState extends State<PendingApprovalsScreen> {
       context.read<RentalCustomerService>().refresh(),
       context.read<VehicleService>().refresh(),
       context.read<RentalVehicleService>().refresh(),
+      context.read<RentalAgreementService>().refresh(),
       context.read<SaleService>().refresh(),
     ]);
     if (mounted) setState(() => _loading = false);
@@ -134,8 +137,7 @@ class _PendingApprovalsScreenState extends State<PendingApprovalsScreen> {
         onApprove: () => rentalVehicles.confirm(v.id, actorId),
         onReject: (r) => rentalVehicles.reject(v.id, r, actorId),
         onView: () => Navigator.of(context).push(MaterialPageRoute(
-          builder: (_) =>
-              CreateVehicleScreen(existing: v, service: rentalVehicles),
+          builder: (_) => RentalVehicleFormScreen(existing: v),
         )),
       ));
     }
@@ -254,15 +256,65 @@ class _PendingApprovalsScreenState extends State<PendingApprovalsScreen> {
         ));
       }
     }
-    for (final r in rentals.pendingRentals()) {
+    // Real rentals (module = rental) needing approval.
+    final rentalAgreements = context.watch<RentalAgreementService>();
+    String renterName(String id) =>
+        rentalCustomers.byId(id)?.fullName ?? 'customer';
+    void openRental(String id) => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => RentDetailScreen(rentalId: id)));
+
+    for (final r in rentalAgreements.all().where((r) => r.isPending)) {
       items.add(_PendingItem(
         type: 'Rental',
-        title: 'Rental for ${custName(r.customerId)}',
-        subtitle: '${r.basis.label} · ${Formatters.currency(r.rent)}',
+        title: 'Rental · ${renterName(r.customerId)}',
+        subtitle: 'Total ${Formatters.currency(r.totalAmount)} · ${addedBy(r.createdBy)}',
         createdAt: r.createdAt,
-        onApprove: () => rentals.confirmRental(r.id, actorId),
-        onReject: (reason) => rentals.rejectRental(r.id, reason, actorId),
+        onApprove: () => rentalAgreements.confirm(r.id, actorId),
+        onReject: (reason) => rentalAgreements.reject(r.id, reason, actorId),
+        onView: () => openRental(r.id),
       ));
+    }
+    // Pending rental seizes.
+    for (final r in rentalAgreements.all().where((r) => r.isSeizePending)) {
+      items.add(_PendingItem(
+        type: 'Rental seize',
+        title: 'Seize · ${renterName(r.customerId)}',
+        subtitle: r.seizeReason ?? 'Seize requested',
+        createdAt: r.seizedAt ?? r.createdAt,
+        onApprove: () async {
+          await rentalAgreements.approveSeize(r.id);
+          await rentalVehicles.refresh();
+        },
+        onReject: (reason) => rentalAgreements.rejectSeize(r.id, reason),
+        onView: () => openRental(r.id),
+      ));
+    }
+    // Pending rental edits.
+    for (final r in rentalAgreements.all().where((r) => r.isEditPending)) {
+      items.add(_PendingItem(
+        type: 'Rental edit',
+        title: 'Rental edit · ${renterName(r.customerId)}',
+        subtitle: addedBy(r.editRequestedBy ?? ''),
+        createdAt: r.createdAt,
+        onApprove: () => rentalAgreements.approveEdit(r.id),
+        onReject: (reason) => rentalAgreements.rejectEdit(r.id, reason),
+        onView: () => openRental(r.id),
+      ));
+    }
+    // Pending rent payments.
+    for (final r in rentalAgreements.all()) {
+      for (final p in r.payments.where((p) => p.isPending)) {
+        items.add(_PendingItem(
+          type: 'Rent payment',
+          title: 'Rent payment · ${renterName(r.customerId)}',
+          subtitle:
+              '${Formatters.currency(p.amount)} · ${p.isManual ? 'Manual' : 'Installment'}',
+          createdAt: p.paidAt ?? r.createdAt,
+          onApprove: () => rentalAgreements.approvePayment(p.id),
+          onReject: (reason) => rentalAgreements.declinePayment(p.id, reason),
+          onView: () => openRental(r.id),
+        ));
+      }
     }
     for (final l in loans.all().where((l) => l.isPending)) {
       items.add(_PendingItem(

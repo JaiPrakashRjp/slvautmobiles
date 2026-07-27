@@ -8,6 +8,7 @@ import '../models/customer.dart';
 import '../models/installment.dart';
 import '../models/monthly_report.dart';
 import '../models/loan.dart';
+import '../models/rental_agreement.dart';
 import '../models/sale.dart';
 import '../models/second_hand_report.dart';
 import '../models/vehicle.dart';
@@ -31,6 +32,14 @@ abstract class PdfService {
   /// Raw bytes of the sale invoice PDF (for the in-app preview + share).
   Future<Uint8List> invoiceBytes({
     required Sale sale,
+    required Customer customer,
+    required Vehicle vehicle,
+  });
+
+  /// Raw bytes of the rent invoice PDF (same layout as the sale invoice, with
+  /// the rent collection history + remaining balance).
+  Future<Uint8List> rentInvoiceBytes({
+    required RentalAgreement rental,
     required Customer customer,
     required Vehicle vehicle,
   });
@@ -332,6 +341,127 @@ class RealPdfService implements PdfService {
   }) async =>
       (await _invoiceDoc(sale: sale, customer: customer, vehicle: vehicle))
           .save();
+
+  // ── Rent invoice ───────────────────────────────────────────────────────────
+  @override
+  Future<Uint8List> rentInvoiceBytes({
+    required RentalAgreement rental,
+    required Customer customer,
+    required Vehicle vehicle,
+  }) async {
+    final logo = await _loadLogo();
+    final branch = vehicle.branch?.label ?? customer.branch?.label;
+    final paid = rental.payments.where((p) => p.isApproved).toList()
+      ..sort((a, b) => (a.paidAt ?? DateTime(2000))
+          .compareTo(b.paidAt ?? DateTime(2000)));
+    final doc = pw.Document();
+    doc.addPage(pw.Page(
+      pageFormat: PdfPageFormat.a4,
+      margin: pw.EdgeInsets.zero,
+      build: (_) => pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+        children: [
+          _invoiceHeader(logo),
+          pw.Container(
+            color: _gold,
+            alignment: pw.Alignment.center,
+            padding: const pw.EdgeInsets.symmetric(vertical: 4),
+            child: pw.Text('RENT INVOICE',
+                style: pw.TextStyle(
+                    fontSize: 9,
+                    fontWeight: pw.FontWeight.bold,
+                    color: _navy,
+                    letterSpacing: 2)),
+          ),
+          pw.Expanded(
+            child: pw.Container(
+              color: _bgWarm,
+              padding: const pw.EdgeInsets.fromLTRB(28, 14, 28, 20),
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+                children: [
+                  pw.Row(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Expanded(
+                        child: pw.Column(
+                          crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+                          children: [
+                            _label('RENTED TO'),
+                            _card([
+                              _row('Name', customer.fullName),
+                              _row('Contact no.',
+                                  Formatters.phone(customer.phone)),
+                            ]),
+                          ],
+                        ),
+                      ),
+                      pw.SizedBox(width: 12),
+                      pw.Expanded(
+                        child: pw.Column(
+                          crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+                          children: [
+                            _label('RENTAL DETAILS'),
+                            _card([
+                              if (rental.invoiceNo != null)
+                                _row('Invoice no.', rental.invoiceNo!),
+                              if (rental.startDate != null)
+                                _row('Start date',
+                                    Formatters.date(rental.startDate!)),
+                              _row(
+                                  'Vehicle',
+                                  vehicle.regNo.isNotEmpty
+                                      ? vehicle.regNo
+                                      : (vehicle.chassisNo ?? '—')),
+                              if (branch != null) _row('Branch', branch),
+                            ]),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  _label('RENT'),
+                  _card([
+                    _row('Total rent', _curr(rental.totalAmount)),
+                    _row('Advance received', _curr(rental.advance)),
+                  ]),
+                  if (paid.isNotEmpty) ...[
+                    _label('PAYMENT HISTORY'),
+                    _card([
+                      for (final p in paid)
+                        _row(
+                          [
+                            if (p.paidAt != null) Formatters.date(p.paidAt!),
+                            p.isManual ? 'Manual' : 'Installment',
+                          ].join('  ·  '),
+                          _curr(p.amount),
+                        ),
+                    ]),
+                  ],
+                  _totalBar('BALANCE', _curr(rental.remainingAmount)),
+                  _label('AMOUNT IN WORDS'),
+                  _card([
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 9),
+                      child: pw.Text(_amountInWords(rental.collected),
+                          style: pw.TextStyle(
+                              fontSize: 10,
+                              fontWeight: pw.FontWeight.bold,
+                              color: _textMain)),
+                    ),
+                  ]),
+                  pw.Spacer(),
+                  _branchFooter(),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    ));
+    return doc.save();
+  }
 
   Future<pw.Document> _invoiceDoc({
     required Sale sale,
