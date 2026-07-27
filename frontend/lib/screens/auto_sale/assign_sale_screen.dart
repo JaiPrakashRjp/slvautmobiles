@@ -73,15 +73,24 @@ class _AssignSaleView extends StatelessWidget {
       context,
       title: 'Assign vehicle',
       searchable: true,
-      searchHint: 'Search by reg number',
+      searchHint: 'Search by chassis / reg number',
       selected: vm.vehicleId,
-      options: vm.availableVehicles
-          .map((v) => SheetOption(
-                value: v.id,
-                label: v.displayLabel,
-                subtitle: v.type.label,
-              ))
-          .toList(),
+      options: vm.availableVehicles.map((v) {
+        // Identify by chassis number first, else the vehicle (reg) number, else
+        // the VEH id. Never the model (avoids a mistyped model like "2026").
+        final chassis = v.chassisNo?.trim() ?? '';
+        final reg = v.regNo.trim();
+        final primary = chassis.isNotEmpty
+            ? chassis
+            : (reg.isNotEmpty ? reg : v.displayId);
+        // Second line: the reg number when we led with chassis, plus the type —
+        // both are searchable (the sheet matches label + subtitle).
+        final sub = [
+          if (chassis.isNotEmpty && reg.isNotEmpty) reg,
+          v.type.label,
+        ].join(' · ');
+        return SheetOption(value: v.id, label: primary, subtitle: sub);
+      }).toList(),
     );
     if (picked != null) vm.vehicleId = picked;
   }

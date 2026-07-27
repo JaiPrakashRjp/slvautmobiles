@@ -340,6 +340,11 @@ class RealPdfService implements PdfService {
   }) async {
     final logo = await _loadLogo();
     final branch = vehicle.branch?.label ?? customer.branch?.label;
+    // Approved payments (installments + manual), oldest first — the collection
+    // history shown under the invoice, with the remaining balance below it.
+    final paid = sale.payments.where((p) => p.isApproved).toList()
+      ..sort((a, b) => (a.paidAt ?? DateTime(2000))
+          .compareTo(b.paidAt ?? DateTime(2000)));
     final doc = pw.Document();
     doc.addPage(pw.Page(
       pageFormat: PdfPageFormat.a4,
@@ -411,6 +416,25 @@ class RealPdfService implements PdfService {
                       _row('Total price', _curr(sale.salePrice!)),
                     _row('Advance received', _curr(sale.advance)),
                   ]),
+
+                  // Payment history — approved collections (Date · Type ·
+                  // Amount). Shown only when there are recorded payments.
+                  if (paid.isNotEmpty) ...[
+                    _label('PAYMENT HISTORY'),
+                    _card([
+                      for (final p in paid)
+                        _row(
+                          [
+                            if (p.paidAt != null) Formatters.date(p.paidAt!),
+                            p.kind == 'early_payoff'
+                                ? 'Payoff'
+                                : (p.isManual ? 'Manual' : 'Installment'),
+                          ].join('  ·  '),
+                          _curr(p.amount),
+                        ),
+                    ]),
+                  ],
+
                   // Balance drops as installments are paid.
                   _totalBar('BALANCE', _curr(sale.remainingAmount)),
 
