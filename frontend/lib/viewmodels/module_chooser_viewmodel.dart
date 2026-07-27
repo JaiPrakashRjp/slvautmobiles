@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../config/app_config.dart';
 import '../controllers/auth_controller.dart';
 import '../models/enums.dart';
 
@@ -31,19 +32,14 @@ class ModuleChooserViewModel extends ChangeNotifier {
       subtitle: 'Sell and track three-wheelers',
       icon: Icons.electric_rickshaw,
     ),
-    // Hidden for this release — Loan management & Auto rental not launched yet.
-    // ModuleTile(
-    //   module: AppModule.loans,
-    //   title: 'Loan management',
-    //   subtitle: 'Track loans and EMIs',
-    //   icon: Icons.account_balance_wallet_outlined,
-    // ),
-    // ModuleTile(
-    //   module: AppModule.rentals,
-    //   title: 'Auto rental collection',
-    //   subtitle: 'Manage rentals and weekly collection',
-    //   icon: Icons.vpn_key_outlined,
-    // ),
+    // Auto rental — shown on dev only until it's launched on prod (gated below).
+    // Loan management stays hidden (not built yet).
+    ModuleTile(
+      module: AppModule.rentals,
+      title: 'Auto rental collection',
+      subtitle: 'Rent vehicles and collect rent',
+      icon: Icons.vpn_key_outlined,
+    ),
     ModuleTile(
       module: AppModule.users,
       title: 'User management',
@@ -54,6 +50,10 @@ class ModuleChooserViewModel extends ChangeNotifier {
 
   String get greetingName => _auth.currentUser?.name ?? '';
 
-  List<ModuleTile> get tiles =>
-      _all.where((t) => _auth.currentUser?.canAccess(t.module) ?? false).toList();
+  List<ModuleTile> get tiles => _all.where((t) {
+        if (!(_auth.currentUser?.canAccess(t.module) ?? false)) return false;
+        // Rental is dev-only until launched on prod.
+        if (t.module == AppModule.rentals && !AppConfig.isDev) return false;
+        return true;
+      }).toList();
 }
