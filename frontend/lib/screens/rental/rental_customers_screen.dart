@@ -16,6 +16,7 @@ import '../../widgets/gold_create_button.dart';
 import '../../widgets/icon_button_soft.dart';
 import '../../widgets/status_pill.dart';
 import '../auto_sale/create_customer_screen.dart';
+import 'rental_customer_rentals_screen.dart';
 
 /// Rental customers — the rental module's own independent customer list
 /// (module = rental). Same create / edit / KYC / approval functionality as the
@@ -149,6 +150,12 @@ class _RentalCustomerCard extends StatelessWidget {
     ));
   }
 
+  Future<void> _openDetail(BuildContext context) {
+    return Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => RentalCustomerRentalsScreen(customerId: customer.id),
+    ));
+  }
+
   Future<void> _confirmDelete(BuildContext context) async {
     final service = context.read<RentalCustomerService>();
     final ok = await ConfirmationDialog.show(
@@ -171,7 +178,7 @@ class _RentalCustomerCard extends StatelessWidget {
     final canReview = auth.isSuperAdmin && customer.isPending;
 
     return AppCard(
-      onTap: () => _edit(context),
+      onTap: () => _openDetail(context),
       accentLeft: customer.isRejected,
       accentColor: customer.isRejected ? c.danger : null,
       child: Column(
@@ -257,9 +264,9 @@ class _RentalCustomerCard extends StatelessWidget {
             children: [
               IconButtonSoft(
                 icon: Icons.visibility_outlined,
-                tooltip: 'View / edit',
+                tooltip: 'View rentals',
                 compact: true,
-                onPressed: () => _edit(context),
+                onPressed: () => _openDetail(context),
               ),
               if (canModify) ...[
                 const SizedBox(width: AppSpacing.sm),

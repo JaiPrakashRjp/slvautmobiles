@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../../models/rental_agreement.dart';
 import '../../services/api_rental_service.dart';
 import '../../services/rental_customer_service.dart';
 import '../../services/rental_vehicle_service.dart';
@@ -22,10 +23,16 @@ class AssignRentScreen extends StatefulWidget {
     super.key,
     required this.customerId,
     required this.vehicleId,
+    this.existing,
   });
 
   final String customerId;
   final String vehicleId;
+
+  /// When set, the screen edits this rental instead of creating a new one
+  /// (vehicle/customer fixed; only the terms change). Admin edit → super-admin
+  /// approval; super admin → applies at once.
+  final RentalAgreement? existing;
 
   @override
   State<AssignRentScreen> createState() => _AssignRentScreenState();
@@ -38,9 +45,18 @@ class _AssignRentScreenState extends State<AssignRentScreen> {
   DateTime? _startDate = DateTime.now();
   bool _loading = false;
 
+  bool get _isEditing => widget.existing != null;
+
   @override
   void initState() {
     super.initState();
+    final e = widget.existing;
+    if (e != null) {
+      _totalCtrl.text = e.totalAmount == 0 ? '' : '${e.totalAmount}';
+      _advanceCtrl.text = e.advance == 0 ? '' : '${e.advance}';
+      _remarksCtrl.text = e.remarks ?? '';
+      _startDate = e.startDate;
+    }
     _totalCtrl.addListener(() => setState(() {}));
     _advanceCtrl.addListener(() => setState(() {}));
   }
@@ -82,14 +98,32 @@ class _AssignRentScreenState extends State<AssignRentScreen> {
     final vehicles = context.read<RentalVehicleService>();
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
+    final remarks =
+        _remarksCtrl.text.trim().isEmpty ? null : _remarksCtrl.text.trim();
     try {
+      if (_isEditing) {
+        final pending = await rentals.editRental(
+          widget.existing!.id,
+          totalAmount: _total,
+          advance: _advance,
+          startDate: _startDate,
+          remarks: remarks,
+        );
+        navigator.pop();
+        messenger.showSnackBar(SnackBar(
+          content: Text(pending
+              ? 'Edit submitted. Awaiting Super admin approval.'
+              : 'Changes saved.'),
+        ));
+        return;
+      }
       final rental = await rentals.create(
         vehicleId: widget.vehicleId,
         customerId: widget.customerId,
         totalAmount: _total,
         advance: _advance,
         startDate: _startDate,
-        remarks: _remarksCtrl.text.trim().isEmpty ? null : _remarksCtrl.text.trim(),
+        remarks: remarks,
       );
       await vehicles.refresh();
       navigator.pop();
@@ -100,7 +134,8 @@ class _AssignRentScreenState extends State<AssignRentScreen> {
       ));
     } catch (e) {
       if (mounted) setState(() => _loading = false);
-      messenger.showSnackBar(SnackBar(content: Text('Could not rent: $e')));
+      messenger.showSnackBar(SnackBar(
+          content: Text('Could not ${_isEditing ? 'save' : 'rent'}: $e')));
     }
   }
 
@@ -115,7 +150,7 @@ class _AssignRentScreenState extends State<AssignRentScreen> {
 
     return Scaffold(
       backgroundColor: c.bgCanvas,
-      appBar: AppBar(title: const Text('Rent vehicle')),
+      appBar: AppBar(title: Text(_isEditing ? 'Edit rental' : 'Rent vehicle')),
       body: SafeArea(
         child: ResponsiveBody(
           maxFormWidth: 520,
@@ -179,7 +214,9 @@ class _AssignRentScreenState extends State<AssignRentScreen> {
               ),
               const SizedBox(height: AppSpacing.xxl),
               PrimaryButton(
-                label: _loading ? 'Saving…' : 'Confirm rent',
+                label: _loading
+                    ? 'Saving…'
+                    : (_isEditing ? 'Save changes' : 'Confirm rent'),
                 onPressed: _loading ? null : _confirm,
               ),
             ],

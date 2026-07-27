@@ -23,6 +23,8 @@ import '../auto_sale/create_customer_screen.dart';
 import 'assign_rent_screen.dart';
 import 'rent_detail_screen.dart';
 import 'rental_customers_screen.dart';
+import 'rental_daily_report_screen.dart';
+import 'rental_monthly_report_screen.dart';
 import 'rental_vehicle_form_screen.dart';
 
 /// Auto Rental module shell — Vehicle / Customer tabs (mockups 11 & 14).
@@ -124,6 +126,20 @@ class _RentalVehiclesTabState extends State<_RentalVehiclesTab> {
         title: const Text('Auto rental system'),
         automaticallyImplyLeading: false,
         actions: [
+          IconButton(
+            tooltip: 'Daily collections',
+            icon: const Icon(Icons.assignment_outlined),
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => const RentalDailyReportScreen(),
+            )),
+          ),
+          IconButton(
+            tooltip: 'Rental report',
+            icon: const Icon(Icons.insert_chart_outlined),
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => const RentalMonthlyReportScreen(),
+            )),
+          ),
           GoldCreateButton(
             iconOnly: true,
             onPressed: () => Navigator.of(context).push(

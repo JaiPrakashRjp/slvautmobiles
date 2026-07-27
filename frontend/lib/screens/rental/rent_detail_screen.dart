@@ -23,6 +23,7 @@ import '../../widgets/role_gate_banner.dart';
 import '../../widgets/status_pill.dart';
 import '../document_preview_screen.dart';
 import '../pdf_preview_screen.dart';
+import 'assign_rent_screen.dart';
 
 /// Full rental detail: summary, rent invoice, collections (reminders + manual
 /// payment), payment history, confirm-complete, seize, and approval banners.
@@ -423,6 +424,23 @@ class _RentDetailScreenState extends State<RentDetailScreen> {
       appBar: AppBar(
         title: const Text('Rental detail'),
         actions: [
+          if (canModify &&
+              !r.isEditPending &&
+              (r.rentalStatus == 'active' || r.rentalStatus == 'completed'))
+            IconButton(
+              icon: const Icon(Icons.edit_outlined),
+              tooltip: 'Edit rental',
+              onPressed: () async {
+                await Navigator.of(context).push(MaterialPageRoute<void>(
+                  builder: (_) => AssignRentScreen(
+                    customerId: r.customerId,
+                    vehicleId: r.vehicleId,
+                    existing: r,
+                  ),
+                ));
+                if (mounted) _refresh();
+              },
+            ),
           if (r != null && customer != null && vehicle != null)
             IconButton(
               icon: const Icon(Icons.receipt_long_outlined),
