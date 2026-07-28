@@ -167,7 +167,13 @@ class _RentalVehiclesTabState extends State<_RentalVehiclesTab> {
                 ),
               ),
               Expanded(
-                child: RefreshIndicator(
+                child: GestureDetector(
+                  onHorizontalDragEnd: (d) {
+                    final vel = d.primaryVelocity ?? 0;
+                    if (vel < -250 && _tab == 0) setState(() => _tab = 1);
+                    if (vel > 250 && _tab == 1) setState(() => _tab = 0);
+                  },
+                  child: RefreshIndicator(
                   onRefresh: vehiclesSvc.refresh,
                   child: (vehiclesSvc.loading && list.isEmpty)
                       ? const Center(child: CircularProgressIndicator())
@@ -183,6 +189,16 @@ class _RentalVehiclesTabState extends State<_RentalVehiclesTab> {
                                       : 'No rented vehicles',
                                   subtitle:
                                       'Tap “+” to add a rental vehicle.',
+                                  ctaLabel:
+                                      _tab == 0 ? 'Add vehicle' : null,
+                                  onCta: _tab == 0
+                                      ? () => Navigator.of(context).push(
+                                            MaterialPageRoute(
+                                              builder: (_) =>
+                                                  const RentalVehicleFormScreen(),
+                                            ),
+                                          )
+                                      : null,
                                 ),
                               ],
                             )
@@ -202,6 +218,7 @@ class _RentalVehiclesTabState extends State<_RentalVehiclesTab> {
                                   ),
                               ],
                             ),
+                  ),
                 ),
               ),
             ],

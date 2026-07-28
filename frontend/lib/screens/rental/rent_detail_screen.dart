@@ -615,7 +615,7 @@ class _RentDetailScreenState extends State<RentDetailScreen> {
                     : (vehicle.chassisNo ?? '—'),
                 c),
           if (r.startDate != null)
-            _row('Start date', Formatters.date(r.startDate!), c),
+            _row('Purchase date', Formatters.date(r.startDate!), c),
           _row('Total', Formatters.currency(r.totalAmount), c),
           _row('Advance', Formatters.currency(r.advance), c),
           _row('Remaining',

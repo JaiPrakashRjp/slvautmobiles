@@ -199,7 +199,7 @@ class _AssignRentScreenState extends State<AssignRentScreen> {
               ),
               const SizedBox(height: AppSpacing.lg),
               PickerField(
-                label: 'Start date',
+                label: 'Purchase date',
                 leadingIcon: Icons.calendar_today_outlined,
                 placeholder: 'Select date',
                 value: _startDate == null ? null : Formatters.date(_startDate!),

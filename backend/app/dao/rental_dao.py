@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.module import Module
+from app.models.reminder_log import ReminderLog
 from app.models.rental import Rental
 from app.models.rental_installment import RentalInstallment
 from app.models.rental_payment import RentalPayment
@@ -66,3 +67,40 @@ class RentalDAO:
         db.add(payment)
         db.flush()
         return payment
+
+    # ── reminders ────────────────────────────────────────────────────────────
+    @staticmethod
+    def active_rentals_with_unpaid(db: Session) -> list[Rental]:
+        """Approved, active rentals that still have an unpaid rent installment."""
+        from app.models.enums import EntityStatus, InstallmentStatus, RentalLifecycle
+
+        stmt = (
+            RentalDAO._with_relations(select(Rental))
+            .where(Rental.rental_status == RentalLifecycle.active)
+            .where(Rental.status == EntityStatus.active)
+            .where(
+                Rental.installments.any(
+                    RentalInstallment.status != InstallmentStatus.paid
+                )
+            )
+        )
+        return list(db.scalars(stmt).all())
+
+    @staticmethod
+    def find_reminder(
+        db: Session, *, rental_installment_id, recipient_type, due_date, recipient_phone
+    ) -> ReminderLog | None:
+        return db.scalar(
+            select(ReminderLog).where(
+                ReminderLog.rental_installment_id == rental_installment_id,
+                ReminderLog.recipient_type == recipient_type,
+                ReminderLog.due_date == due_date,
+                ReminderLog.recipient_phone == recipient_phone,
+            )
+        )
+
+    @staticmethod
+    def add_reminder(db: Session, log: ReminderLog) -> ReminderLog:
+        db.add(log)
+        db.flush()
+        return log

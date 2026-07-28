@@ -44,6 +44,16 @@ class Settings:
     # Approved template used for installment reminders (body vars: name, amount, date).
     WHATSAPP_REMINDER_TEMPLATE: str = os.getenv("WHATSAPP_REMINDER_TEMPLATE", "payment_reminder")
     WHATSAPP_REMINDER_LANG: str = os.getenv("WHATSAPP_REMINDER_LANG", "en_US")
+    # Separate, rental-specific reminder template (rent collections read very
+    # differently from an installment/loan reminder). Same 3 body vars so the
+    # sender stays generic: {{1}} = customer name, {{2}} = rent amount,
+    # {{3}} = due date. Approve a distinct template in Meta and set its name here.
+    WHATSAPP_RENTAL_REMINDER_TEMPLATE: str = os.getenv(
+        "WHATSAPP_RENTAL_REMINDER_TEMPLATE", "rent_reminder"
+    )
+    WHATSAPP_RENTAL_REMINDER_LANG: str = os.getenv(
+        "WHATSAPP_RENTAL_REMINDER_LANG", "en_US"
+    )
 
     @property
     def whatsapp_enabled(self) -> bool:

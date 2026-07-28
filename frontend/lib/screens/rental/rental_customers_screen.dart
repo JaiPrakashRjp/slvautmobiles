@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../controllers/auth_controller.dart';
 import '../../models/customer.dart';
+import '../../services/api_rental_service.dart';
 import '../../services/rental_customer_service.dart';
 import '../../theme/app_colors.dart';
 import '../../utils/app_spacing.dart';
@@ -15,6 +16,7 @@ import '../../widgets/empty_state.dart';
 import '../../widgets/gold_create_button.dart';
 import '../../widgets/icon_button_soft.dart';
 import '../../widgets/status_pill.dart';
+import '../../widgets/tab_bar_navy.dart';
 import '../auto_sale/create_customer_screen.dart';
 import 'rental_customer_rentals_screen.dart';
 
@@ -30,13 +32,17 @@ class RentalCustomersScreen extends StatefulWidget {
 
 class _RentalCustomersScreenState extends State<RentalCustomersScreen> {
   String _query = '';
+  int _tab = 0; // 0 = With vehicle, 1 = Without vehicle
 
   @override
   void initState() {
     super.initState();
-    // Auto-refresh on open so newly-added customers / approvals show.
+    // Auto-refresh on open so newly-added customers / approvals + their rentals
+    // show (rentals decide the With / Without vehicle split).
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) context.read<RentalCustomerService>().refresh();
+      if (!mounted) return;
+      context.read<RentalCustomerService>().refresh();
+      context.read<RentalAgreementService>().refresh();
     });
   }
 
@@ -51,9 +57,21 @@ class _RentalCustomersScreenState extends State<RentalCustomersScreen> {
   Widget build(BuildContext context) {
     final c = context.colors;
     final customers = context.watch<RentalCustomerService>();
+    final rentals = context.watch<RentalAgreementService>();
+
+    // A customer "has a vehicle" when they hold a current rental (active or
+    // completed, not cancelled/seized, and not rejected).
+    final withVehicleIds = <String>{
+      for (final r in rentals.all())
+        if ((r.rentalStatus == 'active' || r.rentalStatus == 'completed') &&
+            r.isActive)
+          r.customerId,
+    };
 
     final q = _query.trim().toLowerCase();
     final list = customers.all().where((cust) {
+      final hasVehicle = withVehicleIds.contains(cust.id);
+      if (_tab == 0 ? !hasVehicle : hasVehicle) return false;
       if (q.isEmpty) return true;
       return cust.fullName.toLowerCase().contains(q) ||
           cust.phone.toLowerCase().contains(q);
@@ -80,7 +98,16 @@ class _RentalCustomersScreenState extends State<RentalCustomersScreen> {
             children: [
               Padding(
                 padding: EdgeInsets.fromLTRB(context.screenHPadding,
-                    AppSpacing.lg, context.screenHPadding, AppSpacing.sm),
+                    AppSpacing.lg, context.screenHPadding, AppSpacing.md),
+                child: TabBarNavy(
+                  tabs: const ['With vehicle', 'Without vehicle'],
+                  index: _tab,
+                  onChanged: (i) => setState(() => _tab = i),
+                ),
+              ),
+              Padding(
+                padding: EdgeInsets.fromLTRB(context.screenHPadding, 0,
+                    context.screenHPadding, AppSpacing.sm),
                 child: TextField(
                   onChanged: (v) => setState(
                       () => _query = v.trim().length >= 3 ? v : ''),
@@ -94,7 +121,13 @@ class _RentalCustomersScreenState extends State<RentalCustomersScreen> {
                 ),
               ),
               Expanded(
-                child: RefreshIndicator(
+                child: GestureDetector(
+                  onHorizontalDragEnd: (d) {
+                    final vel = d.primaryVelocity ?? 0;
+                    if (vel < -250 && _tab == 0) setState(() => _tab = 1);
+                    if (vel > 250 && _tab == 1) setState(() => _tab = 0);
+                  },
+                  child: RefreshIndicator(
                   onRefresh: customers.refresh,
                   child: (customers.loading && list.isEmpty)
                       ? const Center(child: CircularProgressIndicator())
@@ -105,7 +138,9 @@ class _RentalCustomersScreenState extends State<RentalCustomersScreen> {
                                 const SizedBox(height: 60),
                                 EmptyState(
                                   icon: Icons.people_outline,
-                                  title: 'No rental customers yet',
+                                  title: _tab == 0
+                                      ? 'No customers with a vehicle'
+                                      : 'No customers without a vehicle',
                                   subtitle: 'Tap “+” to add a customer.',
                                   ctaLabel: 'Add customer',
                                   onCta: () => _openCreate(context),
@@ -128,6 +163,7 @@ class _RentalCustomersScreenState extends State<RentalCustomersScreen> {
                                   ),
                               ],
                             ),
+                  ),
                 ),
               ),
             ],
