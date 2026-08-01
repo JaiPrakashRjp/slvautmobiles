@@ -12,7 +12,9 @@ class RentalAgreement with GatedEntity {
     required this.id,
     required this.vehicleId,
     required this.customerId,
-    required this.totalAmount,
+    this.rentalType,
+    this.periodAmount = 0,
+    this.totalAmount = 0,
     this.advance = 0,
     this.remainingAmount = 0,
     this.startDate,
@@ -43,10 +45,19 @@ class RentalAgreement with GatedEntity {
   final String vehicleId;
   final String customerId;
 
+  /// Recurring rent cadence: 'weekly' | 'daily' (null = legacy balance rental).
+  String? rentalType;
+
+  /// Rent charged per period (per week or per day) for recurring rentals.
+  int periodAmount;
+
   int totalAmount;
   int advance;
   int remainingAmount;
   DateTime? startDate;
+
+  /// A recurring rent rental (weekly/daily) vs the legacy total/remaining model.
+  bool get isRecurring => rentalType != null;
   String? invoiceNo;
   String? remarks;
 

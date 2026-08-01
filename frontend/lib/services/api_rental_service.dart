@@ -75,7 +75,9 @@ class RentalAgreementService extends ChangeNotifier {
   Future<RentalAgreement> create({
     required String vehicleId,
     required String customerId,
-    required int totalAmount,
+    String? rentalType, // 'weekly' | 'daily' (recurring rent)
+    int? periodAmount, // rent per period
+    int? totalAmount, // legacy balance model only
     int advance = 0,
     DateTime? startDate,
     String? remarks,
@@ -83,7 +85,9 @@ class RentalAgreementService extends ChangeNotifier {
     final body = <String, dynamic>{
       'vehicle_id': int.parse(vehicleId),
       'customer_id': int.parse(customerId),
-      'total_amount': totalAmount,
+      if (rentalType != null) 'rental_type': rentalType,
+      if (periodAmount != null) 'period_amount': periodAmount,
+      if (totalAmount != null) 'total_amount': totalAmount,
       'advance_amount': advance,
       if (startDate != null) 'start_date': _dateStr(startDate),
       if (remarks != null && remarks.isNotEmpty) 'remarks': remarks,
@@ -126,14 +130,18 @@ class RentalAgreementService extends ChangeNotifier {
   // ── Edit ────────────────────────────────────────────────────────────────
   Future<bool> editRental(
     String id, {
-    required int totalAmount,
+    String? rentalType,
+    int? periodAmount,
+    int? totalAmount,
     int advance = 0,
     DateTime? startDate,
     String? remarks,
   }) async {
     final numId = int.tryParse(id) ?? 0;
     final body = <String, dynamic>{
-      'total_amount': totalAmount,
+      if (rentalType != null) 'rental_type': rentalType,
+      if (periodAmount != null) 'period_amount': periodAmount,
+      if (totalAmount != null) 'total_amount': totalAmount,
       'advance_amount': advance,
       'start_date': startDate == null ? null : _dateStr(startDate),
       'remarks': (remarks != null && remarks.isNotEmpty) ? remarks : null,
@@ -177,8 +185,8 @@ class RentalAgreementService extends ChangeNotifier {
 
   Future<void> submitPayment(String installmentId,
       {required int amount,
-      required Uint8List screenshot,
-      required String filename,
+      Uint8List? screenshot,
+      String? filename,
       String? mimeType,
       DateTime? paidOn}) async {
     final j = await _api.postMultipart(
@@ -187,7 +195,7 @@ class RentalAgreementService extends ChangeNotifier {
         'amount': '$amount',
         if (paidOn != null) 'paid_on': _dateStr(paidOn),
       },
-      fileField: 'screenshot',
+      fileField: screenshot == null ? null : 'screenshot',
       filename: filename,
       bytes: screenshot,
       mimeType: mimeType,
@@ -197,8 +205,8 @@ class RentalAgreementService extends ChangeNotifier {
 
   Future<void> submitManualPayment(String rentalId,
       {required int amount,
-      required Uint8List screenshot,
-      required String filename,
+      Uint8List? screenshot,
+      String? filename,
       String? mimeType,
       DateTime? paidOn}) async {
     final j = await _api.postMultipart(
@@ -207,7 +215,7 @@ class RentalAgreementService extends ChangeNotifier {
         'amount': '$amount',
         if (paidOn != null) 'paid_on': _dateStr(paidOn),
       },
-      fileField: 'screenshot',
+      fileField: screenshot == null ? null : 'screenshot',
       filename: filename,
       bytes: screenshot,
       mimeType: mimeType,
@@ -275,6 +283,8 @@ class RentalAgreementService extends ChangeNotifier {
       id: (j['id'] as int).toString(),
       vehicleId: (j['vehicle_id'] as int).toString(),
       customerId: (j['customer_id'] as int).toString(),
+      rentalType: j['rental_type'] as String?,
+      periodAmount: (j['period_amount'] as num?)?.round() ?? 0,
       totalAmount: (j['total_amount'] as num?)?.round() ?? 0,
       advance: (j['advance_amount'] as num?)?.round() ?? 0,
       remainingAmount: (j['remaining_amount'] as num?)?.round() ?? 0,

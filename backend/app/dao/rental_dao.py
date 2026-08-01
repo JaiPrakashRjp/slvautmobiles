@@ -1,7 +1,7 @@
 """Data Access Object for rentals / rent installments / rent payments."""
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.module import Module
@@ -96,6 +96,21 @@ class RentalDAO:
                 ReminderLog.recipient_type == recipient_type,
                 ReminderLog.due_date == due_date,
                 ReminderLog.recipient_phone == recipient_phone,
+            )
+        )
+
+    @staticmethod
+    def find_reminder_on_date(
+        db: Session, *, rental_installment_id, recipient_phone, on_date
+    ) -> ReminderLog | None:
+        """A reminder already logged for this rent installment + renter TODAY.
+        Recurring rent reminds daily until paid, so idempotency is per-day (safe
+        to run the job more than once a day) rather than once-per-installment."""
+        return db.scalar(
+            select(ReminderLog).where(
+                ReminderLog.rental_installment_id == rental_installment_id,
+                ReminderLog.recipient_phone == recipient_phone,
+                func.date(ReminderLog.created_at) == on_date,
             )
         )
 

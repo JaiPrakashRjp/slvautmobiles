@@ -86,6 +86,12 @@ class RentalLifecycle(str, enum.Enum):
     seized = "seized"        # vehicle repossessed from the renter
 
 
+class RentalType(str, enum.Enum):
+    """Recurring rent cadence — drives the reminder interval and roll-forward."""
+    weekly = "weekly"  # rent due every 7 days
+    daily = "daily"    # rent due every day
+
+
 class InstallmentStatus(str, enum.Enum):
     pending = "pending"          # reminder set, not yet acted on
     in_progress = "in_progress"  # an admin took the call (locked)

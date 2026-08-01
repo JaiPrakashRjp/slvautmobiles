@@ -153,25 +153,29 @@ class ApiClient {
     return file.readAsBytes();
   }
 
-  /// Multipart POST for file uploads: [fields] are form text fields and a single
-  /// file is attached under [fileField]. Returns the decoded JSON body.
+  /// Multipart POST for file uploads: [fields] are form text fields and an
+  /// optional single file is attached under [fileField]. The file is omitted
+  /// when [bytes] is null (e.g. a payment recorded without a screenshot).
+  /// Returns the decoded JSON body.
   Future<dynamic> postMultipart(
     String path, {
     required Map<String, String> fields,
-    required String fileField,
-    required String filename,
-    required Uint8List bytes,
+    String? fileField,
+    String? filename,
+    Uint8List? bytes,
     String? mimeType,
   }) async {
     final req = http.MultipartRequest('POST', _uri(path))
       ..headers.addAll(_headers())
-      ..fields.addAll(fields)
-      ..files.add(http.MultipartFile.fromBytes(
+      ..fields.addAll(fields);
+    if (bytes != null && fileField != null) {
+      req.files.add(http.MultipartFile.fromBytes(
         fileField,
         bytes,
-        filename: filename,
+        filename: filename ?? 'file',
         contentType: mimeType != null ? MediaType.parse(mimeType) : null,
       ));
+    }
     final res = await _run(
       () async => http.Response.fromStream(await _client.send(req)),
     );

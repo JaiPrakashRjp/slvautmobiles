@@ -1,16 +1,18 @@
-"""Rental rent-collection reminder engine.
+"""Rental rent-collection reminder engine (recurring rent).
 
-`run()` scans approved, active rentals' unpaid rent installments and, on an
-installment's due date (or the first run after it, if a day was missed), it:
+`run()` scans approved, active rentals' unpaid rent periods and, on/after a
+period's due date, it:
   1. sends the renter a WhatsApp reminder using the RENTAL template (distinct
      from the sale/installment template — rent reads very differently), and
   2. notifies all staff (admins + super admins) via in-app + FCM so they can
      call the renter and collect the rent.
 
-Every WhatsApp attempt (sent or failed) is logged to reminder_logs, idempotently
-(keyed on rental installment + recipient + due_date + phone), so a renter is
-reminded only once per due date. Meant to run daily at 8 AM alongside the sale
-reminders (see app/jobs/run_reminders.py).
+Recurring rent reminds the renter EVERY DAY until they pay (the period rolls
+forward from each payment). Every WhatsApp attempt (sent or failed) is logged to
+reminder_logs, idempotently PER DAY (keyed on rent installment + phone + today),
+so the job is safe to run more than once a day but still nudges daily. Meant to
+run at 5 PM IST (see app/jobs/run_rental_reminders.py) — separate from the 8 AM
+sale reminders.
 """
 from __future__ import annotations
 
@@ -51,17 +53,16 @@ class RentalReminderService:
             for inst in rental.installments:
                 if inst.status == InstallmentStatus.paid:
                     continue
-                # Only on/after the due date (fires on due-day 8 AM; catches up if
-                # the job missed a day). Future installments are skipped.
+                # Only on/after the due date. Future periods are skipped.
                 if (inst.due_date - today).days > 0:
                     continue
-                # Idempotent: one reminder per rent installment + due date + renter.
-                if cust_phone and RentalDAO.find_reminder(
+                # Fire EVERY DAY until paid, but only once per day (safe to run the
+                # job more than once). Idempotent per rent installment + renter + today.
+                if cust_phone and RentalDAO.find_reminder_on_date(
                     db,
                     rental_installment_id=inst.id,
-                    recipient_type=ReminderRecipient.customer,
-                    due_date=inst.due_date,
                     recipient_phone=cust_phone,
+                    on_date=today,
                 ) is not None:
                     continue
 

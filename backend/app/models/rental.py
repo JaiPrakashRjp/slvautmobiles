@@ -20,7 +20,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
-from app.models.enums import EntityStatus, RentalLifecycle, pg_enum
+from app.models.enums import EntityStatus, RentalLifecycle, RentalType, pg_enum
 
 
 class Rental(Base):
@@ -37,7 +37,14 @@ class Rental(Base):
         BigInteger, ForeignKey("customers.id"), nullable=False
     )
 
-    total_amount: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
+    # Recurring rent model: rent is charged per period (weekly/daily) and rolls
+    # forward from each payment. total_amount is nullable (legacy balance model
+    # only); recurring rentals use rental_type + period_amount instead.
+    rental_type: Mapped[RentalType | None] = mapped_column(
+        pg_enum(RentalType, "rental_type")
+    )
+    period_amount: Mapped[float | None] = mapped_column(Numeric(12, 2))
+    total_amount: Mapped[float | None] = mapped_column(Numeric(12, 2))
     advance_amount: Mapped[float] = mapped_column(
         Numeric(12, 2), nullable=False, server_default="0"
     )

@@ -6,7 +6,7 @@ verification notification to the super admins.
 """
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
@@ -19,6 +19,7 @@ from app.models.enums import (
     NotificationEntity,
     PaymentKind,
     RentalLifecycle,
+    RentalType,
 )
 from app.models.rental import Rental
 from app.models.rental_installment import RentalInstallment
@@ -70,6 +71,50 @@ class RentalService:
             vehicle.inventory_status = InventoryStatus.available
             vehicle.is_seized = seized
 
+    # ── Recurring rent schedule ──────────────────────────────────────────────
+    @staticmethod
+    def _interval_days(rental: Rental) -> int:
+        """Days between rent reminders: 7 for weekly, 1 for daily."""
+        return 7 if rental.rental_type == RentalType.weekly else 1
+
+    @staticmethod
+    def _create_first_installment(db: Session, rental: Rental, created_by: int) -> None:
+        """First rent is due one interval after the rental date."""
+        base = rental.start_date or date.today()
+        due = base + timedelta(days=RentalService._interval_days(rental))
+        db.add(
+            RentalInstallment(
+                rental_id=rental.id,
+                module_id=rental.module_id,
+                number=1,
+                due_date=due,
+                amount=rental.period_amount,
+                status=InstallmentStatus.pending,
+                created_by=created_by,
+            )
+        )
+
+    @staticmethod
+    def _roll_next(db: Session, rental: Rental, paid_inst: RentalInstallment) -> None:
+        """After a period is paid, schedule the next one at paid date + interval.
+        Only while the rental is still an active recurring rental."""
+        if rental.rental_type is None or rental.rental_status != RentalLifecycle.active:
+            return
+        base = paid_inst.paid_date or date.today()
+        due = base + timedelta(days=RentalService._interval_days(rental))
+        next_number = max((i.number for i in rental.installments), default=0) + 1
+        db.add(
+            RentalInstallment(
+                rental_id=rental.id,
+                module_id=rental.module_id,
+                number=next_number,
+                due_date=due,
+                amount=rental.period_amount,
+                status=InstallmentStatus.pending,
+                created_by=paid_inst.created_by,
+            )
+        )
+
     # ── Create ───────────────────────────────────────────────────────────────
     @staticmethod
     def create(db: Session, data: RentalCreate, *, actor_role: str, created_by: int) -> Rental:
@@ -89,31 +134,59 @@ class RentalService:
                 status_code=409, detail="This vehicle already has an active rental."
             )
 
-        total = round(float(data.total_amount), 2)
-        if total <= 0:
-            raise HTTPException(status_code=400, detail="Total amount must be greater than 0")
-        advance = round(float(data.advance_amount), 2)
-        if advance < 0 or advance > total:
-            raise HTTPException(
-                status_code=400, detail="Advance cannot exceed the total amount"
-            )
-        remaining = round(total - advance, 2)
+        recurring = data.rental_type is not None
+        advance = round(float(data.advance_amount or 0), 2)
+        if advance < 0:
+            raise HTTPException(status_code=400, detail="Advance cannot be negative")
 
-        rental = Rental(
-            module_id=module_id,
-            vehicle_id=data.vehicle_id,
-            customer_id=data.customer_id,
-            total_amount=total,
-            advance_amount=advance,
-            remaining_amount=remaining,
-            start_date=data.start_date,
-            remarks=data.remarks,
-            rental_status=RentalLifecycle.active,
-            status=data.status or initial_status(actor_role),
-            created_by=created_by,
-        )
+        if recurring:
+            # Recurring rent: per-period amount, no total/remaining countdown.
+            period = round(float(data.period_amount or 0), 2)
+            if period <= 0:
+                raise HTTPException(status_code=400, detail="Rent amount must be greater than 0")
+            rental = Rental(
+                module_id=module_id,
+                vehicle_id=data.vehicle_id,
+                customer_id=data.customer_id,
+                rental_type=data.rental_type,
+                period_amount=period,
+                total_amount=None,
+                advance_amount=advance,
+                remaining_amount=0,
+                start_date=data.start_date,
+                remarks=data.remarks,
+                rental_status=RentalLifecycle.active,
+                status=data.status or initial_status(actor_role),
+                created_by=created_by,
+            )
+        else:
+            # Legacy balance model (total → remaining).
+            total = round(float(data.total_amount or 0), 2)
+            if total <= 0:
+                raise HTTPException(status_code=400, detail="Total amount must be greater than 0")
+            if advance > total:
+                raise HTTPException(
+                    status_code=400, detail="Advance cannot exceed the total amount"
+                )
+            rental = Rental(
+                module_id=module_id,
+                vehicle_id=data.vehicle_id,
+                customer_id=data.customer_id,
+                total_amount=total,
+                advance_amount=advance,
+                remaining_amount=round(total - advance, 2),
+                start_date=data.start_date,
+                remarks=data.remarks,
+                rental_status=RentalLifecycle.active,
+                status=data.status or initial_status(actor_role),
+                created_by=created_by,
+            )
         RentalDAO.add(db, rental)  # flush → id
         rental.invoice_no = f"RENT-{rental.id:04d}"
+
+        # Recurring rentals start their rent schedule at rental date + one interval.
+        if recurring:
+            RentalService._create_first_installment(db, rental, created_by)
 
         # Assign the vehicle only when the rental is active (super admin). An
         # admin's rental is pending, so the vehicle waits until approval.
@@ -166,8 +239,10 @@ class RentalService:
     @staticmethod
     def _edit_payload(data: RentalEdit) -> dict:
         return {
-            "total_amount": float(data.total_amount),
-            "advance_amount": float(data.advance_amount),
+            "rental_type": data.rental_type.value if data.rental_type else None,
+            "period_amount": float(data.period_amount) if data.period_amount is not None else None,
+            "total_amount": float(data.total_amount) if data.total_amount is not None else None,
+            "advance_amount": float(data.advance_amount or 0),
             "start_date": data.start_date.isoformat() if data.start_date else None,
             "remarks": data.remarks,
         }
@@ -184,6 +259,21 @@ class RentalService:
 
     @staticmethod
     def _apply_edit(db: Session, rental: Rental, payload: dict) -> None:
+        if rental.rental_type is not None:
+            # Recurring: update cadence + per-period rent + advance, no balance
+            # recompute. New period_amount applies to future reminders.
+            if payload.get("rental_type"):
+                rental.rental_type = RentalType(payload["rental_type"])
+            if payload.get("period_amount") is not None:
+                period = round(float(payload["period_amount"]), 2)
+                if period <= 0:
+                    raise HTTPException(status_code=400, detail="Rent amount must be greater than 0")
+                rental.period_amount = period
+            rental.advance_amount = round(float(payload.get("advance_amount") or 0), 2)
+            if payload.get("start_date"):
+                rental.start_date = date.fromisoformat(payload["start_date"])
+            rental.remarks = payload.get("remarks")
+            return
         total, advance = RentalService._validate_edit(payload)
         collected = round(
             sum(float(p.amount) for p in rental.payments if p.status == EntityStatus.active),
@@ -206,7 +296,8 @@ class RentalService:
         rental = RentalService.get(db, rental_id)
         RentalService._editable(rental)
         payload = RentalService._edit_payload(data)
-        RentalService._validate_edit(payload)
+        if rental.rental_type is None:
+            RentalService._validate_edit(payload)
         if actor_role == "super_admin":
             RentalService._apply_edit(db, rental, payload)
             rental.pending_edit = None
@@ -252,13 +343,19 @@ class RentalService:
     # ── Completion ───────────────────────────────────────────────────────────
     @staticmethod
     def complete(db: Session, rental_id: int, *, by_user_id: int) -> Rental:
-        """Confirm a fully-collected rental as complete. Only when balance is 0.
-        Frees the vehicle back to the available pool; the rental stays as history."""
+        """End a rental. Recurring rentals can end anytime; legacy balance rentals
+        require a zero balance. Frees the vehicle (→ Not-rented) and moves the
+        customer to Without-vehicle; the rental stays as history."""
         rental = RentalService.get(db, rental_id)
-        if float(rental.remaining_amount) > 0:
+        if rental.rental_type is None and float(rental.remaining_amount) > 0:
             raise HTTPException(status_code=400, detail="Rent still has an outstanding balance.")
         rental.rental_status = RentalLifecycle.completed
         rental.completed_at = datetime.now(timezone.utc)
+        # Close any open rent reminder so it stops showing as due.
+        for inst in rental.installments:
+            if inst.status in (InstallmentStatus.pending, InstallmentStatus.in_progress):
+                inst.status = InstallmentStatus.cancelled
+                inst.cancel_reason = "Rental ended"
         RentalService._release_vehicle(db, rental)
         db.commit()
         return RentalService.get(db, rental_id)
@@ -377,10 +474,14 @@ class RentalService:
             rental.remaining_amount = 0
 
     @staticmethod
-    def _apply_paid(inst: RentalInstallment, rental: Rental, amount, paid_on=None) -> None:
+    def _apply_paid(db: Session, inst: RentalInstallment, rental: Rental, amount, paid_on=None) -> None:
         inst.status = InstallmentStatus.paid
         inst.paid_date = paid_on or date.today()
-        RentalService._reduce_balance(rental, amount)
+        if rental.rental_type is not None:
+            # Recurring: no balance countdown — roll the next period forward.
+            RentalService._roll_next(db, rental, inst)
+        else:
+            RentalService._reduce_balance(rental, amount)
 
     @staticmethod
     def _attach_screenshot(db, payment, screenshot, recorded_by) -> None:
@@ -425,7 +526,7 @@ class RentalService:
         RentalService._attach_screenshot(db, payment, screenshot, recorded_by)
 
         if is_super:
-            RentalService._apply_paid(inst, rental, amount, paid_on=paid_on)
+            RentalService._apply_paid(db, inst, rental, amount, paid_on=paid_on)
         else:
             NotificationService.create_verification(
                 db,
@@ -491,7 +592,7 @@ class RentalService:
             )
             if inst is not None and inst.status != InstallmentStatus.paid:
                 RentalService._apply_paid(
-                    inst, rental, payment.amount,
+                    db, inst, rental, payment.amount,
                     paid_on=payment.paid_at.date() if payment.paid_at else None,
                 )
             elif payment.installment_id is None:

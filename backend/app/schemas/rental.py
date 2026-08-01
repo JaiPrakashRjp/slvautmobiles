@@ -8,6 +8,7 @@ from app.models.enums import (
     InstallmentStatus,
     PaymentKind,
     RentalLifecycle,
+    RentalType,
 )
 
 
@@ -15,8 +16,12 @@ class RentalCreate(BaseModel):
     module_code: str = "rental"
     vehicle_id: int
     customer_id: int
-    total_amount: float
-    advance_amount: float = 0  # advance received now
+    # Recurring rent: type (weekly/daily) + per-period amount. total_amount is
+    # legacy/optional (balance model only).
+    rental_type: RentalType | None = None
+    period_amount: float | None = None
+    total_amount: float | None = None
+    advance_amount: float = 0  # advance received now (recorded only)
     start_date: date | None = None
     remarks: str | None = None
     status: EntityStatus | None = None  # optional override; else from role
@@ -25,7 +30,9 @@ class RentalCreate(BaseModel):
 class RentalEdit(BaseModel):
     """Editable fields of a rental. Super admin applies at once; admin's is held
     pending until a super admin approves."""
-    total_amount: float
+    rental_type: RentalType | None = None
+    period_amount: float | None = None
+    total_amount: float | None = None
     advance_amount: float = 0
     start_date: date | None = None
     remarks: str | None = None
@@ -73,7 +80,9 @@ class RentalOut(BaseModel):
     module_id: int
     vehicle_id: int
     customer_id: int
-    total_amount: float
+    rental_type: RentalType | None = None
+    period_amount: float | None = None
+    total_amount: float | None = None
     advance_amount: float
     remaining_amount: float
     start_date: date | None = None

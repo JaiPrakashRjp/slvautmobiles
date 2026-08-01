@@ -12,19 +12,18 @@ from datetime import datetime, timezone
 from app.db import SessionLocal
 from app.services.doc_expiry_service import DocExpiryService
 from app.services.reminder_service import ReminderService
-from app.services.rental_reminder_service import RentalReminderService
 
 
 def main() -> None:
     db = SessionLocal()
     try:
         created = ReminderService.run(db)
-        rental_created = RentalReminderService.run(db)
+        # Rental rent reminders run separately at 5 PM IST (run_rental_reminders).
         expiries = DocExpiryService.run(db)
         stamp = datetime.now(timezone.utc).isoformat()
         print(
-            f"[{stamp}] reminders: {len(created)} sale + {len(rental_created)} rental "
-            f"WhatsApp reminder(s) dispatched; {expiries} document-expiry alert(s)."
+            f"[{stamp}] reminders: {len(created)} sale WhatsApp reminder(s) "
+            f"dispatched; {expiries} document-expiry alert(s)."
         )
     finally:
         db.close()

@@ -16,8 +16,11 @@ import '../../widgets/app_text_field.dart';
 import '../../widgets/picker_field.dart';
 import '../../widgets/primary_button.dart';
 
-/// Rent a vehicle to a customer: total, advance, remaining (derived), start
-/// date, remarks. Mirrors the sale assign screen, on the rental services.
+/// Rent a vehicle to a customer on a recurring basis: rental type (weekly/daily),
+/// per-period rent, advance (recorded only), rental date, remarks. The first rent
+/// reminder is scheduled one interval after the rental date; each payment rolls
+/// the next one forward. Admin edit → super-admin approval; super admin → applies
+/// at once.
 class AssignRentScreen extends StatefulWidget {
   const AssignRentScreen({
     super.key,
@@ -30,8 +33,7 @@ class AssignRentScreen extends StatefulWidget {
   final String vehicleId;
 
   /// When set, the screen edits this rental instead of creating a new one
-  /// (vehicle/customer fixed; only the terms change). Admin edit → super-admin
-  /// approval; super admin → applies at once.
+  /// (vehicle/customer fixed; only the terms change).
   final RentalAgreement? existing;
 
   @override
@@ -39,9 +41,10 @@ class AssignRentScreen extends StatefulWidget {
 }
 
 class _AssignRentScreenState extends State<AssignRentScreen> {
-  final _totalCtrl = TextEditingController();
+  final _rentCtrl = TextEditingController();
   final _advanceCtrl = TextEditingController();
   final _remarksCtrl = TextEditingController();
+  String _type = 'weekly'; // 'weekly' | 'daily'
   DateTime? _startDate = DateTime.now();
   bool _loading = false;
 
@@ -52,26 +55,24 @@ class _AssignRentScreenState extends State<AssignRentScreen> {
     super.initState();
     final e = widget.existing;
     if (e != null) {
-      _totalCtrl.text = e.totalAmount == 0 ? '' : '${e.totalAmount}';
+      _type = e.rentalType ?? 'weekly';
+      _rentCtrl.text = e.periodAmount == 0 ? '' : '${e.periodAmount}';
       _advanceCtrl.text = e.advance == 0 ? '' : '${e.advance}';
       _remarksCtrl.text = e.remarks ?? '';
       _startDate = e.startDate;
     }
-    _totalCtrl.addListener(() => setState(() {}));
-    _advanceCtrl.addListener(() => setState(() {}));
   }
 
   @override
   void dispose() {
-    _totalCtrl.dispose();
+    _rentCtrl.dispose();
     _advanceCtrl.dispose();
     _remarksCtrl.dispose();
     super.dispose();
   }
 
-  int get _total => int.tryParse(_totalCtrl.text.replaceAll(RegExp(r'[^\d]'), '')) ?? 0;
+  int get _rent => int.tryParse(_rentCtrl.text.replaceAll(RegExp(r'[^\d]'), '')) ?? 0;
   int get _advance => int.tryParse(_advanceCtrl.text.replaceAll(RegExp(r'[^\d]'), '')) ?? 0;
-  int get _remaining => (_total - _advance).clamp(0, 1 << 31);
 
   Future<void> _pickDate() async {
     final d = await showDatePicker(
@@ -85,12 +86,8 @@ class _AssignRentScreenState extends State<AssignRentScreen> {
 
   Future<void> _confirm() async {
     if (_loading) return;
-    if (_total <= 0) {
-      _snack('Enter the total rent amount');
-      return;
-    }
-    if (_advance > _total) {
-      _snack('Advance cannot exceed the total');
+    if (_rent <= 0) {
+      _snack('Enter the rent amount');
       return;
     }
     setState(() => _loading = true);
@@ -104,7 +101,8 @@ class _AssignRentScreenState extends State<AssignRentScreen> {
       if (_isEditing) {
         final pending = await rentals.editRental(
           widget.existing!.id,
-          totalAmount: _total,
+          rentalType: _type,
+          periodAmount: _rent,
           advance: _advance,
           startDate: _startDate,
           remarks: remarks,
@@ -120,7 +118,8 @@ class _AssignRentScreenState extends State<AssignRentScreen> {
       final rental = await rentals.create(
         vehicleId: widget.vehicleId,
         customerId: widget.customerId,
-        totalAmount: _total,
+        rentalType: _type,
+        periodAmount: _rent,
         advance: _advance,
         startDate: _startDate,
         remarks: remarks,
@@ -147,6 +146,7 @@ class _AssignRentScreenState extends State<AssignRentScreen> {
     final c = context.colors;
     final customer = context.read<RentalCustomerService>().byId(widget.customerId);
     final vehicle = context.read<RentalVehicleService>().byId(widget.vehicleId);
+    final rentLabel = _type == 'weekly' ? 'Weekly rent' : 'Daily rent';
 
     return Scaffold(
       backgroundColor: c.bgCanvas,
@@ -175,31 +175,37 @@ class _AssignRentScreenState extends State<AssignRentScreen> {
                 ),
               ),
               const SizedBox(height: AppSpacing.lg),
-              _money('Total rent amount', _totalCtrl),
-              const SizedBox(height: AppSpacing.md),
-              _money('Advance received', _advanceCtrl),
-              const SizedBox(height: AppSpacing.md),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.lg, vertical: AppSpacing.md),
-                decoration: BoxDecoration(
-                  color: c.bgContainer,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: c.borderColor),
-                ),
-                child: Row(
-                  children: [
-                    Text('Remaining',
-                        style: AppTextStyles.label.copyWith(color: c.textSub)),
-                    const Spacer(),
-                    Text(Formatters.currency(_remaining),
-                        style: AppTextStyles.h2.copyWith(color: c.textMain)),
-                  ],
-                ),
+              Text('Rental type',
+                  style: AppTextStyles.label.copyWith(color: c.textSub)),
+              const SizedBox(height: AppSpacing.xs),
+              SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(
+                      value: 'weekly',
+                      label: Text('Weekly'),
+                      icon: Icon(Icons.calendar_view_week_outlined)),
+                  ButtonSegment(
+                      value: 'daily',
+                      label: Text('Daily'),
+                      icon: Icon(Icons.today_outlined)),
+                ],
+                selected: {_type},
+                onSelectionChanged: (s) => setState(() => _type = s.first),
               ),
               const SizedBox(height: AppSpacing.lg),
+              _money(rentLabel, _rentCtrl),
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                _type == 'weekly'
+                    ? 'Reminder every 7 days from the rental date until paid.'
+                    : 'Reminder every day from the rental date until paid.',
+                style: AppTextStyles.caption.copyWith(color: c.textSub),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              _money('Advance received', _advanceCtrl),
+              const SizedBox(height: AppSpacing.lg),
               PickerField(
-                label: 'Purchase date',
+                label: 'Rental date',
                 leadingIcon: Icons.calendar_today_outlined,
                 placeholder: 'Select date',
                 value: _startDate == null ? null : Formatters.date(_startDate!),

@@ -51,8 +51,11 @@ class Settings:
     WHATSAPP_RENTAL_REMINDER_TEMPLATE: str = os.getenv(
         "WHATSAPP_RENTAL_REMINDER_TEMPLATE", "rent_reminder"
     )
+    # NOTE: the approved rent_reminder template in Meta is language "en"
+    # (not "en_US" like payment_reminder). A mismatch here → Meta error 132001
+    # and every rental reminder logs as failed. Verified via a live test send.
     WHATSAPP_RENTAL_REMINDER_LANG: str = os.getenv(
-        "WHATSAPP_RENTAL_REMINDER_LANG", "en_US"
+        "WHATSAPP_RENTAL_REMINDER_LANG", "en"
     )
 
     @property

@@ -59,13 +59,12 @@ class _RentalCustomersScreenState extends State<RentalCustomersScreen> {
     final customers = context.watch<RentalCustomerService>();
     final rentals = context.watch<RentalAgreementService>();
 
-    // A customer "has a vehicle" when they hold a current rental (active or
-    // completed, not cancelled/seized, and not rejected).
+    // A customer "has a vehicle" only while a rental is currently ACTIVE. Once
+    // the rental ends (completed/seized), the customer moves to Without-vehicle
+    // (their rental history is still kept on their profile).
     final withVehicleIds = <String>{
       for (final r in rentals.all())
-        if ((r.rentalStatus == 'active' || r.rentalStatus == 'completed') &&
-            r.isActive)
-          r.customerId,
+        if (r.rentalStatus == 'active' && r.isActive) r.customerId,
     };
 
     final q = _query.trim().toLowerCase();

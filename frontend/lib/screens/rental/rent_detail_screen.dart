@@ -109,6 +109,30 @@ class _RentDetailScreenState extends State<RentDetailScreen> {
     return (ok == true && text.isNotEmpty) ? text : null;
   }
 
+  Future<void> _endRental(RentalAgreement r) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('End rental'),
+        content: const Text(
+            'End this rental? The vehicle returns to the not-rented pool, the '
+            'renter moves to without-vehicle, and rent reminders stop. The '
+            'rental history is kept.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('End rental')),
+        ],
+      ),
+    );
+    if (ok == true) {
+      await _run(() => _rentals.complete(r.id), 'Rental ended.');
+    }
+  }
+
   // ── Collections ────────────────────────────────────────────────────────────
   Future<void> _setReminder(RentalAgreement r) async {
     DateTime date = DateTime.now().add(const Duration(days: 5));
@@ -191,7 +215,7 @@ class _RentDetailScreenState extends State<RentDetailScreen> {
     String title, {
     required int? amount,
     required Future<void> Function(
-            int amt, Uint8List bytes, String name, String? mime, DateTime paidOn)
+            int amt, Uint8List? bytes, String? name, String? mime, DateTime paidOn)
         onSubmit,
   }) async {
     final amountCtrl = TextEditingController(text: amount == null ? '' : '$amount');
@@ -214,7 +238,8 @@ class _RentDetailScreenState extends State<RentDetailScreen> {
             const SizedBox(height: 12),
             Row(children: [
               Expanded(
-                  child: Text(shot == null ? 'Attach screenshot' : shot!.name,
+                  child: Text(
+                      shot == null ? 'Attach screenshot (optional)' : shot!.name,
                       overflow: TextOverflow.ellipsis)),
               TextButton.icon(
                 onPressed: () async {
@@ -265,13 +290,9 @@ class _RentDetailScreenState extends State<RentDetailScreen> {
       messenger.showSnackBar(const SnackBar(content: Text('Enter an amount')));
       return;
     }
-    if (shot == null) {
-      messenger.showSnackBar(
-          const SnackBar(content: Text('Attach a payment screenshot')));
-      return;
-    }
+    // Screenshot is optional — record the payment with or without it.
     await _run(
-        () => onSubmit(amt, shot!.bytes, shot!.name, shot!.mime, paidOn),
+        () => onSubmit(amt, shot?.bytes, shot?.name, shot?.mime, paidOn),
         _isSuper ? 'Payment recorded.' : 'Payment submitted for approval.');
   }
 
@@ -503,7 +524,12 @@ class _RentDetailScreenState extends State<RentDetailScreen> {
                         ),
                         const SizedBox(height: AppSpacing.lg),
                       ],
-                      if (canModify && r.remainingAmount <= 0 && !r.isCompleted) ...[
+                      // Legacy balance rentals: auto-suggest completion at zero.
+                      // Recurring rentals end explicitly via the End-rental button.
+                      if (canModify &&
+                          !r.isRecurring &&
+                          r.remainingAmount <= 0 &&
+                          !r.isCompleted) ...[
                         _completeBanner(r, c),
                         const SizedBox(height: AppSpacing.lg),
                       ],
@@ -555,6 +581,21 @@ class _RentDetailScreenState extends State<RentDetailScreen> {
                           _reminderTile(r, inst, c, canModify),
                           const SizedBox(height: AppSpacing.sm),
                         ],
+                      // End rental (recurring, active) — vehicle → Not-rented,
+                      // customer → Without-vehicle, reminders stop; history kept.
+                      if (canModify &&
+                          r.isRecurring &&
+                          r.rentalStatus == 'active') ...[
+                        const SizedBox(height: AppSpacing.lg),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton.icon(
+                            onPressed: _busy ? null : () => _endRental(r),
+                            icon: const Icon(Icons.done_all, size: 18),
+                            label: const Text('End rental'),
+                          ),
+                        ),
+                      ],
                       // Seize (active rental only)
                       if (canModify &&
                           r.rentalStatus == 'active' &&
@@ -615,15 +656,25 @@ class _RentDetailScreenState extends State<RentDetailScreen> {
                     : (vehicle.chassisNo ?? '—'),
                 c),
           if (r.startDate != null)
-            _row('Purchase date', Formatters.date(r.startDate!), c),
-          _row('Total', Formatters.currency(r.totalAmount), c),
-          _row('Advance', Formatters.currency(r.advance), c),
-          _row('Remaining',
-              r.remainingAmount > 0
-                  ? Formatters.currency(r.remainingAmount)
-                  : 'Paid',
-              c,
-              highlight: r.remainingAmount > 0),
+            _row('Rental date', Formatters.date(r.startDate!), c),
+          if (r.isRecurring) ...[
+            _row('Type', r.rentalType == 'daily' ? 'Daily' : 'Weekly', c),
+            _row(
+                'Rent',
+                '${Formatters.currency(r.periodAmount)} / '
+                    '${r.rentalType == 'daily' ? 'day' : 'week'}',
+                c),
+            _row('Advance', Formatters.currency(r.advance), c),
+          ] else ...[
+            _row('Total', Formatters.currency(r.totalAmount), c),
+            _row('Advance', Formatters.currency(r.advance), c),
+            _row('Remaining',
+                r.remainingAmount > 0
+                    ? Formatters.currency(r.remainingAmount)
+                    : 'Paid',
+                c,
+                highlight: r.remainingAmount > 0),
+          ],
           _row('Status', r.rentalStatus, c),
           if (r.remarks != null && r.remarks!.isNotEmpty)
             _row('Remarks', r.remarks!, c),
