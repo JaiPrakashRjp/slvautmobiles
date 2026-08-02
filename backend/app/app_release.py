@@ -15,7 +15,7 @@ gate would block every fresh install.
 """
 
 # MUST equal the APK's versionName (the `version:` in frontend/pubspec.yaml).
-LATEST_VERSION = "0.2.17"
+LATEST_VERSION = "0.2.18"
 
 # Where the APK is hosted (nginx serves this). Relative → the app builds the
 # full URL from its API base, so dev and prod each use their own server.

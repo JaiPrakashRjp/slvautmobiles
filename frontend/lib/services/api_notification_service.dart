@@ -24,7 +24,7 @@ class NotificationItem {
   final String type;
   final String title;
   final String message;
-  final String? entityType; // vehicle | customer | sale
+  final String? entityType; // vehicle | customer | sale | rental
   final int? entityId;
   bool isRead;
   final DateTime createdAt;
@@ -92,16 +92,17 @@ class NotificationFeed extends ChangeNotifier {
         // so we don't spam a push for every old pending item.
         _lastPushedId = maxId;
       } else {
-        // Push a system-tray notification only for genuinely NEW unread
-        // verification requests (id above the last one we pushed).
+        // Push a system-tray notification for genuinely NEW unread notifications
+        // (id above the last one we pushed) — approval requests AND reminders
+        // (rent/installment/doc-expiry, which are type 'info'). Previously this
+        // fired only for verification_request, so rent reminders never produced a
+        // tray notification for the admin / super admin.
         for (final n in _items) {
-          if (n.id > baseline &&
-              !n.isRead &&
-              n.type == 'verification_request') {
+          if (n.id > baseline && !n.isRead) {
             unawaited(LocalPushService.show(
               id: n.id,
               title: n.title,
-              body: n.message.isNotEmpty ? n.message : 'Tap to review',
+              body: n.message.isNotEmpty ? n.message : 'Tap to open',
             ));
           }
         }

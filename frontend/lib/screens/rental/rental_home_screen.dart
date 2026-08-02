@@ -25,6 +25,7 @@ import 'rent_detail_screen.dart';
 import 'rental_customers_screen.dart';
 import 'rental_daily_report_screen.dart';
 import 'rental_monthly_report_screen.dart';
+import 'rental_vehicle_details_screen.dart';
 import 'rental_vehicle_form_screen.dart';
 
 /// Auto Rental module shell — Vehicle / Customer tabs (mockups 11 & 14).
@@ -240,6 +241,12 @@ class _RentalVehicleCard extends StatelessWidget {
     ));
   }
 
+  void _openDetails(BuildContext context) {
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => RentalVehicleDetailsScreen(vehicleId: vehicle.id),
+    ));
+  }
+
   /// Rent this vehicle: pick a rental customer (with + new customer), then open
   /// the rent form with the vehicle pre-selected.
   Future<void> _rent(BuildContext context) async {
@@ -298,7 +305,7 @@ class _RentalVehicleCard extends StatelessWidget {
         vehicle.regNo.isNotEmpty ? vehicle.regNo : (vehicle.chassisNo ?? '—');
 
     return AppCard(
-      onTap: () => _edit(context),
+      onTap: () => _openDetails(context),
       accentLeft: vehicle.isRejected,
       accentColor: vehicle.isRejected ? c.danger : null,
       child: Column(
@@ -387,19 +394,20 @@ class _RentalVehicleCard extends StatelessWidget {
               return const SizedBox.shrink();
             }),
           ],
-          const SizedBox(height: AppSpacing.sm),
-          Divider(height: 1, color: c.borderColor),
-          const SizedBox(height: AppSpacing.sm),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              IconButtonSoft(
-                icon: Icons.visibility_outlined,
-                tooltip: 'View / edit',
-                compact: true,
-                onPressed: () => _edit(context),
-              ),
-              if (canModify) ...[
+          // Tapping the card opens the vehicle details; the pencil edits it.
+          if (canModify) ...[
+            const SizedBox(height: AppSpacing.sm),
+            Divider(height: 1, color: c.borderColor),
+            const SizedBox(height: AppSpacing.sm),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                IconButtonSoft(
+                  icon: Icons.edit_outlined,
+                  tooltip: 'Edit vehicle',
+                  compact: true,
+                  onPressed: () => _edit(context),
+                ),
                 const SizedBox(width: AppSpacing.sm),
                 IconButtonSoft(
                   icon: Icons.delete_outline,
@@ -419,8 +427,8 @@ class _RentalVehicleCard extends StatelessWidget {
                   },
                 ),
               ],
-            ],
-          ),
+            ),
+          ],
         ],
       ),
     );

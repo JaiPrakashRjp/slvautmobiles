@@ -18,6 +18,7 @@ import '../widgets/empty_state.dart';
 import 'auto_sale/customer_detail_screen.dart';
 import 'auto_sale/sale_detail_screen.dart';
 import 'auto_sale/vehicle_detail_screen.dart';
+import 'rental/rent_detail_screen.dart';
 import 'users/pending_approvals_screen.dart';
 
 /// Lists the signed-in user's in-app notifications (verification requests).
@@ -68,6 +69,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       case 'sale':
         Navigator.of(context).push(
           MaterialPageRoute(builder: (_) => SaleDetailScreen(saleId: id)),
+        );
+      case 'rental':
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => RentDetailScreen(rentalId: id)),
         );
     }
   }

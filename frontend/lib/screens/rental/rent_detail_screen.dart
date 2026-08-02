@@ -134,61 +134,6 @@ class _RentDetailScreenState extends State<RentDetailScreen> {
   }
 
   // ── Collections ────────────────────────────────────────────────────────────
-  Future<void> _setReminder(RentalAgreement r) async {
-    DateTime date = DateTime.now().add(const Duration(days: 5));
-    final amountCtrl = TextEditingController();
-    final remaining = r.remainingAmount;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setLocal) => AlertDialog(
-          title: const Text('Set reminder'),
-          content: Column(mainAxisSize: MainAxisSize.min, children: [
-            TextField(
-              controller: amountCtrl,
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              decoration: InputDecoration(
-                labelText: 'Amount',
-                prefixText: '₹ ',
-                helperText: remaining > 0 ? 'Remaining: ₹$remaining' : null,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Row(children: [
-              Expanded(child: Text('Due ${Formatters.date(date)}')),
-              TextButton(
-                onPressed: () async {
-                  final picked = await showDatePicker(
-                    context: ctx,
-                    initialDate: date,
-                    firstDate: DateTime(2020),
-                    lastDate: DateTime(2035),
-                  );
-                  if (picked != null) setLocal(() => date = picked);
-                },
-                child: const Text('Pick date'),
-              ),
-            ]),
-          ]),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Cancel')),
-            TextButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('Set')),
-          ],
-        ),
-      ),
-    );
-    final amount = int.tryParse(amountCtrl.text.trim()) ?? 0;
-    amountCtrl.dispose();
-    if (ok != true || amount <= 0 || !mounted) return;
-    await _run(() => _rentals.addReminder(r.id, dueDate: date, amount: amount),
-        'Reminder set.');
-  }
-
   Future<void> _recordPayment(RentalAgreement r, Installment inst) =>
       _payDialog('Record payment',
           amount: inst.amount,
@@ -554,23 +499,14 @@ class _RentDetailScreenState extends State<RentDetailScreen> {
                           style: AppTextStyles.pageTitle.copyWith(color: c.textMain)),
                       if (canModify && !r.isCompleted) ...[
                         const SizedBox(height: AppSpacing.xs),
-                        Row(children: [
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: _busy ? null : () => _manualPay(r),
-                              icon: const Icon(Icons.payments_outlined, size: 18),
-                              label: const Text('Manual pay'),
-                            ),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: _busy ? null : () => _manualPay(r),
+                            icon: const Icon(Icons.payments_outlined, size: 18),
+                            label: const Text('Manual pay'),
                           ),
-                          const SizedBox(width: AppSpacing.sm),
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: _busy ? null : () => _setReminder(r),
-                              icon: const Icon(Icons.add, size: 18),
-                              label: const Text('Set reminder'),
-                            ),
-                          ),
-                        ]),
+                        ),
                       ],
                       const SizedBox(height: AppSpacing.sm),
                       if (r.installments.isEmpty)
@@ -635,6 +571,18 @@ class _RentDetailScreenState extends State<RentDetailScreen> {
     return 'New total ₹$total · advance ₹$adv';
   }
 
+  /// Total rent collected so far — sum of approved payments (excludes advance).
+  int _collectedRent(RentalAgreement r) =>
+      r.payments.where((p) => p.isApproved).fold(0, (s, p) => s + p.amount);
+
+  /// An unpaid, non-cancelled reminder whose due date has already passed.
+  bool _isOverdue(Installment inst) {
+    if (inst.isPaid || inst.isCancelled) return false;
+    final now = DateTime.now();
+    final due = DateTime(inst.dueDate.year, inst.dueDate.month, inst.dueDate.day);
+    return due.isBefore(DateTime(now.year, now.month, now.day));
+  }
+
   Widget _summaryCard(RentalAgreement r, customer, vehicle, AppColors c) {
     return AppCard(
       child: Column(
@@ -665,6 +613,7 @@ class _RentDetailScreenState extends State<RentDetailScreen> {
                     '${r.rentalType == 'daily' ? 'day' : 'week'}',
                 c),
             _row('Advance', Formatters.currency(r.advance), c),
+            _row('Collected', Formatters.currency(_collectedRent(r)), c),
           ] else ...[
             _row('Total', Formatters.currency(r.totalAmount), c),
             _row('Advance', Formatters.currency(r.advance), c),
@@ -760,7 +709,8 @@ class _RentDetailScreenState extends State<RentDetailScreen> {
         Row(children: [
           Expanded(
               child: Text('₹${inst.amount}  ·  due ${Formatters.date(inst.dueDate)}',
-                  style: AppTextStyles.body.copyWith(color: c.textMain))),
+                  style: AppTextStyles.body.copyWith(
+                      color: _isOverdue(inst) ? c.textSub : c.textMain))),
           _chip(inst, pending, c),
         ]),
         if (inst.isCancelled && inst.cancelReason != null) ...[
@@ -787,6 +737,9 @@ class _RentDetailScreenState extends State<RentDetailScreen> {
       color = c.primary;
     } else if (inst.isCancelled) {
       label = 'Cancelled';
+      color = c.textSub;
+    } else if (_isOverdue(inst)) {
+      label = 'Not paid';
       color = c.textSub;
     } else {
       label = 'Pending';
