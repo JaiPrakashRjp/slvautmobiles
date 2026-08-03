@@ -245,6 +245,26 @@ def reject_seize(
     return RentalService.reject_seize(db, rental_id, reason, by_user_id=current_user.id)
 
 
+@router.post("/{rental_id}/seize/cancel", response_model=RentalOut)
+def cancel_seize(
+    rental_id: int,
+    remarks: str = Query(..., min_length=1),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return RentalService.cancel_seize(db, rental_id, remarks, by_user_id=current_user.id)
+
+
+@router.post("/{rental_id}/seize/confirm", response_model=RentalOut)
+def confirm_seize(
+    rental_id: int,
+    remarks: str = Query(..., min_length=1),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return RentalService.confirm_seize(db, rental_id, remarks, by_user_id=current_user.id)
+
+
 @router.delete("/{rental_id}", status_code=204)
 def delete_rental(
     rental_id: int,

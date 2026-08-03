@@ -415,6 +415,42 @@ class RentalService:
         rental.seized_at = None
         rental.seized_by = None
         rental.seize_reason = None
+        rental.seize_cancel_remarks = reason
+        db.commit()
+        return RentalService.get(db, rental_id)
+
+    @staticmethod
+    def cancel_seize(db: Session, rental_id: int, remarks: str, *, by_user_id: int) -> Rental:
+        """Cancel an active seize: return the vehicle to the renter and reactivate
+        the rental. Only valid while the seize is in the active 'seized' stage."""
+        rental = RentalService.get(db, rental_id)
+        if rental.seize_stage != "seized":
+            raise HTTPException(status_code=400, detail="No active seize to cancel.")
+        rental.rental_status = RentalLifecycle.active
+        rental.seize_stage = None
+        rental.seize_cancel_remarks = remarks
+        rental.seized_at = None
+        rental.seized_by = None
+        rental.seize_reason = None
+        # Re-assign the vehicle back to the renter (clears the seized badge).
+        RentalService._assign_vehicle(db, rental)
+        db.commit()
+        return RentalService.get(db, rental_id)
+
+    @staticmethod
+    def confirm_seize(db: Session, rental_id: int, remarks: str, *, by_user_id: int) -> Rental:
+        """Finalise an active seize: the vehicle becomes a plain available vehicle
+        (badge cleared); the seized rental stays as history."""
+        rental = RentalService.get(db, rental_id)
+        if rental.seize_stage != "seized":
+            raise HTTPException(status_code=400, detail="No active seize to confirm.")
+        rental.seize_stage = "confirmed"
+        rental.seize_confirmed_at = datetime.now(timezone.utc)
+        rental.seize_confirmed_by = by_user_id
+        rental.seize_confirm_remarks = remarks
+        vehicle = db.get(Vehicle, rental.vehicle_id)
+        if vehicle is not None:
+            vehicle.is_seized = False  # badge cleared — now a normal free vehicle
         db.commit()
         return RentalService.get(db, rental_id)
 

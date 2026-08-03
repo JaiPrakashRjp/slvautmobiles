@@ -452,6 +452,10 @@ class _RentDetailScreenState extends State<RentDetailScreen> {
                         ),
                         const SizedBox(height: AppSpacing.lg),
                       ],
+                      if (canModify && r.isSeizeActive) ...[
+                        _seizeActiveBanner(r, c),
+                        const SizedBox(height: AppSpacing.lg),
+                      ],
                       if (r.isEditPending) ...[
                         _approvalBanner(
                           'Edit pending approval',
@@ -812,6 +816,70 @@ class _RentDetailScreenState extends State<RentDetailScreen> {
             label: const Text('Confirm complete rent'),
           ),
         ),
+      ]),
+    );
+  }
+
+  /// Active seizure — the vehicle is repossessed but not finalised. Cancel returns
+  /// it to the renter (rental resumes); Confirm finalises it (vehicle freed).
+  Widget _seizeActiveBanner(RentalAgreement r, AppColors c) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: c.danger.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: c.danger.withValues(alpha: 0.5)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Icon(Icons.gavel_rounded, color: c.danger, size: 20),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+              child: Text('Vehicle seized',
+                  style: AppTextStyles.bodyStrong.copyWith(color: c.textMain))),
+        ]),
+        if (r.seizeReason != null && r.seizeReason!.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Text(r.seizeReason!,
+              style: AppTextStyles.caption.copyWith(color: c.textSub)),
+        ],
+        const SizedBox(height: 4),
+        Text('Cancel to return the vehicle to the renter, or confirm to finalise.',
+            style: AppTextStyles.caption.copyWith(color: c.textSub)),
+        const SizedBox(height: AppSpacing.sm),
+        Row(children: [
+          Expanded(
+            child: OutlinedButton(
+              onPressed: _busy
+                  ? null
+                  : () async {
+                      final remarks = await _askReason('Cancel seize',
+                          'The vehicle returns to the renter. Remarks');
+                      if (remarks != null) {
+                        await _run(() => _rentals.cancelSeize(r.id, remarks),
+                            'Seize cancelled — vehicle returned.');
+                      }
+                    },
+              child: const Text('Cancel seize'),
+            ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: FilledButton(
+              onPressed: _busy
+                  ? null
+                  : () async {
+                      final remarks = await _askReason(
+                          'Confirm seize', 'Finalise the seizure. Remarks');
+                      if (remarks != null) {
+                        await _run(() => _rentals.confirmSeize(r.id, remarks),
+                            'Seizure confirmed.');
+                      }
+                    },
+              child: const Text('Confirm seize'),
+            ),
+          ),
+        ]),
       ]),
     );
   }

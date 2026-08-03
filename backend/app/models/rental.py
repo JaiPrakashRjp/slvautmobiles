@@ -79,8 +79,13 @@ class Rental(Base):
     seized_at: Mapped[datetime | None] = mapped_column()
     seized_by: Mapped[int | None] = mapped_column(BigInteger)
     seize_reason: Mapped[str | None] = mapped_column(Text)
-    # NULL | 'pending' (admin requested, awaiting super admin) | 'seized'
+    # NULL | 'pending' (admin requested, awaiting super admin) | 'seized' (active
+    # — cancel/confirm available) | 'confirmed' (finalised).
     seize_stage: Mapped[str | None] = mapped_column(Text)
+    seize_confirmed_at: Mapped[datetime | None] = mapped_column()
+    seize_confirmed_by: Mapped[int | None] = mapped_column(BigInteger)
+    seize_confirm_remarks: Mapped[str | None] = mapped_column(Text)
+    seize_cancel_remarks: Mapped[str | None] = mapped_column(Text)
 
     # edit approval (admin's edit held until a super admin approves)
     pending_edit: Mapped[dict | None] = mapped_column(JSONB)

@@ -100,6 +100,10 @@ class RentalOut(BaseModel):
     seized_by: int | None = None
     seize_reason: str | None = None
     seize_stage: str | None = None
+    seize_confirmed_at: datetime | None = None
+    seize_confirmed_by: int | None = None
+    seize_confirm_remarks: str | None = None
+    seize_cancel_remarks: str | None = None
     pending_edit: dict | None = None
     edit_stage: str | None = None
     edit_requested_by: int | None = None

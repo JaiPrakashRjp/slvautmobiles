@@ -264,6 +264,18 @@ class RentalAgreementService extends ChangeNotifier {
         query: {'reason': reason}) as Map<String, dynamic>));
   }
 
+  Future<void> cancelSeize(String id, String remarks) async {
+    final numId = int.tryParse(id) ?? 0;
+    _replace(_fromJson(await _api.post('/rentals/$numId/seize/cancel',
+        query: {'remarks': remarks}) as Map<String, dynamic>));
+  }
+
+  Future<void> confirmSeize(String id, String remarks) async {
+    final numId = int.tryParse(id) ?? 0;
+    _replace(_fromJson(await _api.post('/rentals/$numId/seize/confirm',
+        query: {'remarks': remarks}) as Map<String, dynamic>));
+  }
+
   void delete(String id) {
     final numId = int.tryParse(id) ?? 0;
     unawaited(_api.delete('/rentals/$numId').catchError((_) => null));
@@ -311,6 +323,11 @@ class RentalAgreementService extends ChangeNotifier {
       seizedBy: (j['seized_by'] as int?)?.toString(),
       seizeReason: j['seize_reason'] as String?,
       seizeStage: j['seize_stage'] as String?,
+      seizeConfirmedAt: j['seize_confirmed_at'] == null
+          ? null
+          : DateTime.tryParse(j['seize_confirmed_at'] as String),
+      seizeConfirmRemarks: j['seize_confirm_remarks'] as String?,
+      seizeCancelRemarks: j['seize_cancel_remarks'] as String?,
       pendingEdit: (j['pending_edit'] as Map?)?.cast<String, dynamic>(),
       editStage: j['edit_stage'] as String?,
       editRequestedBy: (j['edit_requested_by'] as int?)?.toString(),

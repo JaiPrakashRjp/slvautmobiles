@@ -34,6 +34,9 @@ class RentalAgreement with GatedEntity {
     this.seizedBy,
     this.seizeReason,
     this.seizeStage,
+    this.seizeConfirmedAt,
+    this.seizeConfirmRemarks,
+    this.seizeCancelRemarks,
     this.pendingEdit,
     this.editStage,
     this.editRequestedBy,
@@ -85,10 +88,14 @@ class RentalAgreement with GatedEntity {
   DateTime? seizedAt;
   String? seizedBy;
   String? seizeReason;
-  String? seizeStage; // null | 'pending' | 'seized'
+  String? seizeStage; // null | 'pending' | 'seized' | 'confirmed'
+  DateTime? seizeConfirmedAt;
+  String? seizeConfirmRemarks;
+  String? seizeCancelRemarks;
 
   bool get isSeizePending => seizeStage == 'pending';
   bool get isSeizeActive => seizeStage == 'seized';
+  bool get isSeizeConfirmed => seizeStage == 'confirmed';
 
   // Edit approval (admin edit awaiting super-admin approval)
   Map<String, dynamic>? pendingEdit;
