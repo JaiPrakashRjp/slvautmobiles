@@ -13,6 +13,7 @@ import '../../services/api_rental_service.dart';
 import '../../services/pdf_service.dart';
 import '../../services/rental_customer_service.dart';
 import '../../services/rental_vehicle_service.dart';
+import '../../services/user_service.dart';
 import '../../theme/app_colors.dart';
 import '../../utils/app_spacing.dart';
 import '../../utils/app_text_styles.dart';
@@ -682,26 +683,50 @@ class _RentDetailScreenState extends State<RentDetailScreen> {
     } else if (canModify && !r.isCompleted && !inst.isPaid && !inst.isCancelled) {
       final due = DateTime(inst.dueDate.year, inst.dueDate.month, inst.dueDate.day);
       final today = DateTime.now();
-      if (due.isAfter(DateTime(today.year, today.month, today.day))) {
+      if (inst.isInProgress) {
+        // The call is locked to whoever took it: only the taker gets the
+        // actions; everyone else sees a read-only "taken by …" note.
+        final mine = inst.takenBy != null && inst.takenBy == _uid;
+        if (mine) {
+          actions.add(TextButton(
+              onPressed: _busy ? null : () => _recordPayment(r, inst),
+              child: const Text('Record payment')));
+          actions.add(TextButton(
+              onPressed: _busy
+                  ? null
+                  : () async {
+                      final reason =
+                          await _askReason('Cancel reminder', 'Why deferred?');
+                      if (reason != null) {
+                        await _run(
+                            () => _rentals.cancelReminder(inst.id, reason),
+                            'Reminder cancelled.');
+                      }
+                    },
+              child: const Text('Cancel')));
+        } else {
+          final takerName =
+              context.read<UserService>().byId(inst.takenBy ?? '')?.name;
+          actions.add(Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(Icons.lock_outline, size: 16, color: c.textSub),
+            const SizedBox(width: AppSpacing.xs),
+            Text('Taken by ${takerName ?? 'another admin'}',
+                style: AppTextStyles.caption.copyWith(color: c.textSub)),
+          ]));
+        }
+      } else if (due.isAfter(DateTime(today.year, today.month, today.day))) {
         actions.add(Text('Opens ${Formatters.date(inst.dueDate)}',
             style: AppTextStyles.caption.copyWith(color: c.textSub)));
       } else {
-        actions.add(TextButton(
-            onPressed: _busy ? null : () => _recordPayment(r, inst),
-            child: const Text('Record payment')));
-        actions.add(TextButton(
+        // Open call — anyone can take it; taking it locks the call to them so
+        // two people don't call the same renter (same as the sale system).
+        actions.add(TextButton.icon(
             onPressed: _busy
                 ? null
-                : () async {
-                    final reason =
-                        await _askReason('Cancel reminder', 'Why deferred?');
-                    if (reason != null) {
-                      await _run(
-                          () => _rentals.cancelReminder(inst.id, reason),
-                          'Reminder cancelled.');
-                    }
-                  },
-            child: const Text('Cancel')));
+                : () => _run(
+                    () => _rentals.takeCall(inst.id), 'Call assigned to you.'),
+            icon: const Icon(Icons.headset_mic_outlined, size: 18),
+            label: const Text('Take call')));
       }
     }
     return AppCard(

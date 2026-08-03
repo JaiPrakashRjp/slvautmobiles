@@ -190,8 +190,16 @@ class _AssignRentScreenState extends State<AssignRentScreen> {
                       icon: Icon(Icons.today_outlined)),
                 ],
                 selected: {_type},
-                onSelectionChanged: (s) => setState(() => _type = s.first),
+                // Locked once the rental exists — a reminder is already scheduled
+                // on this cadence. End the rental to switch type.
+                onSelectionChanged:
+                    _isEditing ? null : (s) => setState(() => _type = s.first),
               ),
+              if (_isEditing) ...[
+                const SizedBox(height: AppSpacing.xs),
+                Text('Rental type can’t be changed after the rental starts.',
+                    style: AppTextStyles.caption.copyWith(color: c.textSub)),
+              ],
               const SizedBox(height: AppSpacing.lg),
               _money(rentLabel, _rentCtrl),
               const SizedBox(height: AppSpacing.xs),

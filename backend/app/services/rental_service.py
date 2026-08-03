@@ -269,6 +269,14 @@ class RentalService:
                 if period <= 0:
                     raise HTTPException(status_code=400, detail="Rent amount must be greater than 0")
                 rental.period_amount = period
+                # Reflect the new rent on the current open (unpaid) reminder so the
+                # change shows immediately, not only on the next roll-forward.
+                for inst in rental.installments:
+                    if inst.status in (
+                        InstallmentStatus.pending,
+                        InstallmentStatus.in_progress,
+                    ):
+                        inst.amount = period
             rental.advance_amount = round(float(payload.get("advance_amount") or 0), 2)
             if payload.get("start_date"):
                 rental.start_date = date.fromisoformat(payload["start_date"])
