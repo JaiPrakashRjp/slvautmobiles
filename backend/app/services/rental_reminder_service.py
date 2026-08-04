@@ -11,7 +11,7 @@ Recurring rent reminds the renter EVERY DAY until they pay (the period rolls
 forward from each payment). Every WhatsApp attempt (sent or failed) is logged to
 reminder_logs, idempotently PER DAY (keyed on rent installment + phone + today),
 so the job is safe to run more than once a day but still nudges daily. Meant to
-run at 7 AM IST (see app/jobs/run_rental_reminders.py) — separate from the 8 AM
+run at 8 PM IST (see app/jobs/run_rental_reminders.py) — separate from the 8 AM
 sale reminders.
 """
 from __future__ import annotations

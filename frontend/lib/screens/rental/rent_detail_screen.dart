@@ -146,16 +146,145 @@ class _RentDetailScreenState extends State<RentDetailScreen> {
               mimeType: mime,
               paidOn: paidOn));
 
-  Future<void> _manualPay(RentalAgreement r) =>
-      _payDialog('Manual payment',
-          amount: null,
-          onSubmit: (amt, shot, name, mime, paidOn) =>
-              _rentals.submitManualPayment(r.id,
-                  amount: amt,
-                  screenshot: shot,
-                  filename: name,
-                  mimeType: mime,
-                  paidOn: paidOn));
+  /// Manual pay = pay a specific rent reminder (e.g. the renter pays early,
+  /// before the due date). Shows the open reminder(s) as a radio list; the amount
+  /// must exactly match the selected reminder. Paying it marks the reminder Paid
+  /// and rolls the next period forward from the paid date.
+  Future<void> _manualPay(RentalAgreement r) async {
+    // Payable = unpaid, not cancelled, and not already awaiting approval. In the
+    // recurring model this is the single current (recent) reminder.
+    final payable = r.installments
+        .where((i) =>
+            !i.isPaid && !i.isCancelled && r.pendingPaymentFor(i.id) == null)
+        .toList();
+    if (payable.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No pending reminder to pay.')));
+      return;
+    }
+
+    final c = context.colors;
+    Installment selected = payable.first;
+    final amountCtrl = TextEditingController(text: '${selected.amount}');
+    _Shot? shot;
+    DateTime paidOn = DateTime.now();
+    final messenger = ScaffoldMessenger.of(context);
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          title: const Text('Manual pay'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Select the reminder being paid'),
+                for (final inst in payable)
+                  InkWell(
+                    onTap: () => setLocal(() {
+                      selected = inst;
+                      amountCtrl.text = '${inst.amount}';
+                    }),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      child: Row(children: [
+                        Icon(
+                          selected.id == inst.id
+                              ? Icons.radio_button_checked
+                              : Icons.radio_button_unchecked,
+                          size: 20,
+                          color: selected.id == inst.id ? c.primary : c.textSub,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                              '₹${inst.amount}  ·  due ${Formatters.date(inst.dueDate)}'),
+                        ),
+                      ]),
+                    ),
+                  ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: amountCtrl,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  decoration: const InputDecoration(
+                      labelText: 'Amount received', prefixText: '₹ '),
+                ),
+                const SizedBox(height: 12),
+                Row(children: [
+                  Expanded(
+                      child: Text(
+                          shot == null
+                              ? 'Attach screenshot (optional)'
+                              : shot!.name,
+                          overflow: TextOverflow.ellipsis)),
+                  TextButton.icon(
+                    onPressed: () async {
+                      final img = await ImagePicker()
+                          .pickImage(source: ImageSource.gallery);
+                      if (img != null) {
+                        final bytes = await img.readAsBytes();
+                        setLocal(() => shot = _Shot(img.name, bytes, img.mimeType));
+                      }
+                    },
+                    icon: const Icon(Icons.image_outlined, size: 18),
+                    label: const Text('Screenshot'),
+                  ),
+                ]),
+                const SizedBox(height: 12),
+                Row(children: [
+                  Expanded(child: Text('Paid on: ${Formatters.date(paidOn)}')),
+                  TextButton.icon(
+                    onPressed: () async {
+                      final picked = await showDatePicker(
+                        context: ctx,
+                        initialDate: paidOn,
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime.now(),
+                      );
+                      if (picked != null) setLocal(() => paidOn = picked);
+                    },
+                    icon: const Icon(Icons.event_outlined, size: 18),
+                    label: const Text('Date'),
+                  ),
+                ]),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel')),
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Submit')),
+          ],
+        ),
+      ),
+    );
+
+    final amt = int.tryParse(amountCtrl.text.trim()) ?? 0;
+    final chosen = selected;
+    amountCtrl.dispose();
+    if (ok != true || !mounted) return;
+    // Validation: the amount must exactly match the selected reminder's amount.
+    if (amt != chosen.amount) {
+      messenger.showSnackBar(SnackBar(
+          content: Text('Amount must be ₹${chosen.amount} for this reminder.')));
+      return;
+    }
+    await _run(
+        () => _rentals.submitPayment(chosen.id,
+            amount: amt,
+            screenshot: shot?.bytes,
+            filename: shot?.name,
+            mimeType: shot?.mime,
+            paidOn: paidOn),
+        _isSuper ? 'Payment recorded.' : 'Payment submitted for approval.');
+  }
 
   Future<void> _payDialog(
     String title, {

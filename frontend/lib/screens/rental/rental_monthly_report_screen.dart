@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../models/monthly_report.dart';
+import '../../models/rental_report.dart';
 import '../../services/api_rental_service.dart';
 import '../../services/pdf_service.dart';
 import '../../services/rental_customer_service.dart';
@@ -67,7 +67,7 @@ class _RentalMonthlyReportScreenState extends State<RentalMonthlyReportScreen> {
       ? Formatters.monthYear(_month)
       : '${Formatters.date(_from)} – ${Formatters.date(_to)}';
 
-  MonthlyReport _build() {
+  RentalReport _build() {
     final rentals = context.read<RentalAgreementService>();
     final vehicles = context.read<RentalVehicleService>();
     final customers = context.read<RentalCustomerService>();
@@ -80,27 +80,48 @@ class _RentalMonthlyReportScreenState extends State<RentalMonthlyReportScreen> {
       return !x.isBefore(start) && !x.isAfter(end);
     }
 
-    final rows = <MonthlySaleRow>[];
+    final rentalRows = <RentalReportRow>[];
+    final collections = <RentalCollectionRow>[];
+
     for (final r in rentals.all()) {
-      final live = r.rentalStatus != 'cancelled';
-      if (!r.isActive || !live) continue;
-      final when = r.startDate ?? r.createdAt;
-      if (!inRange(when)) continue;
+      if (!r.isActive || r.rentalStatus == 'cancelled') continue;
       final cust = customers.byId(r.customerId);
       final veh = vehicles.byId(r.vehicleId);
-      rows.add(MonthlySaleRow(
-        date: when,
-        customerName: cust?.fullName ?? 'Customer',
-        phone: cust?.phone ?? '',
-        vehicle: veh?.regNo.isNotEmpty == true
-            ? veh!.regNo
-            : (veh?.chassisNo ?? '—'),
-        price: r.totalAmount,
-        received: r.collected,
-        balance: r.remainingAmount,
-      ));
+      final vlabel = veh?.regNo.isNotEmpty == true
+          ? veh!.regNo
+          : (veh?.chassisNo ?? '—');
+      final custName = cust?.fullName ?? 'Customer';
+
+      // Rent collected IN the period (approved payments whose paid-date is in
+      // range), across every rental — the real monthly income.
+      var collectedInPeriod = 0;
+      for (final p in r.payments) {
+        if (p.isApproved && inRange(p.paidAt)) {
+          collectedInPeriod += p.amount;
+          collections.add(RentalCollectionRow(
+            date: p.paidAt ?? r.createdAt,
+            customerName: custName,
+            vehicle: vlabel,
+            amount: p.amount,
+          ));
+        }
+      }
+
+      // Rentals STARTED in the period → the rentals table.
+      final when = r.startDate ?? r.createdAt;
+      if (inRange(when)) {
+        rentalRows.add(RentalReportRow(
+          date: when,
+          customerName: custName,
+          vehicle: vlabel,
+          type: r.rentalType ?? '',
+          rent: r.periodAmount,
+          collected: collectedInPeriod,
+        ));
+      }
     }
-    rows.sort((a, b) => a.date.compareTo(b.date));
+    rentalRows.sort((a, b) => a.date.compareTo(b.date));
+    collections.sort((a, b) => a.date.compareTo(b.date));
 
     final idle = vehicles
         .all()
@@ -116,12 +137,13 @@ class _RentalMonthlyReportScreenState extends State<RentalMonthlyReportScreen> {
     final newCustomers =
         customers.all().where((c) => inRange(c.createdAt)).length;
 
-    return MonthlyReport(
+    return RentalReport(
       from: start,
       to: end,
       label: _label,
-      sales: rows,
-      unsold: idle,
+      rentals: rentalRows,
+      collections: collections,
+      idle: idle,
       newCustomerCount: newCustomers,
     );
   }
@@ -185,7 +207,7 @@ class _RentalMonthlyReportScreenState extends State<RentalMonthlyReportScreen> {
                           icon: Icons.picture_as_pdf_outlined,
                           onPressed: () => context
                               .read<PdfService>()
-                              .previewMonthlyReport(report),
+                              .previewRentalReport(report),
                         ),
                       ),
                       const SizedBox(width: AppSpacing.md),
@@ -195,7 +217,7 @@ class _RentalMonthlyReportScreenState extends State<RentalMonthlyReportScreen> {
                           icon: Icons.download_outlined,
                           onPressed: () => context
                               .read<PdfService>()
-                              .shareMonthlyReport(report),
+                              .shareRentalReport(report),
                         ),
                       ),
                     ]),
@@ -262,7 +284,7 @@ class _RentalMonthlyReportScreenState extends State<RentalMonthlyReportScreen> {
     ]);
   }
 
-  Widget _overview(AppColors c, MonthlyReport r) {
+  Widget _overview(AppColors c, RentalReport r) {
     Widget stat(String value, String label, {Color? color}) => Expanded(
           child: Container(
             margin: const EdgeInsets.only(right: AppSpacing.sm),
@@ -294,17 +316,16 @@ class _RentalMonthlyReportScreenState extends State<RentalMonthlyReportScreen> {
               style: AppTextStyles.bodyStrong.copyWith(color: c.textMain)),
           const SizedBox(height: AppSpacing.md),
           Row(children: [
-            stat('${r.soldCount}', 'Rentals'),
-            stat('${r.unsold.length}', 'Idle vehicles'),
-            stat('${r.newCustomerCount}', 'New customers'),
+            stat('${r.rentalCount}', 'Rentals'),
+            stat('${r.weeklyCount}', 'Weekly'),
+            stat('${r.dailyCount}', 'Daily'),
           ]),
           const SizedBox(height: AppSpacing.sm),
           Row(children: [
-            stat(Formatters.currency(r.soldValue), 'Total rent'),
-            stat(Formatters.currency(r.collected), 'Collected',
+            stat(Formatters.currency(r.collectedTotal), 'Rent collected',
                 color: c.success),
-            stat(Formatters.currency(r.outstanding), 'Outstanding',
-                color: c.danger),
+            stat('${r.idle.length}', 'Idle vehicles'),
+            stat('${r.newCustomerCount}', 'New customers'),
           ]),
         ],
       ),

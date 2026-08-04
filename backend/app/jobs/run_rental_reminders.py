@@ -1,11 +1,11 @@
-"""Rental rent-collection reminder job — runs at 7 AM IST.
+"""Rental rent-collection reminder job — runs at 8 PM IST.
 
 Separate from the 8 AM sale reminders (rent reads very differently and nudges
-daily). Cron on the server:
+daily). Sends BOTH the renter's WhatsApp and the staff app notification. Cron:
 
-    30 1 * * * cd /opt/slv-dev/backend && /opt/slv-dev/venv/bin/python -m app.jobs.run_rental_reminders >> /var/log/slv-rental-reminders.log 2>&1
+    30 14 * * * cd /opt/slv-dev/backend && /opt/slv-dev/venv/bin/python -m app.jobs.run_rental_reminders >> /var/log/slv-rental-reminders.log 2>&1
 
-(30 1 UTC = 07:00 IST.) Reminds renters with an unpaid rent period every day
+(30 14 UTC = 20:00 IST.) Reminds renters with an unpaid rent period every day
 until they pay; every WhatsApp attempt (sent + failed) is logged to reminder_logs.
 Idempotent per day — safe to run more than once.
 """

@@ -9,6 +9,7 @@ import '../models/installment.dart';
 import '../models/monthly_report.dart';
 import '../models/loan.dart';
 import '../models/rental_agreement.dart';
+import '../models/rental_report.dart';
 import '../models/sale.dart';
 import '../models/second_hand_report.dart';
 import '../models/vehicle.dart';
@@ -67,6 +68,11 @@ abstract class PdfService {
   /// [shareMonthlyReport] hands the PDF to the OS share sheet.
   Future<void> previewMonthlyReport(MonthlyReport report);
   Future<void> shareMonthlyReport(MonthlyReport report);
+
+  /// Rental report (recurring model): rentals started, Weekly/Daily split, rent
+  /// collected in the period, and idle vehicles. No total/outstanding.
+  Future<void> previewRentalReport(RentalReport report);
+  Future<void> shareRentalReport(RentalReport report);
 
   /// Second-hand vehicles bought in a period (vehicle + previous owner + buying
   /// price + status). [secondHandReportBytes] backs the in-app preview;
@@ -422,7 +428,14 @@ class RealPdfService implements PdfService {
                   ),
                   _label('RENT'),
                   _card([
-                    _row('Total rent', _curr(rental.totalAmount)),
+                    if (rental.isRecurring)
+                      _row(
+                          rental.rentalType == 'daily'
+                              ? 'Daily rent'
+                              : 'Weekly rent',
+                          _curr(rental.periodAmount))
+                    else
+                      _row('Total rent', _curr(rental.totalAmount)),
                     _row('Advance received', _curr(rental.advance)),
                   ]),
                   if (paid.isNotEmpty) ...[
@@ -438,7 +451,9 @@ class RealPdfService implements PdfService {
                         ),
                     ]),
                   ],
-                  _totalBar('BALANCE', _curr(rental.remainingAmount)),
+                  rental.isRecurring
+                      ? _totalBar('COLLECTED', _curr(rental.collected))
+                      : _totalBar('BALANCE', _curr(rental.remainingAmount)),
                   _label('AMOUNT IN WORDS'),
                   _card([
                     pw.Padding(
@@ -992,6 +1007,120 @@ class RealPdfService implements PdfService {
               pw.Text('Page ${ctx.pageNumber} of ${ctx.pagesCount}',
                   style:
                       const pw.TextStyle(fontSize: 8, color: PdfColors.grey500)),
+            ],
+          ),
+        ),
+      ),
+    );
+    return doc;
+  }
+
+  // ── Rental report (recurring model) ─────────────────────────────────────
+
+  @override
+  Future<void> previewRentalReport(RentalReport report) async {
+    final doc = await _rentalReportDoc(report);
+    await Printing.layoutPdf(onLayout: (_) => doc.save());
+  }
+
+  @override
+  Future<void> shareRentalReport(RentalReport report) async {
+    final doc = await _rentalReportDoc(report);
+    await Printing.sharePdf(
+      bytes: await doc.save(),
+      filename: 'rental-report-${report.label.replaceAll(' ', '-')}.pdf',
+    );
+  }
+
+  String _rentalTypeLabel(String t) =>
+      t == 'weekly' ? 'Weekly' : (t == 'daily' ? 'Daily' : '—');
+
+  Future<pw.Document> _rentalReportDoc(RentalReport r) async {
+    final logo = await _loadLogo();
+    final doc = pw.Document();
+    doc.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.fromLTRB(28, 22, 28, 28),
+        header: (_) => _reportHeader(logo, r.label),
+        build: (_) => [
+          _label('OVERVIEW'),
+          _statGrid([
+            ('Rentals', '${r.rentalCount}', 'started this period'),
+            ('Weekly', '${r.weeklyCount}', 'rentals'),
+            ('Daily', '${r.dailyCount}', 'rentals'),
+            ('Rent collected', _curr(r.collectedTotal), 'this period'),
+            ('Idle vehicles', '${r.idle.length}', 'not rented'),
+            ('New customers', '${r.newCustomerCount}', 'added this period'),
+          ]),
+          _label('RENTALS THIS PERIOD'),
+          if (r.rentals.isEmpty)
+            _emptyLine('No rentals started in this period.')
+          else
+            _table(
+              ['Date', 'Customer', 'Vehicle', 'Type', 'Rent', 'Collected'],
+              [
+                for (final s in r.rentals)
+                  [
+                    Formatters.date(s.date),
+                    s.customerName,
+                    s.vehicle,
+                    _rentalTypeLabel(s.type),
+                    _curr(s.rent),
+                    _curr(s.collected),
+                  ],
+              ],
+              rightAlign: const {4, 5},
+            ),
+          _label('RENT COLLECTED THIS PERIOD'),
+          if (r.collections.isEmpty)
+            _emptyLine('No rent collected in this period.')
+          else
+            _table(
+              ['Date', 'Customer', 'Vehicle', 'Amount'],
+              [
+                for (final p in r.collections)
+                  [
+                    Formatters.date(p.date),
+                    p.customerName,
+                    p.vehicle,
+                    _curr(p.amount),
+                  ],
+                ['Total collected', '', '', _curr(r.collectedTotal)],
+              ],
+              rightAlign: const {3},
+              totalLastRow: true,
+            ),
+          _label('IDLE VEHICLES (NOT RENTED)'),
+          if (r.idle.isEmpty)
+            _emptyLine('No idle vehicles.')
+          else
+            _table(
+              ['Vehicle', 'Model', 'Type', 'Purchased'],
+              [
+                for (final v in r.idle)
+                  [
+                    v.identifier,
+                    v.model,
+                    v.type,
+                    v.purchaseDate == null
+                        ? '—'
+                        : Formatters.date(v.purchaseDate!),
+                  ],
+              ],
+            ),
+        ],
+        footer: (ctx) => pw.Padding(
+          padding: const pw.EdgeInsets.only(top: 8),
+          child: pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Text('SLV Auto Consultant · Rental report',
+                  style: const pw.TextStyle(
+                      fontSize: 8, color: PdfColors.grey500)),
+              pw.Text('Page ${ctx.pageNumber} of ${ctx.pagesCount}',
+                  style: const pw.TextStyle(
+                      fontSize: 8, color: PdfColors.grey500)),
             ],
           ),
         ),
