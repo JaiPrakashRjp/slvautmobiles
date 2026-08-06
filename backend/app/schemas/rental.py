@@ -24,6 +24,8 @@ class RentalCreate(BaseModel):
     advance_amount: float = 0  # advance received now (recorded only)
     start_date: date | None = None
     remarks: str | None = None
+    old_balance: float | None = None  # carried-forward balance (display only)
+    old_balance_date: date | None = None
     status: EntityStatus | None = None  # optional override; else from role
 
 
@@ -36,6 +38,8 @@ class RentalEdit(BaseModel):
     advance_amount: float = 0
     start_date: date | None = None
     remarks: str | None = None
+    old_balance: float | None = None
+    old_balance_date: date | None = None
 
 
 class ReminderCreate(BaseModel):
@@ -88,6 +92,8 @@ class RentalOut(BaseModel):
     start_date: date | None = None
     invoice_no: str | None = None
     remarks: str | None = None
+    old_balance: float | None = None
+    old_balance_date: date | None = None
     rental_status: RentalLifecycle
     completed_at: datetime | None = None
     status: EntityStatus

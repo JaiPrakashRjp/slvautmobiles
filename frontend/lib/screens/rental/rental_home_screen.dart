@@ -108,9 +108,13 @@ class _RentalVehiclesTabState extends State<_RentalVehiclesTab> {
   @override
   void initState() {
     super.initState();
-    // Auto-refresh on open so newly-added vehicles / approvals show.
+    // Auto-refresh on open so newly-added vehicles / approvals show, and load
+    // rentals so each card's View-rental / Rent-this-vehicle decision and the
+    // delete-gating (hide delete when the vehicle has rental history) are fresh.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) context.read<RentalVehicleService>().refresh();
+      if (!mounted) return;
+      context.read<RentalVehicleService>().refresh();
+      context.read<RentalAgreementService>().refresh();
     });
   }
 
@@ -301,6 +305,12 @@ class _RentalVehicleCard extends StatelessWidget {
     final actorId = auth.currentUser?.id ?? '';
     final canModify = auth.isSuperAdmin || vehicle.createdBy == actorId;
     final canReview = auth.isSuperAdmin && vehicle.isPending;
+    // A vehicle with ANY rental history (ever rented to any customer) can't be
+    // deleted — only a fresh vehicle with no rentals shows the delete button.
+    final hasHistory = context
+        .watch<RentalAgreementService>()
+        .all()
+        .any((r) => r.vehicleId == vehicle.id);
     final title =
         vehicle.regNo.isNotEmpty ? vehicle.regNo : (vehicle.chassisNo ?? '—');
 
@@ -367,9 +377,10 @@ class _RentalVehicleCard extends StatelessWidget {
             Builder(builder: (context) {
               final rental =
                   context.watch<RentalAgreementService>().forVehicle(vehicle.id);
+              // Only a currently-active rental shows "View rental"; once it has
+              // ended (completed/seized) the freed vehicle shows "Rent this vehicle".
               final active = rental != null &&
-                  (rental.rentalStatus == 'active' ||
-                      rental.rentalStatus == 'completed') &&
+                  rental.rentalStatus == 'active' &&
                   rental.isActive;
               if (active) {
                 return SizedBox(
@@ -408,24 +419,26 @@ class _RentalVehicleCard extends StatelessWidget {
                   compact: true,
                   onPressed: () => _edit(context),
                 ),
-                const SizedBox(width: AppSpacing.sm),
-                IconButtonSoft(
-                  icon: Icons.delete_outline,
-                  tooltip: 'Delete',
-                  danger: true,
-                  compact: true,
-                  onPressed: () async {
-                    final ok = await ConfirmationDialog.show(
-                      context,
-                      title: 'Delete vehicle',
-                      message:
-                          'Remove this vehicle? This cannot be undone.',
-                      confirmLabel: 'Delete',
-                      danger: true,
-                    );
-                    if (ok == true) service.delete(vehicle.id);
-                  },
-                ),
+                if (!hasHistory) ...[
+                  const SizedBox(width: AppSpacing.sm),
+                  IconButtonSoft(
+                    icon: Icons.delete_outline,
+                    tooltip: 'Delete',
+                    danger: true,
+                    compact: true,
+                    onPressed: () async {
+                      final ok = await ConfirmationDialog.show(
+                        context,
+                        title: 'Delete vehicle',
+                        message:
+                            'Remove this vehicle? This cannot be undone.',
+                        confirmLabel: 'Delete',
+                        danger: true,
+                      );
+                      if (ok == true) service.delete(vehicle.id);
+                    },
+                  ),
+                ],
               ],
             ),
           ],

@@ -20,6 +20,8 @@ class RentalAgreement with GatedEntity {
     this.startDate,
     this.invoiceNo,
     this.remarks,
+    this.oldBalance = 0,
+    this.oldBalanceDate,
     List<Installment>? installments,
     List<SalePayment>? payments,
     this.rentalStatus = 'active',
@@ -63,6 +65,10 @@ class RentalAgreement with GatedEntity {
   bool get isRecurring => rentalType != null;
   String? invoiceNo;
   String? remarks;
+
+  /// Carried-forward balance recorded for reference only (display; no reminder).
+  int oldBalance;
+  DateTime? oldBalanceDate;
 
   List<Installment> installments;
   List<SalePayment> payments;

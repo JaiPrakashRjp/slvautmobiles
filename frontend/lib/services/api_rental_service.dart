@@ -81,6 +81,8 @@ class RentalAgreementService extends ChangeNotifier {
     int advance = 0,
     DateTime? startDate,
     String? remarks,
+    int oldBalance = 0,
+    DateTime? oldBalanceDate,
   }) async {
     final body = <String, dynamic>{
       'vehicle_id': int.parse(vehicleId),
@@ -91,6 +93,8 @@ class RentalAgreementService extends ChangeNotifier {
       'advance_amount': advance,
       if (startDate != null) 'start_date': _dateStr(startDate),
       if (remarks != null && remarks.isNotEmpty) 'remarks': remarks,
+      if (oldBalance > 0) 'old_balance': oldBalance,
+      if (oldBalanceDate != null) 'old_balance_date': _dateStr(oldBalanceDate),
     };
     final j = await _api.post('/rentals', body: body);
     final rental = _fromJson(j as Map<String, dynamic>);
@@ -136,6 +140,8 @@ class RentalAgreementService extends ChangeNotifier {
     int advance = 0,
     DateTime? startDate,
     String? remarks,
+    int oldBalance = 0,
+    DateTime? oldBalanceDate,
   }) async {
     final numId = int.tryParse(id) ?? 0;
     final body = <String, dynamic>{
@@ -145,6 +151,8 @@ class RentalAgreementService extends ChangeNotifier {
       'advance_amount': advance,
       'start_date': startDate == null ? null : _dateStr(startDate),
       'remarks': (remarks != null && remarks.isNotEmpty) ? remarks : null,
+      'old_balance': oldBalance > 0 ? oldBalance : null,
+      'old_balance_date': oldBalanceDate == null ? null : _dateStr(oldBalanceDate),
     };
     final j = await _api.post('/rentals/$numId/edit', body: body);
     final rental = _fromJson(j as Map<String, dynamic>);
@@ -303,6 +311,8 @@ class RentalAgreementService extends ChangeNotifier {
       startDate: _parseDate(j['start_date'] as String?),
       invoiceNo: j['invoice_no'] as String?,
       remarks: j['remarks'] as String?,
+      oldBalance: (j['old_balance'] as num?)?.round() ?? 0,
+      oldBalanceDate: _parseDate(j['old_balance_date'] as String?),
       installments: installments,
       payments: payments,
       rentalStatus: (j['rental_status'] as String?) ?? 'active',

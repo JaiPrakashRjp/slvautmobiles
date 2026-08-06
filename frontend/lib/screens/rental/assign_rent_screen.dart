@@ -44,8 +44,10 @@ class _AssignRentScreenState extends State<AssignRentScreen> {
   final _rentCtrl = TextEditingController();
   final _advanceCtrl = TextEditingController();
   final _remarksCtrl = TextEditingController();
+  final _oldBalanceCtrl = TextEditingController();
   String _type = 'weekly'; // 'weekly' | 'daily'
   DateTime? _startDate = DateTime.now();
+  DateTime? _oldBalanceDate;
   bool _loading = false;
 
   bool get _isEditing => widget.existing != null;
@@ -60,6 +62,8 @@ class _AssignRentScreenState extends State<AssignRentScreen> {
       _advanceCtrl.text = e.advance == 0 ? '' : '${e.advance}';
       _remarksCtrl.text = e.remarks ?? '';
       _startDate = e.startDate;
+      _oldBalanceCtrl.text = e.oldBalance == 0 ? '' : '${e.oldBalance}';
+      _oldBalanceDate = e.oldBalanceDate;
     }
   }
 
@@ -68,11 +72,14 @@ class _AssignRentScreenState extends State<AssignRentScreen> {
     _rentCtrl.dispose();
     _advanceCtrl.dispose();
     _remarksCtrl.dispose();
+    _oldBalanceCtrl.dispose();
     super.dispose();
   }
 
   int get _rent => int.tryParse(_rentCtrl.text.replaceAll(RegExp(r'[^\d]'), '')) ?? 0;
   int get _advance => int.tryParse(_advanceCtrl.text.replaceAll(RegExp(r'[^\d]'), '')) ?? 0;
+  int get _oldBalance =>
+      int.tryParse(_oldBalanceCtrl.text.replaceAll(RegExp(r'[^\d]'), '')) ?? 0;
 
   Future<void> _pickDate() async {
     final d = await showDatePicker(
@@ -82,6 +89,16 @@ class _AssignRentScreenState extends State<AssignRentScreen> {
       lastDate: DateTime(2035),
     );
     if (d != null) setState(() => _startDate = d);
+  }
+
+  Future<void> _pickOldBalanceDate() async {
+    final d = await showDatePicker(
+      context: context,
+      initialDate: _oldBalanceDate ?? DateTime.now(),
+      firstDate: DateTime(2015),
+      lastDate: DateTime(2035),
+    );
+    if (d != null) setState(() => _oldBalanceDate = d);
   }
 
   Future<void> _confirm() async {
@@ -106,6 +123,8 @@ class _AssignRentScreenState extends State<AssignRentScreen> {
           advance: _advance,
           startDate: _startDate,
           remarks: remarks,
+          oldBalance: _oldBalance,
+          oldBalanceDate: _oldBalanceDate,
         );
         navigator.pop();
         messenger.showSnackBar(SnackBar(
@@ -123,6 +142,8 @@ class _AssignRentScreenState extends State<AssignRentScreen> {
         advance: _advance,
         startDate: _startDate,
         remarks: remarks,
+        oldBalance: _oldBalance,
+        oldBalanceDate: _oldBalanceDate,
       );
       await vehicles.refresh();
       navigator.pop();
@@ -218,6 +239,21 @@ class _AssignRentScreenState extends State<AssignRentScreen> {
                 placeholder: 'Select date',
                 value: _startDate == null ? null : Formatters.date(_startDate!),
                 onTap: _pickDate,
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              _money('Old balance (optional)', _oldBalanceCtrl),
+              const SizedBox(height: AppSpacing.xs),
+              Text('Dues carried forward from before — reference only.',
+                  style: AppTextStyles.caption.copyWith(color: c.textSub)),
+              const SizedBox(height: AppSpacing.md),
+              PickerField(
+                label: 'Old balance date',
+                leadingIcon: Icons.event_outlined,
+                placeholder: 'Select date',
+                value: _oldBalanceDate == null
+                    ? null
+                    : Formatters.date(_oldBalanceDate!),
+                onTap: _pickOldBalanceDate,
               ),
               const SizedBox(height: AppSpacing.lg),
               AppTextField(

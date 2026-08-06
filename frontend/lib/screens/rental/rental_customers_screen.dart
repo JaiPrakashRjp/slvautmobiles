@@ -211,6 +211,12 @@ class _RentalCustomerCard extends StatelessWidget {
     final actorId = auth.currentUser?.id ?? '';
     final canModify = auth.isSuperAdmin || customer.createdBy == actorId;
     final canReview = auth.isSuperAdmin && customer.isPending;
+    // A customer with ANY rental history (past or present, any status) can't be
+    // deleted — only a fresh customer with no rentals shows the delete button.
+    final hasHistory = context
+        .watch<RentalAgreementService>()
+        .all()
+        .any((r) => r.customerId == customer.id);
 
     return AppCard(
       onTap: () => _openDetail(context),
@@ -311,14 +317,16 @@ class _RentalCustomerCard extends StatelessWidget {
                   compact: true,
                   onPressed: () => _edit(context),
                 ),
-                const SizedBox(width: AppSpacing.sm),
-                IconButtonSoft(
-                  icon: Icons.delete_outline,
-                  tooltip: 'Delete',
-                  danger: true,
-                  compact: true,
-                  onPressed: () => _confirmDelete(context),
-                ),
+                if (!hasHistory) ...[
+                  const SizedBox(width: AppSpacing.sm),
+                  IconButtonSoft(
+                    icon: Icons.delete_outline,
+                    tooltip: 'Delete',
+                    danger: true,
+                    compact: true,
+                    onPressed: () => _confirmDelete(context),
+                  ),
+                ],
               ],
             ],
           ),

@@ -758,6 +758,13 @@ class _RentDetailScreenState extends State<RentDetailScreen> {
                 c,
                 highlight: r.remainingAmount > 0),
           ],
+          if (r.oldBalance > 0)
+            _row(
+                'Old balance',
+                r.oldBalanceDate != null
+                    ? '${Formatters.currency(r.oldBalance)} · ${Formatters.date(r.oldBalanceDate!)}'
+                    : Formatters.currency(r.oldBalance),
+                c),
           _row('Status', r.rentalStatus, c),
           if (r.remarks != null && r.remarks!.isNotEmpty)
             _row('Remarks', r.remarks!, c),
