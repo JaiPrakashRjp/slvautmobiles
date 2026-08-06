@@ -28,7 +28,12 @@ import 'assign_sale_screen.dart';
 /// Create / edit customer — required Name / Mobile / Address / Documents /
 /// Assurity person details. Pass [existing] to open in edit mode.
 class CreateCustomerScreen extends StatelessWidget {
-  const CreateCustomerScreen({super.key, this.existing, this.sellVehicleId});
+  const CreateCustomerScreen({
+    super.key,
+    this.existing,
+    this.sellVehicleId,
+    this.service,
+  });
 
   final Customer? existing;
 
@@ -36,11 +41,16 @@ class CreateCustomerScreen extends StatelessWidget {
   /// successful create continues straight to the sell form for this vehicle.
   final String? sellVehicleId;
 
+  /// Customer service to create into. Defaults to the auto_sale [CustomerService]
+  /// from the provider; the rental module passes its own rental-scoped service so
+  /// the customer is created under the rental module.
+  final CustomerService? service;
+
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
       create: (_) => CreateCustomerViewModel(
-        context.read<CustomerService>(),
+        service ?? context.read<CustomerService>(),
         context.read<AuthController>(),
         existing: existing,
       ),

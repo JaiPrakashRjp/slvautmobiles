@@ -18,11 +18,19 @@ class CustomerDAO:
         *,
         status=None,
         branch=None,
+        module: str | None = None,
         q: str | None = None,
         limit: int | None = None,
         offset: int | None = None,
     ) -> list[Customer]:
         stmt = select(Customer).options(selectinload(Customer.documents))
+        # Scope to a module (auto_sale / rental / …) so each module keeps its own
+        # independent customer list. Unknown module → no rows.
+        if module is not None:
+            stmt = stmt.where(
+                Customer.module_id
+                == select(Module.id).where(Module.code == module).scalar_subquery()
+            )
         if status is not None:
             stmt = stmt.where(Customer.status == status)
         if branch is not None:

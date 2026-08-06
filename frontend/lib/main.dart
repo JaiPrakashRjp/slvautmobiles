@@ -24,7 +24,10 @@ import 'services/loan_service.dart';
 import 'services/sale_financer_service.dart';
 import 'services/notification_service.dart';
 import 'services/pdf_service.dart';
+import 'services/api_rental_service.dart';
+import 'services/rental_customer_service.dart';
 import 'services/rental_service.dart';
+import 'services/rental_vehicle_service.dart';
 import 'services/sale_service.dart';
 import 'services/user_service.dart';
 import 'services/vehicle_service.dart';
@@ -69,9 +72,18 @@ class SlvApp extends StatelessWidget {
         ChangeNotifierProvider<CustomerService>(
           create: (_) => ApiCustomerService()..refresh(),
         ),
+        // Rental module's own independent customer list (module = rental), same
+        // functionality as the sale customers above.
+        ChangeNotifierProvider<RentalCustomerService>(
+          create: (_) => RentalCustomerService()..refresh(),
+        ),
         ChangeNotifierProvider<VehicleService>(
           // Real backend service. Loads the vehicle list from the API on start.
           create: (_) => ApiVehicleService()..refresh(),
+        ),
+        // Rental module's own independent vehicle pool (module = rental).
+        ChangeNotifierProvider<RentalVehicleService>(
+          create: (_) => RentalVehicleService()..refresh(),
         ),
         ChangeNotifierProvider<FinancerService>(
           create: (_) => ApiFinancerService()..refresh(),
@@ -87,6 +99,14 @@ class SlvApp extends StatelessWidget {
         ),
         ChangeNotifierProvider<RentalService>(
           create: (_) => MockRentalService(),
+        ),
+        // Real rental agreements (module = rental) — persists rentals, rent
+        // collections, payments. Replaces the mock for the new rental flow.
+        ChangeNotifierProxyProvider<AuthController, RentalAgreementService>(
+          create: (ctx) =>
+              RentalAgreementService(auth: ctx.read<AuthController>())..refresh(),
+          update: (ctx, auth, previous) =>
+              previous ?? RentalAgreementService(auth: auth)..refresh(),
         ),
         ChangeNotifierProvider<LoanService>(
           create: (_) => MockLoanService(),

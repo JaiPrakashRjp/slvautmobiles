@@ -16,10 +16,18 @@ from app.services.vehicle_service import initial_status
 class CustomerService:
     @staticmethod
     def list(
-        db: Session, *, status=None, branch=None, q=None, limit=None, offset=None
+        db: Session,
+        *,
+        status=None,
+        branch=None,
+        module=None,
+        q=None,
+        limit=None,
+        offset=None,
     ) -> list[Customer]:
         return CustomerDAO.list(
-            db, status=status, branch=branch, q=q, limit=limit, offset=offset
+            db, status=status, branch=branch, module=module, q=q,
+            limit=limit, offset=offset,
         )
 
     @staticmethod

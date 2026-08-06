@@ -142,3 +142,42 @@ class NotificationService:
                 "installment_id": installment_id,
             },
         )
+
+    @staticmethod
+    def create_rental_reminder(
+        db: Session,
+        *,
+        rental_id: int,
+        installment_id: int,
+        title: str,
+        message: str = "",
+    ) -> None:
+        """Notify all staff that a rent collection is due — in-app + FCM push.
+        Tapping opens the rental so they can call the renter and record the rent.
+        Best-effort push (a failure never breaks the caller).
+        """
+        staff_ids = [u.id for u in UserDAO.active_staff(db)]
+        for uid in staff_ids:
+            NotificationDAO.add(
+                db,
+                Notification(
+                    recipient_user_id=uid,
+                    type=NotificationType.info,
+                    title=title,
+                    message=message,
+                    entity_type=NotificationEntity.rental,
+                    entity_id=rental_id,
+                ),
+            )
+        tokens = DeviceTokenDAO.tokens_for_users(db, staff_ids)
+        FcmService.send(
+            tokens,
+            title=title,
+            body=message or "Tap to take the call",
+            data={
+                "type": "reminder",
+                "entity_type": "rental",
+                "entity_id": rental_id,
+                "installment_id": installment_id,
+            },
+        )

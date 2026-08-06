@@ -15,7 +15,12 @@ import 'vehicle_service.dart';
 /// (`all()`, `available()`, …) and `ChangeNotifier` reactivity keep working as
 /// before; the cache is filled by [refresh] and updated after each mutation.
 class ApiVehicleService extends VehicleService {
-  ApiVehicleService({ApiClient? client}) : _api = client ?? ApiClient();
+  ApiVehicleService({ApiClient? client, this.module = 'auto_sale'})
+      : _api = client ?? ApiClient();
+
+  /// Module this service is scoped to (auto_sale / rental). Keeps each module's
+  /// vehicle pool independent — created and listed under this module only.
+  final String module;
 
   final ApiClient _api;
   final List<Vehicle> _vehicles = [];
@@ -30,7 +35,7 @@ class ApiVehicleService extends VehicleService {
     _loading = true;
     notifyListeners();
     try {
-      final data = await _api.get('/vehicles');
+      final data = await _api.get('/vehicles', query: {'module': module});
       _vehicles
         ..clear()
         ..addAll(
@@ -97,7 +102,7 @@ class ApiVehicleService extends VehicleService {
   }) async {
     final isSecondHand = type == VehicleType.secondHand;
     final body = <String, dynamic>{
-      'module_code': 'auto_sale',
+      'module_code': module,
       'owned_hand': type.wire,
       'branch': branch?.wire,
       'chassis_no': chassisNo,

@@ -27,12 +27,14 @@ def list_customers(
     db: Session = Depends(get_db),
     status: EntityStatus | None = None,
     branch: Branch | None = None,
+    module: str | None = Query(None, description="module code (auto_sale / rental)"),
     q: str | None = Query(None, description="search name / phone"),
     limit: int | None = Query(None, ge=1, le=200),
     offset: int | None = Query(None, ge=0),
 ):
     return CustomerService.list(
-        db, status=status, branch=branch, q=q, limit=limit, offset=offset
+        db, status=status, branch=branch, module=module, q=q,
+        limit=limit, offset=offset,
     )
 
 

@@ -26,15 +26,20 @@ import '../../widgets/primary_button.dart';
 /// rest of the form (common + first-hand / second-hand groups) appears based on
 /// it. Pass [existing] to open the form in edit mode.
 class CreateVehicleScreen extends StatelessWidget {
-  const CreateVehicleScreen({super.key, this.existing});
+  const CreateVehicleScreen({super.key, this.existing, this.service});
 
   final Vehicle? existing;
+
+  /// Vehicle service to create into. Defaults to the auto_sale [VehicleService]
+  /// from the provider; the rental module passes its own rental-scoped service so
+  /// the vehicle is created under the rental module.
+  final VehicleService? service;
 
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
       create: (_) => CreateVehicleViewModel(
-        context.read<VehicleService>(),
+        service ?? context.read<VehicleService>(),
         context.read<AuthController>(),
         existing: existing,
       ),

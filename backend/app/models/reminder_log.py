@@ -24,6 +24,14 @@ class ReminderLog(Base):
     installment_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("sale_installments.id", ondelete="SET NULL")
     )
+    # Rental reminders reuse this table but point at a rental / rent installment
+    # instead of a sale (nullable so sale reminders leave them empty).
+    rental_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("rentals.id", ondelete="CASCADE")
+    )
+    rental_installment_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("rental_installments.id", ondelete="SET NULL")
+    )
     recipient_type: Mapped[ReminderRecipient] = mapped_column(
         pg_enum(ReminderRecipient, "reminder_recipient"), nullable=False
     )

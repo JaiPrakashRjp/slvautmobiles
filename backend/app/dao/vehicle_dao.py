@@ -19,11 +19,19 @@ class VehicleDAO:
         status=None,
         branch=None,
         sale_status=None,
+        module: str | None = None,
         q: str | None = None,
         limit: int | None = None,
         offset: int | None = None,
     ) -> list[Vehicle]:
         stmt = select(Vehicle).options(selectinload(Vehicle.documents))
+        # Scope to a module (auto_sale / rental) so each keeps its own vehicle
+        # pool independent. Unknown module → no rows.
+        if module is not None:
+            stmt = stmt.where(
+                Vehicle.module_id
+                == select(Module.id).where(Module.code == module).scalar_subquery()
+            )
         if status is not None:
             stmt = stmt.where(Vehicle.status == status)
         if branch is not None:

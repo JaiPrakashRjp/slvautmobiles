@@ -21,4 +21,10 @@ class AppConfig {
     'API_BASE_URL',
     defaultValue: 'http://127.0.0.1:8000',
   );
+
+  /// True for the dev build. The dev backend runs on port 8080 (prod uses
+  /// HTTPS/80). Used to surface not-yet-launched modules (e.g. Rental) on dev
+  /// only, so they stay hidden on prod until launched — no merge conflict.
+  static bool get isDev =>
+      apiBaseUrl.contains(':8080') || apiBaseUrl.contains(':8000');
 }

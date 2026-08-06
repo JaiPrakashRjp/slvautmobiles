@@ -79,6 +79,19 @@ class SaleLifecycle(str, enum.Enum):
     seized = "seized"
 
 
+class RentalLifecycle(str, enum.Enum):
+    active = "active"        # rent ongoing, balance outstanding
+    completed = "completed"  # fully collected + confirmed complete
+    cancelled = "cancelled"  # rental reversed
+    seized = "seized"        # vehicle repossessed from the renter
+
+
+class RentalType(str, enum.Enum):
+    """Recurring rent cadence — drives the reminder interval and roll-forward."""
+    weekly = "weekly"  # rent due every 7 days
+    daily = "daily"    # rent due every day
+
+
 class InstallmentStatus(str, enum.Enum):
     pending = "pending"          # reminder set, not yet acted on
     in_progress = "in_progress"  # an admin took the call (locked)
@@ -118,6 +131,7 @@ class NotificationEntity(str, enum.Enum):
     vehicle = "vehicle"
     customer = "customer"
     sale = "sale"
+    rental = "rental"
 
 
 def pg_enum(py_enum, name):

@@ -11,7 +11,12 @@ import 'customer_service.dart';
 /// Real [CustomerService] backed by the FastAPI backend, with an in-memory
 /// cache so the synchronous getters and reactivity keep working.
 class ApiCustomerService extends CustomerService {
-  ApiCustomerService({ApiClient? client}) : _api = client ?? ApiClient();
+  ApiCustomerService({ApiClient? client, this.module = 'auto_sale'})
+      : _api = client ?? ApiClient();
+
+  /// Module this service is scoped to (auto_sale / rental). Keeps each module's
+  /// customer list independent — created and listed under this module only.
+  final String module;
 
   final ApiClient _api;
   final List<Customer> _customers = [];
@@ -25,7 +30,7 @@ class ApiCustomerService extends CustomerService {
     _loading = true;
     notifyListeners();
     try {
-      final data = await _api.get('/customers');
+      final data = await _api.get('/customers', query: {'module': module});
       _customers
         ..clear()
         ..addAll(
@@ -59,7 +64,7 @@ class ApiCustomerService extends CustomerService {
     String? remarks,
   }) async {
     final body = <String, dynamic>{
-      'module_code': 'auto_sale',
+      'module_code': module,
       'first_name': firstName,
       'last_name': lastName,
       'phone': phone,

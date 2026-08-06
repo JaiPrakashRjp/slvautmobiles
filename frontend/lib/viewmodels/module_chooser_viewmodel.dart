@@ -31,19 +31,13 @@ class ModuleChooserViewModel extends ChangeNotifier {
       subtitle: 'Sell and track three-wheelers',
       icon: Icons.electric_rickshaw,
     ),
-    // Hidden for this release — Loan management & Auto rental not launched yet.
-    // ModuleTile(
-    //   module: AppModule.loans,
-    //   title: 'Loan management',
-    //   subtitle: 'Track loans and EMIs',
-    //   icon: Icons.account_balance_wallet_outlined,
-    // ),
-    // ModuleTile(
-    //   module: AppModule.rentals,
-    //   title: 'Auto rental collection',
-    //   subtitle: 'Manage rentals and weekly collection',
-    //   icon: Icons.vpn_key_outlined,
-    // ),
+    // Auto rental — launched. (Loan management stays hidden; not built yet.)
+    ModuleTile(
+      module: AppModule.rentals,
+      title: 'Auto rental collection',
+      subtitle: 'Rent vehicles and collect rent',
+      icon: Icons.vpn_key_outlined,
+    ),
     ModuleTile(
       module: AppModule.users,
       title: 'User management',
@@ -54,6 +48,8 @@ class ModuleChooserViewModel extends ChangeNotifier {
 
   String get greetingName => _auth.currentUser?.name ?? '';
 
-  List<ModuleTile> get tiles =>
-      _all.where((t) => _auth.currentUser?.canAccess(t.module) ?? false).toList();
+  List<ModuleTile> get tiles => _all.where((t) {
+        if (!(_auth.currentUser?.canAccess(t.module) ?? false)) return false;
+        return true;
+      }).toList();
 }

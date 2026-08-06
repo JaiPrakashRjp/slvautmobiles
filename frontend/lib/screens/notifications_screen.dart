@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../models/enums.dart';
 import '../services/api_notification_service.dart';
 import '../services/customer_service.dart';
+import '../services/rental_customer_service.dart';
 import '../services/sale_service.dart';
 import '../services/user_service.dart';
 import '../services/vehicle_service.dart';
@@ -17,6 +18,7 @@ import '../widgets/empty_state.dart';
 import 'auto_sale/customer_detail_screen.dart';
 import 'auto_sale/sale_detail_screen.dart';
 import 'auto_sale/vehicle_detail_screen.dart';
+import 'rental/rent_detail_screen.dart';
 import 'users/pending_approvals_screen.dart';
 
 /// Lists the signed-in user's in-app notifications (verification requests).
@@ -47,6 +49,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         if (!context.mounted) return;
         context.read<VehicleService>().refresh();
         context.read<CustomerService>().refresh();
+        context.read<RentalCustomerService>().refresh();
         context.read<SaleService>().refresh();
       });
       return;
@@ -67,6 +70,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         Navigator.of(context).push(
           MaterialPageRoute(builder: (_) => SaleDetailScreen(saleId: id)),
         );
+      case 'rental':
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => RentDetailScreen(rentalId: id)),
+        );
     }
   }
 
@@ -78,7 +85,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       case 'vehicle':
         return context.read<VehicleService>().byId(id)?.status;
       case 'customer':
-        return context.read<CustomerService>().byId(id)?.status;
+        return context.read<CustomerService>().byId(id)?.status ??
+            context.read<RentalCustomerService>().byId(id)?.status;
       case 'sale':
         return context.read<SaleService>().byId(id)?.status;
     }
@@ -93,7 +101,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     final id = n.entityId.toString();
     final createdBy = switch (n.entityType) {
       'vehicle' => context.read<VehicleService>().byId(id)?.createdBy,
-      'customer' => context.read<CustomerService>().byId(id)?.createdBy,
+      'customer' => context.read<CustomerService>().byId(id)?.createdBy ??
+          context.read<RentalCustomerService>().byId(id)?.createdBy,
       'sale' => context.read<SaleService>().byId(id)?.createdBy,
       _ => null,
     };
