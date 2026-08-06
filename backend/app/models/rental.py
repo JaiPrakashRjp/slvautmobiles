@@ -54,6 +54,10 @@ class Rental(Base):
     start_date: Mapped[date | None] = mapped_column(Date)
     invoice_no: Mapped[str | None] = mapped_column(Text)
     remarks: Mapped[str | None] = mapped_column(Text)
+    # Old (carried-forward) balance recorded for reference only when onboarding a
+    # rental that already owed money — display only, no reminder / collection.
+    old_balance: Mapped[float | None] = mapped_column(Numeric(12, 2))
+    old_balance_date: Mapped[date | None] = mapped_column(Date)
 
     rental_status: Mapped[RentalLifecycle] = mapped_column(
         pg_enum(RentalLifecycle, "rental_lifecycle"),

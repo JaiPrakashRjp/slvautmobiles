@@ -196,6 +196,9 @@ class RentalService:
                 status=data.status or initial_status(actor_role),
                 created_by=created_by,
             )
+        if data.old_balance is not None:
+            rental.old_balance = round(float(data.old_balance), 2)
+        rental.old_balance_date = data.old_balance_date
         RentalDAO.add(db, rental)  # flush → id
         rental.invoice_no = f"RENT-{rental.id:04d}"
 
@@ -260,6 +263,8 @@ class RentalService:
             "advance_amount": float(data.advance_amount or 0),
             "start_date": data.start_date.isoformat() if data.start_date else None,
             "remarks": data.remarks,
+            "old_balance": float(data.old_balance) if data.old_balance is not None else None,
+            "old_balance_date": data.old_balance_date.isoformat() if data.old_balance_date else None,
         }
 
     @staticmethod
@@ -274,6 +279,17 @@ class RentalService:
 
     @staticmethod
     def _apply_edit(db: Session, rental: Rental, payload: dict) -> None:
+        # Old balance is display-only reference — updated on any edit.
+        rental.old_balance = (
+            round(float(payload["old_balance"]), 2)
+            if payload.get("old_balance") is not None
+            else None
+        )
+        rental.old_balance_date = (
+            date.fromisoformat(payload["old_balance_date"])
+            if payload.get("old_balance_date")
+            else None
+        )
         if rental.rental_type is not None:
             # Recurring: update cadence + per-period rent + advance, no balance
             # recompute. New period_amount applies to future reminders.
