@@ -96,12 +96,27 @@ class RentalService:
 
     @staticmethod
     def _roll_next(db: Session, rental: Rental, paid_inst: RentalInstallment) -> None:
-        """After a period is paid, schedule the next one at paid date + interval.
-        Only while the rental is still an active recurring rental."""
+        """After a period is paid, schedule the next reminder. Rolls from the
+        payment date (+interval), but never ONTO or BEFORE the period just closed —
+        if the renter paid a full interval early, keep it on schedule from the due
+        date instead. Only while the rental is an active recurring rental, and only
+        one open reminder exists at a time (guards against duplicates)."""
         if rental.rental_type is None or rental.rental_status != RentalLifecycle.active:
             return
+        # Invariant: at most one open reminder at a time. If one already exists
+        # (e.g. a duplicate payment), don't create another.
+        if any(
+            i.status in (InstallmentStatus.pending, InstallmentStatus.in_progress)
+            for i in rental.installments
+        ):
+            return
+        interval = RentalService._interval_days(rental)
         base = paid_inst.paid_date or date.today()
-        due = base + timedelta(days=RentalService._interval_days(rental))
+        due = base + timedelta(days=interval)
+        # Paid a full interval (or more) early → the next reminder would land on or
+        # before the one just closed. Keep the schedule sane: roll from the due date.
+        if due <= paid_inst.due_date:
+            due = paid_inst.due_date + timedelta(days=interval)
         next_number = max((i.number for i in rental.installments), default=0) + 1
         db.add(
             RentalInstallment(
