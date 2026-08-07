@@ -71,6 +71,7 @@ class CreateVehicleViewModel extends ChangeNotifier {
   DateTime? _insuranceDate;
   DateTime? _fcDate;
   DateTime? _permitDate;
+  DateTime? _nextServiceDueDate;
   PickedDoc? _prevOwnerIdProof; // picked file, null = not attached
   PickedDoc? _prevOwnerPhoto;
 
@@ -91,6 +92,7 @@ class CreateVehicleViewModel extends ChangeNotifier {
   DateTime? get insuranceDate => _insuranceDate;
   DateTime? get fcDate => _fcDate;
   DateTime? get permitDate => _permitDate;
+  DateTime? get nextServiceDueDate => _nextServiceDueDate;
   PickedDoc? get prevOwnerIdProof => _prevOwnerIdProof;
   PickedDoc? get prevOwnerPhoto => _prevOwnerPhoto;
 
@@ -168,6 +170,11 @@ class CreateVehicleViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  set nextServiceDueDate(DateTime? v) {
+    _nextServiceDueDate = v;
+    notifyListeners();
+  }
+
   /// Records an uploaded / captured file for a document type.
   void setDocument(VehicleDocType t, PickedDoc doc) {
     _documents[t] = doc;
@@ -212,6 +219,7 @@ class CreateVehicleViewModel extends ChangeNotifier {
     _insuranceDate = v.insuranceDate;
     _fcDate = v.fcDate;
     _permitDate = v.permitDate;
+    _nextServiceDueDate = v.nextServiceDueDate;
     prevOwnerNameController.text = v.prevOwnerName ?? '';
     prevOwnerMobileController.text = v.prevOwnerMobile ?? '';
     prevOwnerAddressController.text = v.prevOwnerAddress ?? '';
@@ -241,6 +249,7 @@ class CreateVehicleViewModel extends ChangeNotifier {
         insuranceDate: isSecondHand ? _insuranceDate : null,
         fcDate: isSecondHand ? _fcDate : null,
         permitDate: isSecondHand ? _permitDate : null,
+        nextServiceDueDate: _nextServiceDueDate,
         prevOwnerName: isSecondHand ? prevOwnerNameController.text.trim() : null,
         prevOwnerMobile:
             isSecondHand ? prevOwnerMobileController.text.trim() : null,
@@ -272,6 +281,7 @@ class CreateVehicleViewModel extends ChangeNotifier {
         insuranceDate: isSecondHand ? _insuranceDate : null,
         fcDate: isSecondHand ? _fcDate : null,
         permitDate: isSecondHand ? _permitDate : null,
+        nextServiceDueDate: _nextServiceDueDate,
         prevOwnerName: isSecondHand ? prevOwnerNameController.text.trim() : null,
         prevOwnerMobile:
             isSecondHand ? prevOwnerMobileController.text.trim() : null,

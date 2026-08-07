@@ -199,6 +199,9 @@ class _RentalVehicleDetailsScreenState
     if (v.permitDate != null) {
       card('Permit date', value: Formatters.date(v.permitDate!));
     }
+    if (v.nextServiceDueDate != null) {
+      card('Next service date', value: Formatters.date(v.nextServiceDueDate!));
+    }
     card('Status', widget: StatusPill.forEntity(v.status));
     card('Remarks', value: v.remarks);
     return rows;

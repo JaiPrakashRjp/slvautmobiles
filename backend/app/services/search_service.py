@@ -3,7 +3,8 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.models.customer import Customer
-from app.models.enums import SaleLifecycle
+from app.models.enums import RentalLifecycle, SaleLifecycle
+from app.models.rental import Rental
 from app.models.sale import Sale
 from app.models.vehicle import Vehicle
 from app.schemas.search import SearchResult, SearchVehicle
@@ -33,8 +34,10 @@ class SearchService:
         ).all()
         for c in customers:
             name = f"{c.first_name} {c.last_name}".strip()
-            # Every vehicle sold to this customer (via their sales; skip cancelled).
-            veh_rows = db.execute(
+            # Vehicles linked to this customer via SALES or RENTALS (skip cancelled),
+            # deduped by vehicle id so sale + rental customers both show their vehicle.
+            veh_map: dict = {}
+            sale_rows = db.execute(
                 select(
                     Vehicle.id, Vehicle.reg_no, Vehicle.chassis_no,
                     Vehicle.model, Sale.sale_status,
@@ -46,16 +49,37 @@ class SearchService:
                 )
                 .order_by(Sale.created_at.desc())
             ).all()
-            veh = [
-                SearchVehicle(
+            for r in sale_rows:
+                veh_map[r.id] = SearchVehicle(
                     id=r.id,
                     label=r.chassis_no or r.reg_no or r.model or f"Vehicle #{r.id}",
                     subtitle=" · ".join(
-                        p for p in (r.reg_no, r.model, r.sale_status.value if r.sale_status else None) if p
+                        p for p in (r.reg_no, r.model,
+                                    r.sale_status.value if r.sale_status else None) if p
                     ),
                 )
-                for r in veh_rows
-            ]
+            rent_rows = db.execute(
+                select(
+                    Vehicle.id, Vehicle.reg_no, Vehicle.chassis_no,
+                    Vehicle.model, Rental.rental_status,
+                )
+                .join(Rental, Rental.vehicle_id == Vehicle.id)
+                .where(
+                    Rental.customer_id == c.id,
+                    Rental.rental_status != RentalLifecycle.cancelled,
+                )
+                .order_by(Rental.created_at.desc())
+            ).all()
+            for r in rent_rows:
+                veh_map.setdefault(r.id, SearchVehicle(
+                    id=r.id,
+                    label=r.chassis_no or r.reg_no or r.model or f"Vehicle #{r.id}",
+                    subtitle=" · ".join(
+                        p for p in (r.reg_no, r.model,
+                                    r.rental_status.value if r.rental_status else None) if p
+                    ),
+                ))
+            veh = list(veh_map.values())
             count = len(veh)
             subtitle = c.phone if count == 0 else f"{c.phone} · {count} vehicle{'s' if count != 1 else ''}"
             results.append(

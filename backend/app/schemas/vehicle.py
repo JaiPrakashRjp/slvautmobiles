@@ -48,6 +48,7 @@ class VehicleBase(BaseModel):
 class VehicleCreate(VehicleBase):
     module_code: str = "auto_sale"
     status: EntityStatus | None = None  # optional override; else derived from role
+    next_service_due_date: date | None = None
 
 
 class VehicleUpdate(BaseModel):
@@ -69,6 +70,7 @@ class VehicleUpdate(BaseModel):
     insurance_date: date | None = None
     fc_date: date | None = None
     permit_date: date | None = None
+    next_service_due_date: date | None = None
     prev_owner_name: str | None = None
     prev_owner_mobile: str | None = None
     prev_owner_address: str | None = None
