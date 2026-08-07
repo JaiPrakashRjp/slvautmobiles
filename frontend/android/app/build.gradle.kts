@@ -38,7 +38,7 @@ android {
     defaultConfig {
         // DEV branch: distinct application id so the dev app installs alongside
         // the prod app on the same phone. Prod (main) keeps the base id.
-        applicationId = "com.slvauto.slv_auto_consultant.dev"
+        applicationId = "com.slvauto.slv_auto_consultant"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
