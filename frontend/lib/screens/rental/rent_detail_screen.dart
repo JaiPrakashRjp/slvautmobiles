@@ -137,7 +137,7 @@ class _RentDetailScreenState extends State<RentDetailScreen> {
   // ── Collections ────────────────────────────────────────────────────────────
   Future<void> _recordPayment(RentalAgreement r, Installment inst) =>
       _payDialog('Record payment',
-          amount: inst.amount,
+          amount: _remainingFor(r, inst),
           onSubmit: (amt, shot, name, mime, paidOn) => _rentals.submitPayment(
               inst.id,
               amount: amt,
@@ -148,8 +148,8 @@ class _RentDetailScreenState extends State<RentDetailScreen> {
 
   /// Manual pay = pay a specific rent reminder (e.g. the renter pays early,
   /// before the due date). Shows the open reminder(s) as a radio list; the amount
-  /// must exactly match the selected reminder. Paying it marks the reminder Paid
-  /// and rolls the next period forward from the paid date.
+  /// can be up to the reminder's REMAINING balance — partial payments are allowed
+  /// and accumulate. Paying the full remaining marks it Paid and rolls the next.
   Future<void> _manualPay(RentalAgreement r) async {
     // Payable = unpaid, not cancelled, and not already awaiting approval. In the
     // recurring model this is the single current (recent) reminder.
@@ -165,7 +165,8 @@ class _RentDetailScreenState extends State<RentDetailScreen> {
 
     final c = context.colors;
     Installment selected = payable.first;
-    final amountCtrl = TextEditingController(text: '${selected.amount}');
+    final amountCtrl =
+        TextEditingController(text: '${_remainingFor(r, selected)}');
     _Shot? shot;
     DateTime paidOn = DateTime.now();
     final messenger = ScaffoldMessenger.of(context);
@@ -185,7 +186,7 @@ class _RentDetailScreenState extends State<RentDetailScreen> {
                   InkWell(
                     onTap: () => setLocal(() {
                       selected = inst;
-                      amountCtrl.text = '${inst.amount}';
+                      amountCtrl.text = '${_remainingFor(r, inst)}';
                     }),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(vertical: 6),
@@ -199,8 +200,10 @@ class _RentDetailScreenState extends State<RentDetailScreen> {
                         ),
                         const SizedBox(width: 8),
                         Expanded(
-                          child: Text(
-                              '₹${inst.amount}  ·  due ${Formatters.date(inst.dueDate)}'),
+                          child: Text(_paidFor(r, inst) > 0
+                              ? '₹${_remainingFor(r, inst)} left of ₹${inst.amount}'
+                                  '  ·  due ${Formatters.date(inst.dueDate)}'
+                              : '₹${inst.amount}  ·  due ${Formatters.date(inst.dueDate)}'),
                         ),
                       ]),
                     ),
@@ -270,10 +273,16 @@ class _RentDetailScreenState extends State<RentDetailScreen> {
     final chosen = selected;
     amountCtrl.dispose();
     if (ok != true || !mounted) return;
-    // Validation: the amount must exactly match the selected reminder's amount.
-    if (amt != chosen.amount) {
+    // Partial payments allowed: the amount must be > 0 and not exceed the
+    // reminder's REMAINING balance. Paying the remaining marks it fully paid.
+    final remaining = _remainingFor(r, chosen);
+    if (amt <= 0) {
+      messenger.showSnackBar(const SnackBar(content: Text('Enter an amount.')));
+      return;
+    }
+    if (amt > remaining) {
       messenger.showSnackBar(SnackBar(
-          content: Text('Amount must be ₹${chosen.amount} for this reminder.')));
+          content: Text('Amount can’t exceed the remaining ₹$remaining.')));
       return;
     }
     await _run(
@@ -709,6 +718,14 @@ class _RentDetailScreenState extends State<RentDetailScreen> {
   int _collectedRent(RentalAgreement r) =>
       r.payments.where((p) => p.isApproved).fold(0, (s, p) => s + p.amount);
 
+  /// Approved payments recorded against a single reminder (partial payments add up).
+  int _paidFor(RentalAgreement r, Installment inst) => r.payments
+      .where((p) => p.installmentId == inst.id && p.isApproved)
+      .fold(0, (s, p) => s + p.amount);
+
+  int _remainingFor(RentalAgreement r, Installment inst) =>
+      (inst.amount - _paidFor(r, inst)).clamp(0, inst.amount);
+
   /// An unpaid, non-cancelled reminder whose due date has already passed.
   bool _isOverdue(Installment inst) {
     if (inst.isPaid || inst.isCancelled) return false;
@@ -758,13 +775,6 @@ class _RentDetailScreenState extends State<RentDetailScreen> {
                 c,
                 highlight: r.remainingAmount > 0),
           ],
-          if (r.oldBalance > 0)
-            _row(
-                'Old balance',
-                r.oldBalanceDate != null
-                    ? '${Formatters.currency(r.oldBalance)} · ${Formatters.date(r.oldBalanceDate!)}'
-                    : Formatters.currency(r.oldBalance),
-                c),
           _row('Status', r.rentalStatus, c),
           if (r.remarks != null && r.remarks!.isNotEmpty)
             _row('Remarks', r.remarks!, c),
@@ -876,8 +886,13 @@ class _RentDetailScreenState extends State<RentDetailScreen> {
               child: Text('₹${inst.amount}  ·  due ${Formatters.date(inst.dueDate)}',
                   style: AppTextStyles.body.copyWith(
                       color: _isOverdue(inst) ? c.textSub : c.textMain))),
-          _chip(inst, pending, c),
+          _chip(r, inst, pending, c),
         ]),
+        if (!inst.isPaid && _paidFor(r, inst) > 0) ...[
+          const SizedBox(height: 4),
+          Text('₹${_paidFor(r, inst)} paid  ·  ₹${_remainingFor(r, inst)} left',
+              style: AppTextStyles.caption.copyWith(color: c.warning)),
+        ],
         if (inst.isCancelled && inst.cancelReason != null) ...[
           const SizedBox(height: 4),
           Text('Deferred: ${inst.cancelReason}',
@@ -891,7 +906,8 @@ class _RentDetailScreenState extends State<RentDetailScreen> {
     );
   }
 
-  Widget _chip(Installment inst, SalePayment? pending, AppColors c) {
+  Widget _chip(
+      RentalAgreement r, Installment inst, SalePayment? pending, AppColors c) {
     String label;
     Color color;
     if (inst.isPaid) {
@@ -903,6 +919,9 @@ class _RentDetailScreenState extends State<RentDetailScreen> {
     } else if (inst.isCancelled) {
       label = 'Cancelled';
       color = c.textSub;
+    } else if (_paidFor(r, inst) > 0) {
+      label = 'Partial';
+      color = c.warning;
     } else if (_isOverdue(inst)) {
       label = 'Not paid';
       color = c.textSub;

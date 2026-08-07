@@ -6,6 +6,7 @@ import '../../controllers/auth_controller.dart';
 import '../../models/doc_ref.dart';
 import '../../models/enums.dart';
 import '../../models/picked_doc.dart';
+import '../../models/rental_agreement.dart';
 import '../../models/vehicle.dart';
 import '../../services/api_rental_service.dart';
 import '../../services/rental_customer_service.dart';
@@ -16,9 +17,9 @@ import '../../utils/app_text_styles.dart';
 import '../../utils/doc_picker.dart';
 import '../../utils/formatters.dart';
 import '../../utils/responsive.dart';
+import '../../widgets/app_card.dart';
 import '../../widgets/detail_field_card.dart';
 import '../../widgets/doc_manager_tile.dart';
-import '../../widgets/secondary_button.dart';
 import '../../widgets/status_pill.dart';
 import '../document_preview_screen.dart';
 import 'rent_detail_screen.dart';
@@ -74,10 +75,11 @@ class _RentalVehicleDetailsScreenState
 
     final canModify =
         auth.isSuperAdmin || vehicle.createdBy == auth.currentUser?.id;
-    final rental = rentals.forVehicle(vehicle.id);
-    final renter = rental == null
-        ? null
-        : context.read<RentalCustomerService>().byId(rental.customerId);
+    // All rentals for this vehicle (current + past), newest first — so a
+    // completed or seized rental can still be opened after it ends.
+    final history = rentals.all().where((r) => r.vehicleId == vehicle.id).toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    final customers = context.read<RentalCustomerService>();
 
     return Scaffold(
       backgroundColor: c.bgCanvas,
@@ -110,34 +112,65 @@ class _RentalVehicleDetailsScreenState
                     style: AppTextStyles.label.copyWith(color: c.textSub)),
                 const SizedBox(height: AppSpacing.sm),
                 ..._docTiles(context, vehicles, vehicle),
-                // Rental.
+                // Rentals — current + past. Tap any to open its detail (so the
+                // previous rental stays viewable after it ends).
                 const SizedBox(height: AppSpacing.lg),
-                Text('Rental',
+                Text('Rentals',
                     style: AppTextStyles.label.copyWith(color: c.textSub)),
                 const SizedBox(height: AppSpacing.sm),
-                if (rental != null &&
-                    rental.rentalStatus == 'active' &&
-                    rental.isActive) ...[
-                  DetailFieldCard(
-                      label: 'Current renter', value: renter?.fullName ?? '—'),
-                  const SizedBox(height: AppSpacing.md),
-                  SecondaryButton(
-                    label: 'View rental',
-                    icon: Icons.receipt_long_outlined,
-                    onPressed: () =>
-                        Navigator.of(context).push(MaterialPageRoute(
-                      builder: (_) => RentDetailScreen(rentalId: rental.id),
-                    )),
-                  ),
-                ] else
+                if (history.isEmpty)
                   const DetailFieldCard(
-                      label: 'Current renter', value: 'Not currently rented'),
+                      label: 'Rentals', value: 'No rentals yet')
+                else
+                  for (final r in history) ...[
+                    AppCard(
+                      onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                        builder: (_) => RentDetailScreen(rentalId: r.id),
+                      )),
+                      child: Row(children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                  '${r.invoiceNo ?? 'Rental #${r.id}'}  ·  '
+                                  '${customers.byId(r.customerId)?.fullName ?? '—'}',
+                                  style: AppTextStyles.bodyStrong
+                                      .copyWith(color: c.textMain)),
+                              const SizedBox(height: 2),
+                              Text(_rentalStatusLabel(r),
+                                  style: AppTextStyles.caption
+                                      .copyWith(color: c.textSub)),
+                            ],
+                          ),
+                        ),
+                        Icon(Icons.chevron_right, color: c.textSub),
+                      ]),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                  ],
               ],
             ),
           ),
         ),
       ),
     );
+  }
+
+  String _rentalStatusLabel(RentalAgreement r) {
+    if (!r.isActive) return 'Pending approval';
+    switch (r.rentalStatus) {
+      case 'active':
+        return 'Active';
+      case 'completed':
+        return 'Ended';
+      case 'seized':
+        return 'Seized';
+      case 'cancelled':
+        return 'Cancelled';
+      default:
+        return r.rentalStatus;
+    }
   }
 
   List<Widget> _detailRows(Vehicle v) {

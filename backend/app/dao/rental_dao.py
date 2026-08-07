@@ -68,6 +68,20 @@ class RentalDAO:
         db.flush()
         return payment
 
+    @staticmethod
+    def paid_for_installment(db: Session, installment_id) -> float:
+        """Total of APPROVED (active) payments recorded against a rent reminder —
+        supports partial payments (accumulate until the full amount is met)."""
+        from app.models.enums import EntityStatus
+
+        total = db.scalar(
+            select(func.coalesce(func.sum(RentalPayment.amount), 0)).where(
+                RentalPayment.installment_id == installment_id,
+                RentalPayment.status == EntityStatus.active,
+            )
+        )
+        return float(total or 0)
+
     # ── reminders ────────────────────────────────────────────────────────────
     @staticmethod
     def active_rentals_with_unpaid(db: Session) -> list[Rental]:
