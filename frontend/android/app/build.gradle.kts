@@ -36,8 +36,9 @@ android {
     }
 
     defaultConfig {
-        // DEV branch: distinct application id so the dev app installs alongside
-        // the prod app on the same phone. Prod (main) keeps the base id.
+        // Base id. The `dev` flavor appends `.dev` (see productFlavors) so the
+        // dev app installs ALONGSIDE the prod app on the same phone. Prod (main)
+        // keeps this base id. Both ids are registered in google-services.json.
         applicationId = "com.slvauto.slv_auto_consultant"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
@@ -67,6 +68,25 @@ android {
                 signingConfigs.getByName("release")
             else
                 signingConfigs.getByName("debug")
+        }
+    }
+
+    // Env flavors so dev and prod coexist on one phone and are told apart:
+    //   prod → com.slvauto.slv_auto_consultant       · "SLV Auto Consultant"
+    //   dev  → com.slvauto.slv_auto_consultant.dev    · "SLV Auto (DEV)"
+    // CI builds `--flavor prod` on main, `--flavor dev` on dev. app_name is
+    // consumed by AndroidManifest's android:label. Only the id/name differ —
+    // the API URL is still injected via --dart-define at build time.
+    flavorDimensions += "env"
+    productFlavors {
+        create("prod") {
+            dimension = "env"
+            resValue("string", "app_name", "SLV Auto Consultant")
+        }
+        create("dev") {
+            dimension = "env"
+            applicationIdSuffix = ".dev"
+            resValue("string", "app_name", "SLV Auto (DEV)")
         }
     }
 }

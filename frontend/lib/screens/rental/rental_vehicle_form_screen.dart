@@ -245,6 +245,17 @@ class _RentalVehicleFormViewState extends State<_RentalVehicleFormView> {
                 onTap: () => _pickDate(vm.permitDate, (d) => vm.permitDate = d),
               ),
               const SizedBox(height: AppSpacing.lg),
+              PickerField(
+                label: 'Next service date',
+                leadingIcon: Icons.build_outlined,
+                placeholder: 'Select date',
+                value: vm.nextServiceDueDate == null
+                    ? null
+                    : Formatters.date(vm.nextServiceDueDate!),
+                onTap: () => _pickDate(
+                    vm.nextServiceDueDate, (d) => vm.nextServiceDueDate = d),
+              ),
+              const SizedBox(height: AppSpacing.lg),
 
               // ── Papers: RC / Permit / Insurance (flag + document) ──────
               Text('Papers',

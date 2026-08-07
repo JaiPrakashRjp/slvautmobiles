@@ -31,10 +31,16 @@ class ApiCustomerService extends CustomerService {
     notifyListeners();
     try {
       final data = await _api.get('/customers', query: {'module': module});
+      // Parse the whole response FIRST — only swap the cache once we have valid
+      // fresh data. Never clear-then-fail (that would blank the UI → "not found").
+      final fresh = (data as List)
+          .map((j) => _fromJson(j as Map<String, dynamic>))
+          .toList();
       _customers
         ..clear()
-        ..addAll(
-            (data as List).map((j) => _fromJson(j as Map<String, dynamic>)));
+        ..addAll(fresh);
+    } catch (_) {
+      // Any error (network / bad payload) → keep the existing cache.
     } finally {
       _loading = false;
       notifyListeners();

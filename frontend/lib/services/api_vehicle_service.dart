@@ -36,10 +36,16 @@ class ApiVehicleService extends VehicleService {
     notifyListeners();
     try {
       final data = await _api.get('/vehicles', query: {'module': module});
+      // Parse the whole response FIRST — only swap the cache once we have valid
+      // fresh data. Never clear-then-fail (that would blank the UI → "not found").
+      final fresh = (data as List)
+          .map((j) => _fromJson(j as Map<String, dynamic>))
+          .toList();
       _vehicles
         ..clear()
-        ..addAll(
-            (data as List).map((j) => _fromJson(j as Map<String, dynamic>)));
+        ..addAll(fresh);
+    } catch (_) {
+      // Any error (network / bad payload) → keep the existing cache.
     } finally {
       _loading = false;
       notifyListeners();
@@ -92,6 +98,7 @@ class ApiVehicleService extends VehicleService {
     DateTime? insuranceDate,
     DateTime? fcDate,
     DateTime? permitDate,
+    DateTime? nextServiceDueDate,
     String? prevOwnerName,
     String? prevOwnerMobile,
     String? prevOwnerAddress,
@@ -121,6 +128,7 @@ class ApiVehicleService extends VehicleService {
       'insurance_date': isSecondHand ? _date(insuranceDate) : null,
       'fc_date': isSecondHand ? _date(fcDate) : null,
       'permit_date': isSecondHand ? _date(permitDate) : null,
+      'next_service_due_date': _date(nextServiceDueDate),
       'prev_owner_name': isSecondHand ? prevOwnerName : null,
       'prev_owner_mobile': isSecondHand ? prevOwnerMobile : null,
       'prev_owner_address': isSecondHand ? prevOwnerAddress : null,
@@ -230,6 +238,7 @@ class ApiVehicleService extends VehicleService {
     DateTime? insuranceDate,
     DateTime? fcDate,
     DateTime? permitDate,
+    DateTime? nextServiceDueDate,
     String? prevOwnerName,
     String? prevOwnerMobile,
     String? prevOwnerAddress,
@@ -253,6 +262,7 @@ class ApiVehicleService extends VehicleService {
       'insurance_date': _date(insuranceDate),
       'fc_date': _date(fcDate),
       'permit_date': _date(permitDate),
+      'next_service_due_date': _date(nextServiceDueDate),
       'prev_owner_name': prevOwnerName,
       'prev_owner_mobile': prevOwnerMobile,
       'prev_owner_address': prevOwnerAddress,

@@ -8,6 +8,8 @@ import '../models/enums.dart';
 import '../models/search_result.dart';
 import '../services/api_notification_service.dart';
 import '../services/global_search_service.dart';
+import '../services/rental_customer_service.dart';
+import '../services/rental_vehicle_service.dart';
 import '../theme/app_colors.dart';
 import '../utils/app_spacing.dart';
 import '../utils/app_text_styles.dart';
@@ -19,7 +21,9 @@ import 'auto_sale/customer_detail_screen.dart';
 import 'auto_sale/vehicle_detail_screen.dart';
 import 'loan/loan_home_screen.dart';
 import 'notifications_screen.dart';
+import 'rental/rental_customer_rentals_screen.dart';
 import 'rental/rental_home_screen.dart';
+import 'rental/rental_vehicle_details_screen.dart';
 import 'sign_in_screen.dart';
 import 'users/users_home_screen.dart';
 
@@ -180,18 +184,34 @@ class _GlobalSearchBarState extends State<_GlobalSearchBar> {
   }
 
   void _open(SearchResult r) {
-    final route = r.kind == 'customer'
-        ? MaterialPageRoute<void>(
-            builder: (_) => CustomerDetailScreen(customerId: '${r.id}'))
-        : MaterialPageRoute<void>(
-            builder: (_) => VehicleDetailScreen(vehicleId: '${r.id}'));
+    final id = '${r.id}';
+    final MaterialPageRoute<void> route;
+    if (r.kind == 'customer') {
+      // A rental customer lives in the rental-scoped service — open the rental
+      // detail; otherwise the sale customer detail.
+      route = context.read<RentalCustomerService>().byId(id) != null
+          ? MaterialPageRoute(
+              builder: (_) => RentalCustomerRentalsScreen(customerId: id))
+          : MaterialPageRoute(
+              builder: (_) => CustomerDetailScreen(customerId: id));
+    } else {
+      route = context.read<RentalVehicleService>().byId(id) != null
+          ? MaterialPageRoute(
+              builder: (_) => RentalVehicleDetailsScreen(vehicleId: id))
+          : MaterialPageRoute(
+              builder: (_) => VehicleDetailScreen(vehicleId: id));
+    }
     Navigator.of(context).push(route);
   }
 
   void _openVehicle(int id) {
-    Navigator.of(context).push(MaterialPageRoute<void>(
-      builder: (_) => VehicleDetailScreen(vehicleId: '$id'),
-    ));
+    final vid = '$id';
+    final route = context.read<RentalVehicleService>().byId(vid) != null
+        ? MaterialPageRoute<void>(
+            builder: (_) => RentalVehicleDetailsScreen(vehicleId: vid))
+        : MaterialPageRoute<void>(
+            builder: (_) => VehicleDetailScreen(vehicleId: vid));
+    Navigator.of(context).push(route);
   }
 
   @override

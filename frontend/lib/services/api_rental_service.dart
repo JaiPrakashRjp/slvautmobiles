@@ -52,9 +52,13 @@ class RentalAgreementService extends ChangeNotifier {
     notifyListeners();
     try {
       final data = await _api.get('/rentals', query: {'module': 'rental'});
+      // Parse first, then swap — never clear-then-fail (would blank to "not found").
+      final fresh = (data as List)
+          .map((j) => _fromJson(j as Map<String, dynamic>))
+          .toList();
       _cache
         ..clear()
-        ..addAll((data as List).map((j) => _fromJson(j as Map<String, dynamic>)));
+        ..addAll(fresh);
     } catch (_) {
     } finally {
       _loading = false;
