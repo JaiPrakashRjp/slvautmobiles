@@ -139,9 +139,9 @@ class _RentalCustomerDuesScreenState extends State<RentalCustomerDuesScreen> {
         vehicle: vlabel,
         invoice: r.invoiceNo ?? 'Rental #${r.id}',
         status: _statusLabel(r),
-        rentLabel: r.isRecurring
-            ? '${Formatters.currency(r.periodAmount)} / '
-                '${r.rentalType == 'daily' ? 'day' : 'week'}'
+        periodAmount: r.periodAmount,
+        cadence: r.isRecurring
+            ? (r.rentalType == 'daily' ? 'day' : 'week')
             : '',
         collected: _collected(r),
         pending: _pending(r),

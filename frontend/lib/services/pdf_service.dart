@@ -1211,7 +1211,9 @@ class RealPdfService implements PdfService {
                   [
                     r.invoice,
                     r.status,
-                    r.rentLabel.isEmpty ? '—' : r.rentLabel,
+                    r.cadence.isEmpty
+                        ? '—'
+                        : '${_curr(r.periodAmount)} / ${r.cadence}',
                     _curr(r.collected),
                     _curr(r.pending),
                   ],

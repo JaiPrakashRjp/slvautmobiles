@@ -30,7 +30,8 @@ class RentalStatementRow {
     required this.vehicle,
     required this.invoice,
     required this.status,
-    required this.rentLabel,
+    required this.periodAmount,
+    required this.cadence,
     required this.collected,
     required this.pending,
     required this.reminders,
@@ -39,7 +40,8 @@ class RentalStatementRow {
   final String vehicle;
   final String invoice;
   final String status; // Active / Ended / Seized / Pending approval
-  final String rentLabel; // "₹500 / week" or '' for legacy rentals
+  final int periodAmount; // rent per period (recurring rentals)
+  final String cadence; // 'week' | 'day' | '' (legacy — no cadence)
   final int collected;
   final int pending;
   final List<StatementReminderRow> reminders;
