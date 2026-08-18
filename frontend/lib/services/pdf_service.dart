@@ -9,6 +9,7 @@ import '../models/installment.dart';
 import '../models/monthly_report.dart';
 import '../models/loan.dart';
 import '../models/rental_agreement.dart';
+import '../models/rental_customer_statement.dart';
 import '../models/rental_report.dart';
 import '../models/sale.dart';
 import '../models/second_hand_report.dart';
@@ -73,6 +74,11 @@ abstract class PdfService {
   /// collected in the period, and idle vehicles. No total/outstanding.
   Future<void> previewRentalReport(RentalReport report);
   Future<void> shareRentalReport(RentalReport report);
+
+  /// Per-customer dues statement: headline totals + a per-rental, per-reminder
+  /// breakdown of what is pending, paid, and overdue for one rental customer.
+  Future<void> previewCustomerStatement(RentalCustomerStatement statement);
+  Future<void> shareCustomerStatement(RentalCustomerStatement statement);
 
   /// Second-hand vehicles bought in a period (vehicle + previous owner + buying
   /// price + status). [secondHandReportBytes] backs the in-app preview;
@@ -1140,6 +1146,104 @@ class RealPdfService implements PdfService {
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
               pw.Text('SLV Auto Consultant · Rental report',
+                  style: const pw.TextStyle(
+                      fontSize: 8, color: PdfColors.grey500)),
+              pw.Text('Page ${ctx.pageNumber} of ${ctx.pagesCount}',
+                  style: const pw.TextStyle(
+                      fontSize: 8, color: PdfColors.grey500)),
+            ],
+          ),
+        ),
+      ),
+    );
+    return doc;
+  }
+
+  // ── Customer dues statement ─────────────────────────────────────────────
+
+  @override
+  Future<void> previewCustomerStatement(RentalCustomerStatement s) async {
+    final doc = await _customerStatementDoc(s);
+    await Printing.layoutPdf(onLayout: (_) => doc.save());
+  }
+
+  @override
+  Future<void> shareCustomerStatement(RentalCustomerStatement s) async {
+    final doc = await _customerStatementDoc(s);
+    await Printing.sharePdf(
+      bytes: await doc.save(),
+      filename:
+          'dues-${s.customerName.replaceAll(RegExp(r'\s+'), '-')}.pdf',
+    );
+  }
+
+  Future<pw.Document> _customerStatementDoc(RentalCustomerStatement s) async {
+    final logo = await _loadLogo();
+    final doc = pw.Document();
+    doc.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.fromLTRB(28, 22, 28, 28),
+        header: (_) => _reportHeader(
+            logo,
+            s.customerPhone.isEmpty
+                ? s.customerName
+                : '${s.customerName}  ·  ${s.customerPhone}',
+            kind: 'Customer dues statement'),
+        build: (_) => [
+          _label('SUMMARY'),
+          _statGrid([
+            ('Total pending', _curr(s.totalPending), 'across all rentals'),
+            ('Collected', _curr(s.totalCollected), 'rent paid'),
+            ('Active rentals', '${s.activeRentals}', 'currently out'),
+            ('Open reminders', '${s.openReminders}', 'still owing'),
+            ('Overdue', '${s.overdue}', 'past due date'),
+            ('Awaiting approval', '${s.awaitingApproval}', 'payments'),
+          ]),
+          if (s.rentals.isEmpty)
+            _emptyLine('This customer has no active rental records.')
+          else
+            for (final r in s.rentals) ...[
+              _label('RENTAL — ${r.vehicle}'),
+              _table(
+                ['Invoice', 'Status', 'Rent', 'Collected', 'Pending'],
+                [
+                  [
+                    r.invoice,
+                    r.status,
+                    r.cadence.isEmpty
+                        ? '—'
+                        : '${_curr(r.periodAmount)} / ${r.cadence}',
+                    _curr(r.collected),
+                    _curr(r.pending),
+                  ],
+                ],
+                rightAlign: const {3, 4},
+              ),
+              if (r.reminders.isEmpty)
+                _emptyLine('No open reminders.')
+              else
+                _table(
+                  ['Due date', 'Paid', 'Remaining', 'State'],
+                  [
+                    for (final i in r.reminders)
+                      [
+                        Formatters.date(i.dueDate),
+                        i.paid > 0 ? _curr(i.paid) : '—',
+                        _curr(i.remaining),
+                        i.overdue ? 'Overdue' : 'Upcoming',
+                      ],
+                  ],
+                  rightAlign: const {1, 2},
+                ),
+            ],
+        ],
+        footer: (ctx) => pw.Padding(
+          padding: const pw.EdgeInsets.only(top: 8),
+          child: pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Text('SLV Auto Consultant · Customer dues',
                   style: const pw.TextStyle(
                       fontSize: 8, color: PdfColors.grey500)),
               pw.Text('Page ${ctx.pageNumber} of ${ctx.pagesCount}',

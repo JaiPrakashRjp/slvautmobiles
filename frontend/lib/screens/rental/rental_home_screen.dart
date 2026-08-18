@@ -22,6 +22,7 @@ import '../../widgets/tab_bar_navy.dart';
 import '../auto_sale/create_customer_screen.dart';
 import 'assign_rent_screen.dart';
 import 'rent_detail_screen.dart';
+import 'rental_customer_dues_screen.dart';
 import 'rental_customers_screen.dart';
 import 'rental_daily_report_screen.dart';
 import 'rental_monthly_report_screen.dart';
@@ -131,6 +132,13 @@ class _RentalVehiclesTabState extends State<_RentalVehiclesTab> {
         title: const Text('Auto rental system'),
         automaticallyImplyLeading: false,
         actions: [
+          IconButton(
+            tooltip: 'Customer dues',
+            icon: const Icon(Icons.account_balance_wallet_outlined),
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => const RentalCustomerDuesScreen(),
+            )),
+          ),
           IconButton(
             tooltip: 'Daily collections',
             icon: const Icon(Icons.assignment_outlined),
