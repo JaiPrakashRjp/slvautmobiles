@@ -93,6 +93,7 @@ class ApiVehicleService extends VehicleService {
     num? buyingExpenses,
     Showroom? showroom,
     bool rc = false,
+    bool fc = false,
     bool permit = false,
     bool insurance = false,
     DateTime? insuranceDate,
@@ -119,8 +120,9 @@ class ApiVehicleService extends VehicleService {
       'buying_expenses': buyingExpenses,
       // first-hand only
       'showroom': isSecondHand ? null : showroom?.wire,
-      // RC / Permit / Insurance — both hand types
+      // RC / FC / Permit / Insurance — both hand types
       'rc': rc,
+      'fc': fc,
       'permit': permit,
       'insurance': insurance,
       // second-hand only
@@ -233,6 +235,7 @@ class ApiVehicleService extends VehicleService {
     num? buyingExpenses,
     Showroom? showroom,
     bool? rc,
+    bool? fc,
     bool? permit,
     bool? insurance,
     DateTime? insuranceDate,
@@ -257,6 +260,7 @@ class ApiVehicleService extends VehicleService {
       'buying_expenses': buyingExpenses,
       'showroom': showroom?.wire,
       'rc': rc,
+      'fc': fc,
       'permit': permit,
       'insurance': insurance,
       'insurance_date': _date(insuranceDate),
@@ -332,6 +336,7 @@ class ApiVehicleService extends VehicleService {
           : num.tryParse(j['buying_expenses'].toString()),
       showroom: Showroom.fromWire(j['showroom'] as String?),
       rc: (j['rc'] as bool?) ?? false,
+      fc: (j['fc'] as bool?) ?? false,
       permit: (j['permit'] as bool?) ?? false,
       insurance: (j['insurance'] as bool?) ?? false,
       insuranceDate: _parseDate(j['insurance_date']),

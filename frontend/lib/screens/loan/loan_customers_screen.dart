@@ -1,0 +1,288 @@
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../../controllers/auth_controller.dart';
+import '../../models/customer.dart';
+import '../../models/doc_ref.dart';
+import '../../services/loan_customer_service.dart';
+import '../../services/loan_service.dart';
+import '../../theme/app_colors.dart';
+import '../../utils/app_spacing.dart';
+import '../../utils/app_text_styles.dart';
+import '../../utils/responsive.dart';
+import '../../widgets/app_card.dart';
+import '../../widgets/call_chip.dart';
+import '../../widgets/confirmation_dialog.dart';
+import '../../widgets/empty_state.dart';
+import '../../widgets/gold_create_button.dart';
+import '../../widgets/icon_button_soft.dart';
+import '../../widgets/status_pill.dart';
+import '../../widgets/tab_bar_navy.dart';
+import '../auto_sale/create_customer_screen.dart';
+import 'loan_customer_detail_screen.dart';
+
+/// Loan-module customers — same tables/fields/approval flow as the sale
+/// customers, scoped to module = loan, with the richer assurity document set.
+class LoanCustomersScreen extends StatefulWidget {
+  const LoanCustomersScreen({super.key});
+
+  @override
+  State<LoanCustomersScreen> createState() => _LoanCustomersScreenState();
+}
+
+class _LoanCustomersScreenState extends State<LoanCustomersScreen> {
+  String _query = '';
+  int _tab = 0; // 0 = All, 1 = Seized
+  static const _tabs = ['All', 'Seized'];
+
+  void _openCreate(BuildContext context, LoanCustomerService service) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => CreateCustomerScreen(
+          service: service,
+          extendedAssurity: true,
+        ),
+      ),
+    );
+  }
+
+  List<Customer> _filtered(LoanCustomerService service, Set<String> seized) {
+    final q = _query.trim().toLowerCase();
+    return service.all().where((c) {
+      if (_tab == 1 && !seized.contains(c.id)) return false;
+      if (q.isEmpty) return true;
+      return c.fullName.toLowerCase().contains(q) ||
+          c.phone.toLowerCase().contains(q);
+    }).toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final service = context.watch<LoanCustomerService>();
+    final loans = context.watch<LoanService>();
+    // Customers whose loan vehicle was seized.
+    final seized = <String>{
+      for (final l in loans.all())
+        if (l.isSeized) l.customerId,
+    };
+    final list = _filtered(service, seized);
+
+    return Scaffold(
+      backgroundColor: c.bgCanvas,
+      appBar: AppBar(
+        title: const Text('Loan customers'),
+        actions: [
+          GoldCreateButton(
+            iconOnly: true,
+            onPressed: () => _openCreate(context, service),
+          ),
+        ],
+      ),
+      body: SafeArea(
+        top: false,
+        child: ResponsiveBody(
+          maxFormWidth: 720,
+          phone: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: EdgeInsets.fromLTRB(context.screenHPadding,
+                    AppSpacing.lg, context.screenHPadding, AppSpacing.sm),
+                child: TabBarNavy(
+                  tabs: _tabs,
+                  index: _tab,
+                  onChanged: (i) => setState(() => _tab = i),
+                ),
+              ),
+              Padding(
+                padding: EdgeInsets.fromLTRB(context.screenHPadding,
+                    0, context.screenHPadding, AppSpacing.sm),
+                child: TextField(
+                  onChanged: (q) => setState(() => _query = q),
+                  decoration: InputDecoration(
+                    hintText: 'Search name / phone…',
+                    prefixIcon: const Icon(Icons.search, size: 20),
+                    isDense: true,
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ),
+              Expanded(
+                child: RefreshIndicator(
+                  onRefresh: () => service.refresh(),
+                  child: ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: EdgeInsets.fromLTRB(context.screenHPadding, 0,
+                        context.screenHPadding, AppSpacing.xl),
+                    children: [
+                      if (service.loading && list.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 80),
+                          child: Center(child: CircularProgressIndicator()),
+                        )
+                      else if (list.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 40),
+                          child: EmptyState(
+                            icon: Icons.people_outline,
+                            title: 'No loan customers yet',
+                            subtitle: 'Tap “+” to add a customer.',
+                            ctaLabel: 'Add customer',
+                            onCta: () => _openCreate(context, service),
+                          ),
+                        )
+                      else
+                        for (final cust in list)
+                          Padding(
+                            padding:
+                                const EdgeInsets.only(bottom: AppSpacing.lg),
+                            child: _LoanCustomerCard(customer: cust),
+                          ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LoanCustomerCard extends StatelessWidget {
+  const _LoanCustomerCard({required this.customer});
+
+  final Customer customer;
+
+  void _open(BuildContext context) {
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => LoanCustomerDetailScreen(customerId: customer.id),
+    ));
+  }
+
+  Future<void> _confirmDelete(
+      BuildContext context, LoanCustomerService service) async {
+    final ok = await ConfirmationDialog.show(
+      context,
+      title: 'Delete customer',
+      message: 'Remove ${customer.fullName}? This cannot be undone.',
+      confirmLabel: 'Delete',
+      danger: true,
+    );
+    if (ok == true) service.delete(customer.id);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final auth = context.read<AuthController>();
+    final service = context.read<LoanCustomerService>();
+    final canModify =
+        auth.isSuperAdmin || customer.createdBy == auth.currentUser?.id;
+    final photoRef = customer.uploadedDocs
+        .where((d) => d.docTypeWire == 'photo')
+        .cast<DocRef?>()
+        .firstOrNull;
+
+    return AppCard(
+      onTap: () => _open(context),
+      accentLeft: customer.isRejected,
+      accentColor: customer.isRejected ? c.danger : null,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              CircleAvatar(
+                radius: 22,
+                backgroundColor: c.bgSurface,
+                backgroundImage: photoRef == null
+                    ? null
+                    : CachedNetworkImageProvider(
+                        service.documentUrl(photoRef.id)),
+                child: photoRef == null
+                    ? Icon(Icons.person_outline, color: c.textSub)
+                    : null,
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: AppSpacing.sm,
+                      runSpacing: 4,
+                      children: [
+                        Text(customer.fullName,
+                            style:
+                                AppTextStyles.h2.copyWith(color: c.textMain)),
+                        StatusPill.forEntity(customer.status),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: CallChip(phone: customer.phone),
+                    ),
+                    if (customer.isRejected &&
+                        (customer.rejectionReason?.isNotEmpty ?? false)) ...[
+                      const SizedBox(height: AppSpacing.xs),
+                      Text('Rejected: ${customer.rejectionReason}',
+                          style:
+                              AppTextStyles.caption.copyWith(color: c.danger)),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Divider(height: 1, color: c.borderColor),
+          const SizedBox(height: AppSpacing.sm),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              IconButtonSoft(
+                icon: Icons.visibility_outlined,
+                tooltip: 'View customer',
+                compact: true,
+                onPressed: () => _open(context),
+              ),
+              if (canModify) ...[
+                const SizedBox(width: AppSpacing.sm),
+                IconButtonSoft(
+                  icon: Icons.edit_outlined,
+                  tooltip: 'Edit',
+                  compact: true,
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => CreateCustomerScreen(
+                        existing: customer,
+                        service: service,
+                        extendedAssurity: true,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                IconButtonSoft(
+                  icon: Icons.delete_outline,
+                  tooltip: 'Delete',
+                  danger: true,
+                  compact: true,
+                  onPressed: () => _confirmDelete(context, service),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}

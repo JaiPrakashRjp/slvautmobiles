@@ -13,17 +13,17 @@ import '../services/vehicle_service.dart';
 /// is in EDIT mode: fields are pre-filled and submit() PATCHes instead.
 class CreateVehicleViewModel extends ChangeNotifier {
   CreateVehicleViewModel(this._vehicles, this._auth,
-      {Vehicle? existing, this.rental = false})
+      {Vehicle? existing, this.rental = false, this.loan = false})
       : _existing = existing {
     if (existing != null) {
       _prefill(existing);
     } else {
       _status = Gate.initialStatus(_auth.currentUser?.role ?? Role.admin);
     }
-    // A rental vehicle is handled as "second hand" mode internally so the
+    // A rental / loan vehicle is handled as "second hand" mode internally so the
     // reg-number + Insurance/FC/Permit-date fields apply. Owned-hand and
-    // chassis number are not collected on the rental form.
-    if (rental && _hand == null) _hand = VehicleType.secondHand;
+    // chassis number are not collected on those reduced forms.
+    if ((rental || loan) && _hand == null) _hand = VehicleType.secondHand;
   }
 
   final VehicleService _vehicles;
@@ -33,6 +33,10 @@ class CreateVehicleViewModel extends ChangeNotifier {
   /// True when backing the rental vehicle form (module = rental): a reduced
   /// field set, owned-hand forced to second-hand, chassis not required.
   final bool rental;
+
+  /// True when backing the loan vehicle form (module = loan): reduced field set
+  /// with a vehicle photo and Insurance / FC / Permit availability toggles.
+  final bool loan;
 
   bool get isEditing => _existing != null;
 
@@ -55,10 +59,14 @@ class CreateVehicleViewModel extends ChangeNotifier {
   // ── First-hand only ──────────────────────────────────────────────────────
   Showroom? _showroom;
 
-  // ── RC / Permit / Insurance (both hand types) ────────────────────────────
+  // ── RC / FC / Permit / Insurance (both hand types) ───────────────────────
   bool _rc = false;
+  bool _fc = false;
   bool _permit = false;
   bool _insurance = false;
+
+  /// Loan vehicle photo — picked file held for upload on submit (wire 'photo').
+  PickedDoc? _vehiclePhoto;
 
   // ── Second-hand only ─────────────────────────────────────────────────────
   final regNoController = TextEditingController();
@@ -86,8 +94,10 @@ class CreateVehicleViewModel extends ChangeNotifier {
   SaleStatus get saleStatus => _saleStatus;
   Showroom? get showroom => _showroom;
   bool get rc => _rc;
+  bool get fc => _fc;
   bool get permit => _permit;
   bool get insurance => _insurance;
+  PickedDoc? get vehiclePhoto => _vehiclePhoto;
   Map<VehicleDocType, PickedDoc> get documents => _documents;
   DateTime? get insuranceDate => _insuranceDate;
   DateTime? get fcDate => _fcDate;
@@ -142,6 +152,16 @@ class CreateVehicleViewModel extends ChangeNotifier {
 
   set rc(bool v) {
     _rc = v;
+    notifyListeners();
+  }
+
+  set fc(bool v) {
+    _fc = v;
+    notifyListeners();
+  }
+
+  set vehiclePhoto(PickedDoc? doc) {
+    _vehiclePhoto = doc;
     notifyListeners();
   }
 
@@ -211,6 +231,7 @@ class CreateVehicleViewModel extends ChangeNotifier {
     _financerId = v.financerId;
     _showroom = v.showroom;
     _rc = v.rc;
+    _fc = v.fc;
     _permit = v.permit;
     _insurance = v.insurance;
     _status = v.status;
@@ -244,6 +265,7 @@ class CreateVehicleViewModel extends ChangeNotifier {
         buyingExpenses: _parseAmount(buyingExpensesController.text),
         showroom: isFirstHand ? _showroom : null,
         rc: _rc,
+        fc: _fc,
         permit: _permit,
         insurance: _insurance,
         insuranceDate: isSecondHand ? _insuranceDate : null,
@@ -276,6 +298,7 @@ class CreateVehicleViewModel extends ChangeNotifier {
         buyingExpenses: _parseAmount(buyingExpensesController.text),
         showroom: isFirstHand ? _showroom : null,
         rc: _rc,
+        fc: _fc,
         permit: _permit,
         insurance: _insurance,
         insuranceDate: isSecondHand ? _insuranceDate : null,
@@ -295,6 +318,9 @@ class CreateVehicleViewModel extends ChangeNotifier {
     }
 
     final failedDocs = <String>[];
+    // Loan vehicle photo (wire 'photo') — upserted whenever a new one is picked.
+    await _tryUpload(
+        vehicleId, 'photo', _vehiclePhoto, 'Vehicle photo', failedDocs);
     // RC / Permit / Insurance documents apply to both hand types.
     await _tryUpload(vehicleId, VehicleDocType.rc.wire,
         _documents[VehicleDocType.rc], VehicleDocType.rc.label, failedDocs);

@@ -6,6 +6,7 @@ import 'package:printing/printing.dart';
 
 import '../models/customer.dart';
 import '../models/installment.dart';
+import '../models/loan_customer_report.dart';
 import '../models/monthly_report.dart';
 import '../models/loan.dart';
 import '../models/rental_agreement.dart';
@@ -63,6 +64,12 @@ abstract class PdfService {
     required Loan loan,
     required Customer customer,
   });
+
+  /// Per-customer loan statement — all loans, each EMI schedule and headline
+  /// totals. [previewLoanReport] opens the print preview; [shareLoanReport]
+  /// hands the PDF to the OS share/save sheet.
+  Future<void> previewLoanReport(LoanCustomerReport report);
+  Future<void> shareLoanReport(LoanCustomerReport report);
 
   /// Business report over a period (month or custom range): sold/unsold,
   /// customers, dues. [previewMonthlyReport] opens the print preview;
@@ -928,6 +935,106 @@ class RealPdfService implements PdfService {
       ),
     ));
     await Printing.layoutPdf(onLayout: (_) => doc.save());
+  }
+
+  // ── Loan customer statement ─────────────────────────────────────────────
+
+  @override
+  Future<void> previewLoanReport(LoanCustomerReport report) async {
+    final doc = await _loanReportDoc(report);
+    await Printing.layoutPdf(onLayout: (_) => doc.save());
+  }
+
+  @override
+  Future<void> shareLoanReport(LoanCustomerReport report) async {
+    final doc = await _loanReportDoc(report);
+    await Printing.sharePdf(
+      bytes: await doc.save(),
+      filename:
+          'loan-statement-${report.customerName.replaceAll(RegExp(r'\s+'), '-')}.pdf',
+    );
+  }
+
+  Future<pw.Document> _loanReportDoc(LoanCustomerReport r) async {
+    final logo = await _loadLogo();
+    final doc = pw.Document();
+    doc.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.fromLTRB(28, 22, 28, 28),
+        header: (_) => _reportHeader(
+            logo,
+            r.phone.isEmpty ? r.customerName : '${r.customerName}  ·  ${r.phone}',
+            kind: 'Loan statement'),
+        build: (_) => [
+          _label('SUMMARY'),
+          _statGrid([
+            ('Loans', '${r.loanCount}', 'total'),
+            ('Total loaned', _curr(r.totalLoaned), 'principal'),
+            ('Total paid', _curr(r.totalPaid), 'received'),
+            ('Outstanding', _curr(r.totalOutstanding), 'balance'),
+            ('Penalty', _curr(r.totalPenalty), 'outstanding'),
+          ]),
+          _label('CUSTOMER'),
+          _card([
+            _row('Name', r.customerName),
+            _row('Mobile', r.phone.isEmpty ? '—' : Formatters.phone(r.phone)),
+            if (r.branch.isNotEmpty) _row('Branch', r.branch),
+            if (r.address.isNotEmpty) _row('Address', r.address),
+            if (r.assurityName != null && r.assurityName!.isNotEmpty)
+              _row('Assurity', r.assurityName!),
+            if (r.assurityMobile != null && r.assurityMobile!.isNotEmpty)
+              _row('Assurity mobile', Formatters.phone(r.assurityMobile!)),
+          ]),
+          if (r.loans.isEmpty)
+            _emptyLine('This customer has no loans.')
+          else
+            for (final l in r.loans) ...[
+              _label('LOAN — ${l.vehicleLabel}'),
+              _card([
+                _row('Loan amount', _curr(l.principal)),
+                _row('EMI', _curr(l.emiAmount)),
+                _row('Tenure', '${l.tenureMonths} months'),
+                _row('Loan date', Formatters.date(l.loanDate)),
+                _row('Status', l.status),
+                _row('Paid', _curr(l.paid)),
+                _row('Outstanding', _curr(l.outstanding), accent: true),
+              ]),
+              _table(
+                ['#', 'Due date', 'EMI', 'Penalty', 'Paid', 'Balance', 'Status'],
+                [
+                  for (final e in l.emis)
+                    [
+                      '${e.seq}',
+                      Formatters.date(e.dueDate),
+                      _curr(e.amount),
+                      e.penalty > 0 ? _curr(e.penalty) : '—',
+                      _curr(e.paid),
+                      _curr(e.balance),
+                      e.status,
+                    ],
+                ],
+                rightAlign: const {2, 3, 4, 5},
+              ),
+            ],
+        ],
+        footer: (ctx) => pw.Padding(
+          padding: const pw.EdgeInsets.only(top: 8),
+          child: pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Text('SLV Auto Consultant · Loan statement',
+                  style:
+                      const pw.TextStyle(fontSize: 8, color: PdfColors.grey500)),
+              pw.Text('Page ${ctx.pageNumber} of ${ctx.pagesCount}',
+                  style:
+                      const pw.TextStyle(fontSize: 8, color: PdfColors.grey500)),
+            ],
+          ),
+        ),
+      ),
+    );
+    return doc;
   }
 
   // ── Monthly / period report ─────────────────────────────────────────────

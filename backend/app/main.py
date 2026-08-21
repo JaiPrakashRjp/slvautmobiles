@@ -7,7 +7,9 @@ from app.controllers.auth_controller import router as auth_router
 from app.controllers.customer_controller import router as customers_router
 from app.controllers.device_controller import router as devices_router
 from app.controllers.financer_controller import router as financers_router
+from app.controllers.loan_controller import router as loans_router
 from app.controllers.notification_controller import router as notifications_router
+from app.controllers.personal_loan_controller import router as personal_loans_router
 from app.controllers.rental_controller import router as rentals_router
 from app.controllers.report_controller import router as reports_router
 from app.controllers.sale_controller import router as sales_router
@@ -37,6 +39,8 @@ app.include_router(users_router)
 app.include_router(vehicles_router)
 app.include_router(customers_router)
 app.include_router(sales_router)
+app.include_router(loans_router)
+app.include_router(personal_loans_router)
 app.include_router(rentals_router)
 app.include_router(notifications_router)
 app.include_router(reports_router)

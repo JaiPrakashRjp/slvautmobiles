@@ -1,6 +1,8 @@
 import 'enums.dart';
 
-/// One EMI installment of a [Loan].
+/// One EMI installment of a [Loan]. The month's amount owed is the EMI plus any
+/// late [penalty]; part payments accumulate into [amountPaid] until the whole
+/// [totalDue] is cleared, at which point the month is [isPaid].
 class Emi {
   Emi({
     required this.id,
@@ -10,6 +12,9 @@ class Emi {
     this.amountPaid = 0,
     this.penalty = 0,
     this.paidDate,
+    this.receivedDate,
+    this.remarks,
+    this.screenshotName,
   });
 
   final String id;
@@ -18,11 +23,27 @@ class Emi {
   final int amountDue;
   int amountPaid;
   int penalty;
+
+  /// Date the month was fully cleared (set once [isPaid]).
   DateTime? paidDate;
 
-  bool get isPaid => amountPaid >= amountDue;
-  bool get isPartial => amountPaid > 0 && amountPaid < amountDue;
-  int get remaining => (amountDue - amountPaid).clamp(0, amountDue);
+  /// Date of the most recent (part) payment received.
+  DateTime? receivedDate;
+
+  /// Free-text note captured with the payment.
+  String? remarks;
+
+  /// File name of the attached payment screenshot (proof).
+  String? screenshotName;
+
+  /// Total owed this month = EMI + any late penalty.
+  int get totalDue => amountDue + penalty;
+
+  bool get isPaid => amountPaid >= totalDue;
+  bool get isPartial => amountPaid > 0 && amountPaid < totalDue;
+
+  /// Amount still to collect this month (EMI + penalty − paid).
+  int get remaining => (totalDue - amountPaid).clamp(0, totalDue);
 
   /// EMI status derived from paid state and the due date (spec 8.2 / 11.3).
   ScheduleStatus statusAt(DateTime now) {

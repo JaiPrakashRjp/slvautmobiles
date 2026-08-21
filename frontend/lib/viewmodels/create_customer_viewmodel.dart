@@ -38,10 +38,38 @@ class CreateCustomerViewModel extends ChangeNotifier {
   final Map<KycDocType, PickedDoc> _docs = {};
   PickedDoc? _assurityIdProof;
 
+  /// Extended assurity documents for the Loan module — Aadhaar, PAN, a photo of
+  /// the guarantor and two free "Other" slots. Keyed by backend wire
+  /// (`assurity_aadhaar`, `assurity_pan`, `assurity_photo`,
+  /// `assurity_other_1`, `assurity_other_2`). Used only in create mode; edit
+  /// mode manages these live against the backend like the borrower's docs.
+  final Map<String, PickedDoc> _assurityDocs = {};
+
   DateTime? get dob => _dob;
   Branch? get branch => _branch;
   Map<KycDocType, PickedDoc> get docs => _docs;
   PickedDoc? get assurityIdProof => _assurityIdProof;
+  Map<String, PickedDoc> get assurityDocs => _assurityDocs;
+
+  void setAssurityDoc(String wire, PickedDoc doc) {
+    _assurityDocs[wire] = doc;
+    notifyListeners();
+  }
+
+  void removeAssurityDoc(String wire) {
+    _assurityDocs.remove(wire);
+    notifyListeners();
+  }
+
+  /// Human label for an extended-assurity document wire (for error messages).
+  static String assurityLabel(String wire) => switch (wire) {
+        'assurity_aadhaar' => 'Assurity Aadhaar',
+        'assurity_pan' => 'Assurity PAN',
+        'assurity_photo' => 'Assurity photo',
+        'assurity_other_1' => 'Assurity other document 1',
+        'assurity_other_2' => 'Assurity other document 2',
+        _ => 'Assurity document',
+      };
 
   void _prefill(Customer c) {
     firstNameController.text = c.firstName;
@@ -127,6 +155,11 @@ class CreateCustomerViewModel extends ChangeNotifier {
     }
     await _tryUpload(customer.id, 'assurity_id_proof', _assurityIdProof,
         'Assurity ID proof', failedDocs);
+    // Extended assurity documents (Loan module): Aadhaar / PAN / photo / 2 Other.
+    for (final entry in _assurityDocs.entries) {
+      await _tryUpload(customer.id, entry.key, entry.value,
+          assurityLabel(entry.key), failedDocs);
+    }
 
     return (
       pending: !user.isSuperAdmin,

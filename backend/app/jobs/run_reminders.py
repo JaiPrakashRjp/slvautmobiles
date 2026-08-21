@@ -18,7 +18,8 @@ def main() -> None:
     db = SessionLocal()
     try:
         created = ReminderService.run(db)
-        # Rental rent reminders run separately at 5 PM IST (run_rental_reminders).
+        # Loan + personal-loan EMI reminders run separately at 9 AM IST
+        # (run_loan_reminders). Rental rent reminders run at 5 PM IST.
         expiries = DocExpiryService.run(db)
         stamp = datetime.now(timezone.utc).isoformat()
         print(

@@ -33,6 +33,7 @@ class CreateCustomerScreen extends StatelessWidget {
     this.existing,
     this.sellVehicleId,
     this.service,
+    this.extendedAssurity = false,
   });
 
   final Customer? existing;
@@ -42,9 +43,14 @@ class CreateCustomerScreen extends StatelessWidget {
   final String? sellVehicleId;
 
   /// Customer service to create into. Defaults to the auto_sale [CustomerService]
-  /// from the provider; the rental module passes its own rental-scoped service so
-  /// the customer is created under the rental module.
+  /// from the provider; the rental and loan modules pass their own module-scoped
+  /// service so the customer is created under that module.
   final CustomerService? service;
+
+  /// Loan module: show the richer assurity (guarantor) document set — Aadhaar,
+  /// PAN, a photo and two "Other" slots — instead of the single ID proof used by
+  /// Auto Sale / Rental.
+  final bool extendedAssurity;
 
   @override
   Widget build(BuildContext context) {
@@ -54,15 +60,19 @@ class CreateCustomerScreen extends StatelessWidget {
         context.read<AuthController>(),
         existing: existing,
       ),
-      child: _CreateCustomerView(sellVehicleId: sellVehicleId),
+      child: _CreateCustomerView(
+        sellVehicleId: sellVehicleId,
+        extendedAssurity: extendedAssurity,
+      ),
     );
   }
 }
 
 class _CreateCustomerView extends StatefulWidget {
-  const _CreateCustomerView({this.sellVehicleId});
+  const _CreateCustomerView({this.sellVehicleId, this.extendedAssurity = false});
 
   final String? sellVehicleId;
+  final bool extendedAssurity;
 
   @override
   State<_CreateCustomerView> createState() => _CreateCustomerViewState();
@@ -510,9 +520,20 @@ class _CreateCustomerViewState extends State<_CreateCustomerView> {
                   validator: Validators.phone,
                 ),
                 const SizedBox(height: AppSpacing.lg),
-                _RequiredLabel('ID proof', !vm.isEditing),
-                const SizedBox(height: AppSpacing.sm),
-                _assurityDocTile(context, vm),
+                if (widget.extendedAssurity) ...[
+                  Text('Assurity documents',
+                      style: AppTextStyles.label.copyWith(color: c.textSub)),
+                  const SizedBox(height: AppSpacing.xs),
+                  Text('Aadhaar, PAN, photo and up to two other documents '
+                      '(pdf or image)',
+                      style: AppTextStyles.caption.copyWith(color: c.textSub)),
+                  const SizedBox(height: AppSpacing.sm),
+                  ..._assurityExtendedTiles(context, vm),
+                ] else ...[
+                  _RequiredLabel('ID proof', !vm.isEditing),
+                  const SizedBox(height: AppSpacing.sm),
+                  _assurityDocTile(context, vm),
+                ],
                 const SizedBox(height: AppSpacing.xl),
                 AppTextField(
                   label: 'Remarks',
@@ -560,6 +581,41 @@ class _CreateCustomerViewState extends State<_CreateCustomerView> {
     return [
       for (final d in _docTypes) ...[
         _liveDocTile(context, vm, d.wire, d.label),
+        const SizedBox(height: AppSpacing.sm),
+      ],
+    ];
+  }
+
+  /// Loan module: the richer assurity document set (Aadhaar / PAN / photo /
+  /// two Other slots). Create mode collects picked files (uploaded on submit);
+  /// edit mode manages each document live against the backend.
+  List<Widget> _assurityExtendedTiles(
+      BuildContext context, CreateCustomerViewModel vm) {
+    const docs = [
+      ('assurity_aadhaar', 'Aadhaar'),
+      ('assurity_pan', 'PAN'),
+      ('assurity_photo', 'Photo'),
+      ('assurity_other_1', 'Other document 1'),
+      ('assurity_other_2', 'Other document 2'),
+    ];
+    return [
+      for (final d in docs) ...[
+        if (!vm.isEditing)
+          DocUploadTile(
+            label: d.$2,
+            fileName: vm.assurityDocs[d.$1]?.name,
+            onTakePhoto: () async {
+              final p = await pickPhotoDoc();
+              if (p != null) vm.setAssurityDoc(d.$1, p);
+            },
+            onUpload: () async {
+              final p = await pickFileDoc();
+              if (p != null) vm.setAssurityDoc(d.$1, p);
+            },
+            onRemove: () => vm.removeAssurityDoc(d.$1),
+          )
+        else
+          _liveDocTile(context, vm, d.$1, d.$2),
         const SizedBox(height: AppSpacing.sm),
       ],
     ];

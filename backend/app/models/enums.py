@@ -33,6 +33,8 @@ class VehicleDocType(str, enum.Enum):
     noc = "noc"
     prev_owner_id_proof = "prev_owner_id_proof"
     prev_owner_photo = "prev_owner_photo"
+    # A photo of the vehicle itself (used by the Loan module vehicle).
+    photo = "photo"
 
 
 class InventoryStatus(str, enum.Enum):
@@ -54,6 +56,15 @@ class KycDocType(str, enum.Enum):
     rental_agreement = "rental_agreement"
     photo = "photo"
     assurity_id_proof = "assurity_id_proof"
+    # Loan-module assurity (guarantor) documents. ``assurity_id_proof`` above
+    # still serves the single-ID-proof assurity used by Auto Sale; the loan
+    # customer captures a richer set — Aadhaar, PAN, two free "Other" slots and
+    # a photo of the guarantor.
+    assurity_aadhaar = "assurity_aadhaar"
+    assurity_pan = "assurity_pan"
+    assurity_photo = "assurity_photo"
+    assurity_other_1 = "assurity_other_1"
+    assurity_other_2 = "assurity_other_2"
 
 
 class EntityStatus(str, enum.Enum):
@@ -132,6 +143,7 @@ class NotificationEntity(str, enum.Enum):
     customer = "customer"
     sale = "sale"
     rental = "rental"
+    loan = "loan"
 
 
 def pg_enum(py_enum, name):

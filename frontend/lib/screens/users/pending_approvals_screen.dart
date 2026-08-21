@@ -3,7 +3,9 @@ import 'package:provider/provider.dart';
 
 import '../../controllers/auth_controller.dart';
 import '../../services/customer_service.dart';
+import '../../services/loan_customer_service.dart';
 import '../../services/loan_service.dart';
+import '../../services/loan_vehicle_service.dart';
 import '../../services/api_rental_service.dart';
 import '../../services/rental_customer_service.dart';
 import '../../services/rental_service.dart';
@@ -22,6 +24,9 @@ import '../../widgets/empty_state.dart';
 import '../../widgets/primary_button.dart';
 import '../../widgets/secondary_button.dart';
 import '../auto_sale/create_customer_screen.dart';
+import '../loan/loan_customer_detail_screen.dart';
+import '../loan/loan_detail_screen.dart';
+import '../loan/loan_vehicle_detail_screen.dart';
 import '../rental/rent_detail_screen.dart';
 import '../rental/rental_vehicle_form_screen.dart';
 import '../auto_sale/customer_detail_screen.dart';
@@ -81,6 +86,8 @@ class _PendingApprovalsScreenState extends State<PendingApprovalsScreen> {
     await Future.wait([
       context.read<CustomerService>().refresh(),
       context.read<RentalCustomerService>().refresh(),
+      context.read<LoanCustomerService>().refresh(),
+      context.read<LoanVehicleService>().refresh(),
       context.read<VehicleService>().refresh(),
       context.read<RentalVehicleService>().refresh(),
       context.read<RentalAgreementService>().refresh(),
@@ -96,6 +103,8 @@ class _PendingApprovalsScreenState extends State<PendingApprovalsScreen> {
 
     final customers = context.watch<CustomerService>();
     final rentalCustomers = context.watch<RentalCustomerService>();
+    final loanCustomers = context.watch<LoanCustomerService>();
+    final loanVehicles = context.watch<LoanVehicleService>();
     final vehicles = context.watch<VehicleService>();
     final rentalVehicles = context.watch<RentalVehicleService>();
     final sales = context.watch<SaleService>();
@@ -166,6 +175,34 @@ class _PendingApprovalsScreenState extends State<PendingApprovalsScreen> {
         onView: () => Navigator.of(context).push(MaterialPageRoute(
           builder: (_) =>
               CreateCustomerScreen(existing: cust, service: rentalCustomers),
+        )),
+      ));
+    }
+    // Loan vehicles created by an admin (independent loan module pool).
+    for (final v in loanVehicles.all().where((v) => v.isPending)) {
+      items.add(_PendingItem(
+        type: 'Loan vehicle',
+        title: 'Loan vehicle ${v.displayLabel}',
+        subtitle: addedBy(v.createdBy),
+        createdAt: v.createdAt,
+        onApprove: () => loanVehicles.confirm(v.id, actorId),
+        onReject: (r) => loanVehicles.reject(v.id, r, actorId),
+        onView: () => Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => LoanVehicleDetailScreen(vehicleId: v.id),
+        )),
+      ));
+    }
+    // Loan customers created by an admin (independent loan module list).
+    for (final cust in loanCustomers.all().where((c) => c.isPending)) {
+      items.add(_PendingItem(
+        type: 'Loan customer',
+        title: 'Loan customer ${cust.fullName}',
+        subtitle: addedBy(cust.createdBy),
+        createdAt: cust.createdAt,
+        onApprove: () => loanCustomers.confirm(cust.id, actorId),
+        onReject: (r) => loanCustomers.reject(cust.id, r, actorId),
+        onView: () => Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => LoanCustomerDetailScreen(customerId: cust.id),
         )),
       ));
     }
@@ -316,15 +353,34 @@ class _PendingApprovalsScreenState extends State<PendingApprovalsScreen> {
         ));
       }
     }
+    String loanName(String id) =>
+        loanCustomers.byId(id)?.fullName ?? custName(id);
     for (final l in loans.all().where((l) => l.isPending)) {
       items.add(_PendingItem(
         type: 'Loan',
-        title: 'Loan for ${custName(l.customerId)}',
+        title: 'Loan for ${loanName(l.customerId)}',
         subtitle:
-            '${Formatters.currency(l.principal)} · ${l.tenureMonths} mo · added by ${l.createdBy}',
+            '${Formatters.currency(l.principal)} · ${l.tenureMonths} mo · ${addedBy(l.createdBy)}',
         createdAt: l.createdAt,
         onApprove: () => loans.confirm(l.id, actorId),
         onReject: (reason) => loans.reject(l.id, reason, actorId),
+        onView: () => Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => LoanDetailScreen(loanId: l.id),
+        )),
+      ));
+    }
+    // Loan seize requests (admin asked to repossess the vehicle).
+    for (final l in loans.all().where((l) => l.isSeizePending)) {
+      items.add(_PendingItem(
+        type: 'Loan seize',
+        title: 'Seize · ${loanName(l.customerId)}',
+        subtitle: l.seizeReason ?? 'Seize requested',
+        createdAt: l.seizedAt ?? l.createdAt,
+        onApprove: () => loans.confirmSeize(l.id, actorId),
+        onReject: (reason) => loans.cancelSeize(l.id, actorId, remarks: reason),
+        onView: () => Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => LoanDetailScreen(loanId: l.id),
+        )),
       ));
     }
 

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/loan.dart';
-import '../../services/customer_service.dart';
+import '../../services/loan_customer_service.dart';
 import '../../services/loan_service.dart';
 import '../../theme/app_colors.dart';
 import '../../utils/app_spacing.dart';
@@ -14,7 +14,10 @@ import '../../widgets/empty_state.dart';
 import '../../widgets/gold_create_button.dart';
 import '../../widgets/status_pill.dart';
 import '../../widgets/tab_bar_navy.dart';
+import 'loan_customers_screen.dart';
 import 'loan_detail_screen.dart';
+import 'loan_report_screen.dart';
+import 'loan_vehicles_screen.dart';
 import 'new_loan_screen.dart';
 
 /// Loan list — spec 8.7.2.
@@ -47,7 +50,7 @@ class _LoanHomeScreenState extends State<LoanHomeScreen> {
   Widget build(BuildContext context) {
     final c = context.colors;
     final loans = context.watch<LoanService>();
-    final customers = context.watch<CustomerService>();
+    final customers = context.watch<LoanCustomerService>();
     final list = loans.all().where(_matches).toList();
 
     return Scaffold(
@@ -55,6 +58,27 @@ class _LoanHomeScreenState extends State<LoanHomeScreen> {
       appBar: AppBar(
         title: const Text('Loan management'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.people_outline),
+            tooltip: 'Loan customers',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const LoanCustomersScreen()),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.two_wheeler_outlined),
+            tooltip: 'Loan vehicles',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const LoanVehiclesScreen()),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.assessment_outlined),
+            tooltip: 'Loan report',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const LoanReportScreen()),
+            ),
+          ),
           GoldCreateButton(
             label: 'New loan',
             onPressed: () => Navigator.of(context).push(

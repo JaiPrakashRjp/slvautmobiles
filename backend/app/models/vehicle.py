@@ -62,8 +62,11 @@ class Vehicle(Base):
 
     # first-hand only
     showroom: Mapped[Showroom | None] = mapped_column(pg_enum(Showroom, "showroom"))
-    # RC / Permit / Insurance — independent flags, shown for both hand types
+    # RC / FC / Permit / Insurance — independent "document available" flags,
+    # shown for both hand types. `fc` is used by the Loan module vehicle
+    # (Insurance / FC / Permit availability toggles).
     rc: Mapped[bool] = mapped_column(nullable=False, server_default="false")
+    fc: Mapped[bool] = mapped_column(nullable=False, server_default="false")
     permit: Mapped[bool] = mapped_column(nullable=False, server_default="false")
     insurance: Mapped[bool] = mapped_column(nullable=False, server_default="false")
 
