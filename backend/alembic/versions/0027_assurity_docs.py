@@ -5,8 +5,8 @@ single ID proof used by Auto Sale: Aadhaar, PAN, two free "Other" slots and a
 photo. These are new values on the EXISTING kyc_doc_type enum — no new table;
 the same customer_documents table stores them (tagged module = loan).
 
-Revision ID: 0007
-Revises: 0006
+Revision ID: 0027
+Revises: 0026
 """
 from __future__ import annotations
 
@@ -14,8 +14,8 @@ from typing import Union
 
 from alembic import op
 
-revision: str = "0007"
-down_revision: Union[str, None] = "0006"
+revision: str = "0027"
+down_revision: Union[str, None] = "0026"
 branch_labels = None
 depends_on = None
 

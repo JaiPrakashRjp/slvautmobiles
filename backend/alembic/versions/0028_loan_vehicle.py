@@ -5,8 +5,8 @@ and `permit` already exist as boolean flags on vehicles; this adds the matching
 `fc` flag. It also adds a `photo` value to the vehicle_doc_type enum so a photo of
 the vehicle can be stored (same vehicle_documents table, tagged module = loan).
 
-Revision ID: 0008
-Revises: 0007
+Revision ID: 0028
+Revises: 0027
 """
 from __future__ import annotations
 
@@ -15,8 +15,8 @@ from typing import Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0008"
-down_revision: Union[str, None] = "0007"
+revision: str = "0028"
+down_revision: Union[str, None] = "0027"
 branch_labels = None
 depends_on = None
 

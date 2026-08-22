@@ -5,8 +5,8 @@ month for `tenure_months`; late months accrue a penalty entered on the payment.
 Adds loan_id / emi_id to reminder_logs so EMI reminders reuse that table, and a
 `loan` value to the notification_entity enum.
 
-Revision ID: 0009
-Revises: 0008
+Revision ID: 0029
+Revises: 0028
 """
 from __future__ import annotations
 
@@ -16,8 +16,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision: str = "0009"
-down_revision: Union[str, None] = "0008"
+revision: str = "0029"
+down_revision: Union[str, None] = "0028"
 branch_labels = None
 depends_on = None
 

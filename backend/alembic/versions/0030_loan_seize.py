@@ -4,8 +4,8 @@ seize_stage: NULL | 'pending' (admin requested) | 'seized' (confirmed). The rest
 record who/when/why and any cancel remark. Cancelling clears the stage so the
 loan continues with the customer.
 
-Revision ID: 0010
-Revises: 0009
+Revision ID: 0030
+Revises: 0029
 """
 from __future__ import annotations
 
@@ -14,8 +14,8 @@ from typing import Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0010"
-down_revision: Union[str, None] = "0009"
+revision: str = "0030"
+down_revision: Union[str, None] = "0029"
 branch_labels = None
 depends_on = None
 

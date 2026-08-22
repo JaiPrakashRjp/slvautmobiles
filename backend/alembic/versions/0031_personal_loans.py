@@ -5,8 +5,8 @@ EMI amount, tenure, loan date, reminder phone). EMIs are a flat monthly schedule
 marked paid one at a time. Adds personal_loan_id / personal_loan_emi_id to
 reminder_logs so the monthly WhatsApp reminders reuse that table.
 
-Revision ID: 0011
-Revises: 0010
+Revision ID: 0031
+Revises: 0030
 """
 from __future__ import annotations
 
@@ -16,8 +16,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision: str = "0011"
-down_revision: Union[str, None] = "0010"
+revision: str = "0031"
+down_revision: Union[str, None] = "0030"
 branch_labels = None
 depends_on = None
 
