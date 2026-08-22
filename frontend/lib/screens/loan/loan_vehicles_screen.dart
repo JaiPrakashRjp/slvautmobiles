@@ -37,6 +37,13 @@ class _LoanVehiclesScreenState extends State<LoanVehiclesScreen> {
   String _query = '';
   int _tab = 0; // 0 = On loan, 1 = Seized, 2 = Available
   static const _tabs = ['On loan', 'Seized', 'Available'];
+  final _pageCtrl = PageController();
+
+  @override
+  void dispose() {
+    _pageCtrl.dispose();
+    super.dispose();
+  }
 
   void _openCreate(BuildContext context) {
     Navigator.of(context).push(
@@ -44,21 +51,61 @@ class _LoanVehiclesScreenState extends State<LoanVehiclesScreen> {
     );
   }
 
-  List<Vehicle> _filtered(
-      LoanVehicleService service, Set<String> onLoan, Set<String> seized) {
+  List<Vehicle> _bucketList(LoanVehicleService service, Set<String> onLoan,
+      Set<String> seized, int bucket) {
     final q = _query.trim().toLowerCase();
     return service.all().where((v) {
       // On loan takes precedence over a past seizure (re-loaned vehicle).
-      final bucket = onLoan.contains(v.id)
+      final b = onLoan.contains(v.id)
           ? 0
           : seized.contains(v.id)
               ? 1
               : 2;
-      if (bucket != _tab) return false;
+      if (b != bucket) return false;
       if (q.isEmpty) return true;
       return v.regNo.toLowerCase().contains(q) ||
           (v.model ?? '').toLowerCase().contains(q);
     }).toList();
+  }
+
+  Widget _tabPage(BuildContext context, LoanVehicleService service,
+      Set<String> onLoan, Set<String> seized, int bucket) {
+    final list = _bucketList(service, onLoan, seized, bucket);
+    return RefreshIndicator(
+      onRefresh: () => service.refresh(),
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: EdgeInsets.fromLTRB(
+            context.screenHPadding, 0, context.screenHPadding, AppSpacing.xl),
+        children: [
+          if (service.loading && list.isEmpty)
+            const Padding(
+              padding: EdgeInsets.only(top: 80),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (list.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 40),
+              child: EmptyState(
+                icon: Icons.electric_rickshaw,
+                title: 'No ${_tabs[bucket].toLowerCase()} vehicles',
+                subtitle: 'Tap “+” to add a vehicle.',
+                ctaLabel: 'Add vehicle',
+                onCta: () => _openCreate(context),
+              ),
+            )
+          else
+            for (final v in list)
+              Padding(
+                padding: const EdgeInsets.only(bottom: AppSpacing.lg),
+                child: _LoanVehicleCard(
+                  vehicle: v,
+                  canAssign: v.isActive && !onLoan.contains(v.id),
+                ),
+              ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -77,7 +124,6 @@ class _LoanVehiclesScreenState extends State<LoanVehiclesScreen> {
       for (final l in loans.all())
         if (l.vehicleId != null && l.isSeized) l.vehicleId!,
     };
-    final list = _filtered(service, onLoan, seized);
 
     return Scaffold(
       backgroundColor: c.bgCanvas,
@@ -103,7 +149,11 @@ class _LoanVehiclesScreenState extends State<LoanVehiclesScreen> {
                 child: TabBarNavy(
                   tabs: _tabs,
                   index: _tab,
-                  onChanged: (i) => setState(() => _tab = i),
+                  onChanged: (i) => _pageCtrl.animateToPage(
+                    i,
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeInOut,
+                  ),
                 ),
               ),
               Padding(
@@ -121,42 +171,13 @@ class _LoanVehiclesScreenState extends State<LoanVehiclesScreen> {
                 ),
               ),
               Expanded(
-                child: RefreshIndicator(
-                  onRefresh: () => service.refresh(),
-                  child: ListView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: EdgeInsets.fromLTRB(context.screenHPadding, 0,
-                        context.screenHPadding, AppSpacing.xl),
-                    children: [
-                      if (service.loading && list.isEmpty)
-                        const Padding(
-                          padding: EdgeInsets.only(top: 80),
-                          child: Center(child: CircularProgressIndicator()),
-                        )
-                      else if (list.isEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 40),
-                          child: EmptyState(
-                            icon: Icons.electric_rickshaw,
-                            title: 'No loan vehicles yet',
-                            subtitle: 'Tap “+” to add a vehicle.',
-                            ctaLabel: 'Add vehicle',
-                            onCta: () => _openCreate(context),
-                          ),
-                        )
-                      else
-                        for (final v in list)
-                          Padding(
-                            padding:
-                                const EdgeInsets.only(bottom: AppSpacing.lg),
-                            child: _LoanVehicleCard(
-                              vehicle: v,
-                              canAssign:
-                                  v.isActive && !onLoan.contains(v.id),
-                            ),
-                          ),
-                    ],
-                  ),
+                child: PageView(
+                  controller: _pageCtrl,
+                  onPageChanged: (i) => setState(() => _tab = i),
+                  children: [
+                    for (var bucket = 0; bucket < _tabs.length; bucket++)
+                      _tabPage(context, service, onLoan, seized, bucket),
+                  ],
                 ),
               ),
             ],

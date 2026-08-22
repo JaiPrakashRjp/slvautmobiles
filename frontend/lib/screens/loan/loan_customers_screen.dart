@@ -37,6 +37,13 @@ class _LoanCustomersScreenState extends State<LoanCustomersScreen> {
   String _query = '';
   int _tab = 0; // 0 = All, 1 = Seized
   static const _tabs = ['All', 'Seized'];
+  final _pageCtrl = PageController();
+
+  @override
+  void dispose() {
+    _pageCtrl.dispose();
+    super.dispose();
+  }
 
   void _openCreate(BuildContext context, LoanCustomerService service) {
     Navigator.of(context).push(
@@ -49,14 +56,54 @@ class _LoanCustomersScreenState extends State<LoanCustomersScreen> {
     );
   }
 
-  List<Customer> _filtered(LoanCustomerService service, Set<String> seized) {
+  List<Customer> _bucketList(
+      LoanCustomerService service, Set<String> seized, int bucket) {
     final q = _query.trim().toLowerCase();
     return service.all().where((c) {
-      if (_tab == 1 && !seized.contains(c.id)) return false;
+      if (bucket == 1 && !seized.contains(c.id)) return false;
       if (q.isEmpty) return true;
       return c.fullName.toLowerCase().contains(q) ||
           c.phone.toLowerCase().contains(q);
     }).toList();
+  }
+
+  Widget _tabPage(BuildContext context, LoanCustomerService service,
+      Set<String> seized, int bucket) {
+    final list = _bucketList(service, seized, bucket);
+    return RefreshIndicator(
+      onRefresh: () => service.refresh(),
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: EdgeInsets.fromLTRB(
+            context.screenHPadding, 0, context.screenHPadding, AppSpacing.xl),
+        children: [
+          if (service.loading && list.isEmpty)
+            const Padding(
+              padding: EdgeInsets.only(top: 80),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (list.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 40),
+              child: EmptyState(
+                icon: Icons.people_outline,
+                title: bucket == 1
+                    ? 'No seized customers'
+                    : 'No loan customers yet',
+                subtitle: 'Tap “+” to add a customer.',
+                ctaLabel: 'Add customer',
+                onCta: () => _openCreate(context, service),
+              ),
+            )
+          else
+            for (final cust in list)
+              Padding(
+                padding: const EdgeInsets.only(bottom: AppSpacing.lg),
+                child: _LoanCustomerCard(customer: cust),
+              ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -69,7 +116,6 @@ class _LoanCustomersScreenState extends State<LoanCustomersScreen> {
       for (final l in loans.all())
         if (l.isSeized) l.customerId,
     };
-    final list = _filtered(service, seized);
 
     return Scaffold(
       backgroundColor: c.bgCanvas,
@@ -102,7 +148,11 @@ class _LoanCustomersScreenState extends State<LoanCustomersScreen> {
                 child: TabBarNavy(
                   tabs: _tabs,
                   index: _tab,
-                  onChanged: (i) => setState(() => _tab = i),
+                  onChanged: (i) => _pageCtrl.animateToPage(
+                    i,
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeInOut,
+                  ),
                 ),
               ),
               Padding(
@@ -120,38 +170,13 @@ class _LoanCustomersScreenState extends State<LoanCustomersScreen> {
                 ),
               ),
               Expanded(
-                child: RefreshIndicator(
-                  onRefresh: () => service.refresh(),
-                  child: ListView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: EdgeInsets.fromLTRB(context.screenHPadding, 0,
-                        context.screenHPadding, AppSpacing.xl),
-                    children: [
-                      if (service.loading && list.isEmpty)
-                        const Padding(
-                          padding: EdgeInsets.only(top: 80),
-                          child: Center(child: CircularProgressIndicator()),
-                        )
-                      else if (list.isEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 40),
-                          child: EmptyState(
-                            icon: Icons.people_outline,
-                            title: 'No loan customers yet',
-                            subtitle: 'Tap “+” to add a customer.',
-                            ctaLabel: 'Add customer',
-                            onCta: () => _openCreate(context, service),
-                          ),
-                        )
-                      else
-                        for (final cust in list)
-                          Padding(
-                            padding:
-                                const EdgeInsets.only(bottom: AppSpacing.lg),
-                            child: _LoanCustomerCard(customer: cust),
-                          ),
-                    ],
-                  ),
+                child: PageView(
+                  controller: _pageCtrl,
+                  onPageChanged: (i) => setState(() => _tab = i),
+                  children: [
+                    for (var bucket = 0; bucket < _tabs.length; bucket++)
+                      _tabPage(context, service, seized, bucket),
+                  ],
                 ),
               ),
             ],
