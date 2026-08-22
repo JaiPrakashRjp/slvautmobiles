@@ -34,6 +34,7 @@ class CreateCustomerScreen extends StatelessWidget {
     this.sellVehicleId,
     this.service,
     this.extendedAssurity = false,
+    this.returnOnCreate = false,
   });
 
   final Customer? existing;
@@ -41,6 +42,11 @@ class CreateCustomerScreen extends StatelessWidget {
   /// When set (opened from the "+ New customer" in the sell picker), a
   /// successful create continues straight to the sell form for this vehicle.
   final String? sellVehicleId;
+
+  /// When true (opened from a "+ Add customer" inside a picker), a successful
+  /// create pops back with the new customer's id (or null if it went pending),
+  /// so the caller can select it.
+  final bool returnOnCreate;
 
   /// Customer service to create into. Defaults to the auto_sale [CustomerService]
   /// from the provider; the rental and loan modules pass their own module-scoped
@@ -63,16 +69,22 @@ class CreateCustomerScreen extends StatelessWidget {
       child: _CreateCustomerView(
         sellVehicleId: sellVehicleId,
         extendedAssurity: extendedAssurity,
+        returnOnCreate: returnOnCreate,
       ),
     );
   }
 }
 
 class _CreateCustomerView extends StatefulWidget {
-  const _CreateCustomerView({this.sellVehicleId, this.extendedAssurity = false});
+  const _CreateCustomerView({
+    this.sellVehicleId,
+    this.extendedAssurity = false,
+    this.returnOnCreate = false,
+  });
 
   final String? sellVehicleId;
   final bool extendedAssurity;
+  final bool returnOnCreate;
 
   @override
   State<_CreateCustomerView> createState() => _CreateCustomerViewState();
@@ -350,6 +362,30 @@ class _CreateCustomerViewState extends State<_CreateCustomerView> {
             ),
           ));
         }
+      } catch (e) {
+        if (mounted) {
+          setState(() => _submitting = false);
+          messenger.showSnackBar(SnackBar(content: Text('Could not save: $e')));
+        }
+      }
+      return;
+    }
+
+    // Return-on-create: opened from a "+ Add customer" inside a picker. Await
+    // the create and pop back with the new id (null if it went pending).
+    if (widget.returnOnCreate && !vm.isEditing) {
+      final messenger = ScaffoldMessenger.of(context);
+      final navigator = Navigator.of(context);
+      setState(() => _submitting = true);
+      try {
+        final result = await vm.submit();
+        if (!mounted) return;
+        navigator.pop(result.pending ? null : result.customerId);
+        messenger.showSnackBar(SnackBar(
+          content: Text(result.pending
+              ? 'Customer created — awaiting approval before you can lend.'
+              : 'Customer created.'),
+        ));
       } catch (e) {
         if (mounted) {
           setState(() => _submitting = false);

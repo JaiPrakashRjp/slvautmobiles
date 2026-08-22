@@ -9,6 +9,7 @@ import '../models/installment.dart';
 import '../models/loan_customer_report.dart';
 import '../models/monthly_report.dart';
 import '../models/loan.dart';
+import '../models/personal_loan_report.dart';
 import '../models/rental_agreement.dart';
 import '../models/rental_customer_statement.dart';
 import '../models/rental_report.dart';
@@ -86,6 +87,10 @@ abstract class PdfService {
   Future<Uint8List> loanReportBytes(LoanCustomerReport report);
   Future<void> previewLoanReport(LoanCustomerReport report);
   Future<void> shareLoanReport(LoanCustomerReport report);
+
+  /// Bytes of a single personal-loan statement (for the in-app preview with
+  /// Share + Print).
+  Future<Uint8List> personalLoanReportBytes(PersonalLoanReport report);
 
   /// Business report over a period (month or custom range): sold/unsold,
   /// customers, dues. [previewMonthlyReport] opens the print preview;
@@ -1025,6 +1030,69 @@ class RealPdfService implements PdfService {
   @override
   Future<Uint8List> loanReportBytes(LoanCustomerReport report) async =>
       (await _loanReportDoc(report)).save();
+
+  @override
+  Future<Uint8List> personalLoanReportBytes(PersonalLoanReport r) async {
+    final logo = await _loadLogo();
+    final doc = pw.Document();
+    doc.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.fromLTRB(28, 22, 28, 28),
+        header: (_) => _reportHeader(logo, r.vehicleNumber,
+            kind: 'Personal loan statement'),
+        build: (_) => [
+          _label('SUMMARY'),
+          _statGrid([
+            ('Loan amount', _curr(r.loanAmount), ''),
+            ('EMI', _curr(r.emiAmount), 'x ${r.tenureMonths} mo'),
+            ('Paid', _curr(r.paid), '${r.paidCount}/${r.tenureMonths} months'),
+            ('Outstanding', _curr(r.outstanding), ''),
+            ('Status', r.status, ''),
+          ]),
+          _label('LOAN'),
+          _card([
+            _row('Vehicle number', r.vehicleNumber),
+            _row('Financer', r.financerName.isEmpty ? '-' : r.financerName),
+            _row('Loan amount', _curr(r.loanAmount)),
+            _row('EMI', _curr(r.emiAmount)),
+            _row('Tenure', '${r.tenureMonths} months'),
+            _row('Loan date', Formatters.date(r.loanDate)),
+          ]),
+          _label('EMI SCHEDULE'),
+          _table(
+            ['#', 'Due date', 'EMI', 'Status', 'Paid on'],
+            [
+              for (final e in r.emis)
+                [
+                  '${e.seq}',
+                  Formatters.date(e.dueDate),
+                  _curr(e.amount),
+                  e.paid ? 'Paid' : 'Pending',
+                  e.paidDate != null ? Formatters.date(e.paidDate!) : '-',
+                ],
+            ],
+            rightAlign: const {2},
+          ),
+        ],
+        footer: (ctx) => pw.Padding(
+          padding: const pw.EdgeInsets.only(top: 8),
+          child: pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Text('SLV Auto Consultant · Personal loan',
+                  style:
+                      const pw.TextStyle(fontSize: 8, color: PdfColors.grey500)),
+              pw.Text('Page ${ctx.pageNumber} of ${ctx.pagesCount}',
+                  style:
+                      const pw.TextStyle(fontSize: 8, color: PdfColors.grey500)),
+            ],
+          ),
+        ),
+      ),
+    );
+    return doc.save();
+  }
 
   @override
   Future<void> previewLoanReport(LoanCustomerReport report) async {

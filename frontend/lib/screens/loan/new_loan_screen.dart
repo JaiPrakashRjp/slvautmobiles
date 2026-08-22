@@ -17,6 +17,7 @@ import '../../widgets/app_text_field.dart';
 import '../../widgets/option_sheet.dart';
 import '../../widgets/picker_field.dart';
 import '../../widgets/primary_button.dart';
+import '../auto_sale/create_customer_screen.dart';
 
 /// New loan — no interest. Pick a loan customer + loan vehicle, then enter the
 /// loan date, loan amount, tenure (months) and EMI amount.
@@ -49,19 +50,35 @@ class _NewLoanView extends StatelessWidget {
   const _NewLoanView();
 
   Future<void> _pickCustomer(BuildContext context, NewLoanViewModel vm) async {
+    final navigator = Navigator.of(context);
+    final loanCustomers = context.read<LoanCustomerService>();
     final picked = await OptionSheet.show<String>(
       context,
       title: 'Select customer',
       selected: vm.customerId,
-      options: vm.verifiedCustomers
-          .map((c) => SheetOption(
-                value: c.id,
-                label: c.fullName,
-                subtitle: Formatters.phone(c.phone),
-              ))
-          .toList(),
+      options: [
+        const SheetOption(value: '__add__', label: '＋ Add new customer'),
+        ...vm.verifiedCustomers.map((c) => SheetOption(
+              value: c.id,
+              label: c.fullName,
+              subtitle: Formatters.phone(c.phone),
+            )),
+      ],
     );
-    if (picked != null) vm.customerId = picked;
+    if (picked == null) return;
+    if (picked == '__add__') {
+      // Create a new loan customer inline, then select it on return.
+      final newId = await navigator.push<String>(MaterialPageRoute(
+        builder: (_) => CreateCustomerScreen(
+          service: loanCustomers,
+          extendedAssurity: true,
+          returnOnCreate: true,
+        ),
+      ));
+      if (newId != null) vm.customerId = newId;
+      return;
+    }
+    vm.customerId = picked;
   }
 
   Future<void> _pickVehicle(BuildContext context, NewLoanViewModel vm) async {

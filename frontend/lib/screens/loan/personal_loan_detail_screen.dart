@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../models/personal_loan.dart';
 import '../../models/personal_loan_emi.dart';
+import '../../models/personal_loan_report.dart';
+import '../../services/pdf_service.dart';
 import '../../services/personal_loan_service.dart';
 import '../../theme/app_colors.dart';
 import '../../utils/app_spacing.dart';
@@ -11,6 +14,7 @@ import '../../utils/responsive.dart';
 import '../../widgets/app_card.dart';
 import '../../widgets/confirmation_dialog.dart';
 import '../../widgets/status_pill.dart';
+import '../pdf_preview_screen.dart';
 
 /// Personal loan detail — the loan summary + its monthly EMI list, where each
 /// unpaid month has a ✓ button that (after a confirm) marks it paid.
@@ -32,9 +36,27 @@ class PersonalLoanDetailScreen extends StatelessWidget {
       );
     }
 
+    final pdf = context.read<PdfService>();
+
     return Scaffold(
       backgroundColor: c.bgCanvas,
-      appBar: AppBar(title: const Text('Personal loan')),
+      appBar: AppBar(
+        title: const Text('Personal loan'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.receipt_long_outlined),
+            tooltip: 'Loan report',
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => PdfPreviewScreen(
+                title: 'Personal loan report',
+                fileName:
+                    'personal-loan-${loan.vehicleNumber.replaceAll(' ', '-')}.pdf',
+                builder: () => pdf.personalLoanReportBytes(_report(loan)),
+              ),
+            )),
+          ),
+        ],
+      ),
       body: SafeArea(
         child: ResponsiveBody(
           maxFormWidth: 640,
@@ -111,6 +133,28 @@ class PersonalLoanDetailScreen extends StatelessWidget {
       ),
     );
   }
+
+  PersonalLoanReport _report(PersonalLoan loan) => PersonalLoanReport(
+        vehicleNumber: loan.vehicleNumber,
+        financerName: loan.financerName ?? '',
+        loanAmount: loan.loanAmount,
+        emiAmount: loan.emiAmount,
+        tenureMonths: loan.tenureMonths,
+        loanDate: loan.loanDate,
+        paid: loan.totalPaid,
+        outstanding: loan.outstanding,
+        status: loan.isClosed ? 'Paid' : 'Active',
+        emis: [
+          for (final e in loan.emis)
+            PersonalLoanReportEmi(
+              seq: e.sequenceNumber,
+              dueDate: e.dueDate,
+              amount: e.amount,
+              paid: e.isPaid,
+              paidDate: e.paidDate,
+            ),
+        ],
+      );
 
   Future<void> _confirmPay(BuildContext context, PersonalLoanService service,
       PersonalLoanEmi emi) async {

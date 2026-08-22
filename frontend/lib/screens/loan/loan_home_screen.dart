@@ -6,10 +6,10 @@ import '../../widgets/bottom_nav_bar.dart';
 import 'loan_customers_screen.dart';
 import 'loan_vehicles_screen.dart';
 
-/// Loan management shell — IndexedStack over the Vehicles and Customers tabs,
-/// matching the Auto Sale module. A loan is started from a vehicle (or a
-/// customer's detail); there's no separate loans list. Phone: bottom nav.
-/// Tablet: side navigation rail.
+/// Loan management shell — Vehicles and Customers tabs, matching Auto Sale.
+/// On phone the two tabs live in a swipeable [PageView] (slide left/right or tap
+/// the footer to switch, with a sliding animation); on tablet a side rail.
+/// A loan is started from a vehicle (or a customer's detail); no loans list.
 class LoanHomeScreen extends StatefulWidget {
   const LoanHomeScreen({super.key});
 
@@ -19,18 +19,32 @@ class LoanHomeScreen extends StatefulWidget {
 
 class _LoanHomeScreenState extends State<LoanHomeScreen> {
   int _index = 0;
+  final _controller = PageController();
 
   static const _items = [
     BottomNavItem(icon: Icons.electric_rickshaw, label: 'Vehicles'),
     BottomNavItem(icon: Icons.people_outline, label: 'Customers'),
   ];
 
-  final _pages = const [LoanVehiclesScreen(), LoanCustomersScreen()];
+  static const _pages = [LoanVehiclesScreen(), LoanCustomersScreen()];
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _goToTab(int i) {
+    _controller.animateToPage(
+      i,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    final body = IndexedStack(index: _index, children: _pages);
 
     if (context.isTablet) {
       return Scaffold(
@@ -55,7 +69,7 @@ class _LoanHomeScreenState extends State<LoanHomeScreen> {
                     ),
                 ],
               ),
-              Expanded(child: body),
+              Expanded(child: IndexedStack(index: _index, children: _pages)),
             ],
           ),
         ),
@@ -64,12 +78,41 @@ class _LoanHomeScreenState extends State<LoanHomeScreen> {
 
     return Scaffold(
       backgroundColor: c.bgCanvas,
-      body: body,
+      body: PageView(
+        controller: _controller,
+        onPageChanged: (i) => setState(() => _index = i),
+        children: const [
+          _KeepAlive(child: LoanVehiclesScreen()),
+          _KeepAlive(child: LoanCustomersScreen()),
+        ],
+      ),
       bottomNavigationBar: BottomNavBar(
         items: _items,
         index: _index,
-        onChanged: (i) => setState(() => _index = i),
+        onChanged: _goToTab,
       ),
     );
+  }
+}
+
+/// Keeps a swiped-away page's state (search, selected tab, scroll) alive.
+class _KeepAlive extends StatefulWidget {
+  const _KeepAlive({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_KeepAlive> createState() => _KeepAliveState();
+}
+
+class _KeepAliveState extends State<_KeepAlive>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return widget.child;
   }
 }
