@@ -31,12 +31,19 @@ class ModuleChooserViewModel extends ChangeNotifier {
       subtitle: 'Sell and track three-wheelers',
       icon: Icons.electric_rickshaw,
     ),
-    // Auto rental — launched. (Loan management stays hidden; not built yet.)
+    // Auto rental — launched.
     ModuleTile(
       module: AppModule.rentals,
       title: 'Auto rental collection',
       subtitle: 'Rent vehicles and collect rent',
       icon: Icons.vpn_key_outlined,
+    ),
+    // Loan management — launched.
+    ModuleTile(
+      module: AppModule.loans,
+      title: 'Loan management',
+      subtitle: 'Loans against vehicles + personal loans',
+      icon: Icons.account_balance_wallet_outlined,
     ),
     ModuleTile(
       module: AppModule.users,

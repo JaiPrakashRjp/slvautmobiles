@@ -107,9 +107,7 @@ class UserDetailScreen extends StatelessWidget {
                   for (final m in const [
                     AppModule.autoSale,
                     AppModule.rentals,
-                    // Loan management not launched yet (matches module chooser +
-                    // create-user).
-                    // AppModule.loans,
+                    AppModule.loans,
                   ])
                     GestureDetector(
                       onTap: () {
