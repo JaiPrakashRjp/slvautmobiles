@@ -144,6 +144,45 @@ class NotificationService:
         )
 
     @staticmethod
+    def create_loan_reminder(
+        db: Session,
+        *,
+        loan_id: int,
+        emi_id: int,
+        title: str,
+        message: str = "",
+    ) -> None:
+        """Notify all staff that a loan EMI is due — in-app + FCM push. Tapping
+        opens the loan so they can call the customer and record the payment.
+        Best-effort push (a failure never breaks the caller).
+        """
+        staff_ids = [u.id for u in UserDAO.active_staff(db)]
+        for uid in staff_ids:
+            NotificationDAO.add(
+                db,
+                Notification(
+                    recipient_user_id=uid,
+                    type=NotificationType.info,
+                    title=title,
+                    message=message,
+                    entity_type=NotificationEntity.loan,
+                    entity_id=loan_id,
+                ),
+            )
+        tokens = DeviceTokenDAO.tokens_for_users(db, staff_ids)
+        FcmService.send(
+            tokens,
+            title=title,
+            body=message or "Tap to take the call",
+            data={
+                "type": "reminder",
+                "entity_type": "loan",
+                "entity_id": loan_id,
+                "installment_id": emi_id,
+            },
+        )
+
+    @staticmethod
     def create_rental_reminder(
         db: Session,
         *,

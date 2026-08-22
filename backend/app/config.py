@@ -57,6 +57,28 @@ class Settings:
     WHATSAPP_RENTAL_REMINDER_LANG: str = os.getenv(
         "WHATSAPP_RENTAL_REMINDER_LANG", "en"
     )
+    # Personal-loan reminders all go to this one WhatsApp number (the office /
+    # owner follows up), regardless of the loan. Change it via the env var.
+    PERSONAL_LOAN_REMINDER_PHONE: str = os.getenv(
+        "PERSONAL_LOAN_REMINDER_PHONE", "9741120927"
+    )
+    # Loan module EMI reminder template (body vars: {{1}} customer name,
+    # {{2}} amount, {{3}} due date). Approve it in Meta and set the LANG to the
+    # language you approved it in (a mismatch → Meta error 132001).
+    WHATSAPP_LOAN_REMINDER_TEMPLATE: str = os.getenv(
+        "WHATSAPP_LOAN_REMINDER_TEMPLATE", "loan_emi_reminder"
+    )
+    WHATSAPP_LOAN_REMINDER_LANG: str = os.getenv(
+        "WHATSAPP_LOAN_REMINDER_LANG", "en_US"
+    )
+    # Personal-loan reminder template (body vars: {{1}} vehicle number,
+    # {{2}} amount, {{3}} due date).
+    WHATSAPP_PERSONAL_LOAN_REMINDER_TEMPLATE: str = os.getenv(
+        "WHATSAPP_PERSONAL_LOAN_REMINDER_TEMPLATE", "personal_loan_reminder"
+    )
+    WHATSAPP_PERSONAL_LOAN_REMINDER_LANG: str = os.getenv(
+        "WHATSAPP_PERSONAL_LOAN_REMINDER_LANG", "en_US"
+    )
 
     @property
     def whatsapp_enabled(self) -> bool:

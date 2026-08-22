@@ -13,6 +13,9 @@ import 'services/push_service.dart';
 import 'utils/navigator_key.dart';
 import 'services/api_customer_service.dart';
 import 'services/api_financer_service.dart';
+import 'services/api_loan_service.dart';
+import 'services/personal_loan_financer_service.dart';
+import 'services/personal_loan_service.dart';
 import 'services/api_notification_service.dart';
 import 'services/api_sale_financer_service.dart';
 import 'services/api_sale_service.dart';
@@ -20,7 +23,9 @@ import 'services/api_user_service.dart';
 import 'services/api_vehicle_service.dart';
 import 'services/customer_service.dart';
 import 'services/financer_service.dart';
+import 'services/loan_customer_service.dart';
 import 'services/loan_service.dart';
+import 'services/loan_vehicle_service.dart';
 import 'services/sale_financer_service.dart';
 import 'services/notification_service.dart';
 import 'services/pdf_service.dart';
@@ -77,6 +82,11 @@ class SlvApp extends StatelessWidget {
         ChangeNotifierProvider<RentalCustomerService>(
           create: (_) => RentalCustomerService()..refresh(),
         ),
+        // Loan module's own independent customer list (module = loan), same
+        // tables/fields/approval flow — with the richer assurity document set.
+        ChangeNotifierProvider<LoanCustomerService>(
+          create: (_) => LoanCustomerService()..refresh(),
+        ),
         ChangeNotifierProvider<VehicleService>(
           // Real backend service. Loads the vehicle list from the API on start.
           create: (_) => ApiVehicleService()..refresh(),
@@ -84,6 +94,10 @@ class SlvApp extends StatelessWidget {
         // Rental module's own independent vehicle pool (module = rental).
         ChangeNotifierProvider<RentalVehicleService>(
           create: (_) => RentalVehicleService()..refresh(),
+        ),
+        // Loan module's own independent vehicle pool (module = loan).
+        ChangeNotifierProvider<LoanVehicleService>(
+          create: (_) => LoanVehicleService()..refresh(),
         ),
         ChangeNotifierProvider<FinancerService>(
           create: (_) => ApiFinancerService()..refresh(),
@@ -109,7 +123,14 @@ class SlvApp extends StatelessWidget {
               previous ?? RentalAgreementService(auth: auth)..refresh(),
         ),
         ChangeNotifierProvider<LoanService>(
-          create: (_) => MockLoanService(),
+          create: (_) => ApiLoanService()..refresh(),
+        ),
+        // Personal loan module (own financer master + simple monthly EMIs).
+        ChangeNotifierProvider<PersonalLoanService>(
+          create: (_) => PersonalLoanService()..refresh(),
+        ),
+        ChangeNotifierProvider<PersonalLoanFinancerService>(
+          create: (_) => PersonalLoanFinancerService()..refresh(),
         ),
         ChangeNotifierProvider<UserService>(
           create: (_) => ApiUserService()..refresh(),

@@ -1,23 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 
-import '../../models/loan.dart';
-import '../../services/customer_service.dart';
-import '../../services/loan_service.dart';
 import '../../theme/app_colors.dart';
-import '../../utils/app_spacing.dart';
-import '../../utils/app_text_styles.dart';
-import '../../utils/formatters.dart';
 import '../../utils/responsive.dart';
-import '../../widgets/app_card.dart';
-import '../../widgets/empty_state.dart';
-import '../../widgets/gold_create_button.dart';
-import '../../widgets/status_pill.dart';
-import '../../widgets/tab_bar_navy.dart';
-import 'loan_detail_screen.dart';
-import 'new_loan_screen.dart';
+import '../../widgets/bottom_nav_bar.dart';
+import 'loan_customers_screen.dart';
+import 'loan_vehicles_screen.dart';
 
-/// Loan list — spec 8.7.2.
+/// Loan management shell — IndexedStack over the Vehicles and Customers tabs,
+/// matching the Auto Sale module. A loan is started from a vehicle (or a
+/// customer's detail); there's no separate loans list. Phone: bottom nav.
+/// Tablet: side navigation rail.
 class LoanHomeScreen extends StatefulWidget {
   const LoanHomeScreen({super.key});
 
@@ -26,151 +18,57 @@ class LoanHomeScreen extends StatefulWidget {
 }
 
 class _LoanHomeScreenState extends State<LoanHomeScreen> {
-  int _tab = 0;
-  static const _filters = ['All', 'Active', 'Overdue', 'Closed'];
-  static final DateTime _now = DateTime(2026, 6, 2);
+  int _index = 0;
 
-  bool _matches(Loan l) {
-    switch (_tab) {
-      case 1:
-        return l.loanStatus == 'active';
-      case 2:
-        return l.loanStatus == 'overdue';
-      case 3:
-        return l.isClosed;
-      default:
-        return true;
-    }
-  }
+  static const _items = [
+    BottomNavItem(icon: Icons.electric_rickshaw, label: 'Vehicles'),
+    BottomNavItem(icon: Icons.people_outline, label: 'Customers'),
+  ];
+
+  final _pages = const [LoanVehiclesScreen(), LoanCustomersScreen()];
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    final loans = context.watch<LoanService>();
-    final customers = context.watch<CustomerService>();
-    final list = loans.all().where(_matches).toList();
+    final body = IndexedStack(index: _index, children: _pages);
 
-    return Scaffold(
-      backgroundColor: c.bgCanvas,
-      appBar: AppBar(
-        title: const Text('Loan management'),
-        actions: [
-          GoldCreateButton(
-            label: 'New loan',
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const NewLoanScreen()),
-            ),
-          ),
-        ],
-      ),
-      body: SafeArea(
-        child: ResponsiveBody(
-          maxFormWidth: 720,
-          phone: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+    if (context.isTablet) {
+      return Scaffold(
+        backgroundColor: c.bgCanvas,
+        body: SafeArea(
+          child: Row(
             children: [
-              Padding(
-                padding: EdgeInsets.fromLTRB(context.screenHPadding,
-                    AppSpacing.lg, context.screenHPadding, AppSpacing.md),
-                child: TabBarNavy(
-                  tabs: _filters,
-                  index: _tab,
-                  onChanged: (i) => setState(() => _tab = i),
-                ),
+              NavigationRail(
+                backgroundColor: c.primary,
+                selectedIndex: _index,
+                onDestinationSelected: (i) => setState(() => _index = i),
+                labelType: NavigationRailLabelType.all,
+                selectedIconTheme: IconThemeData(color: c.accent),
+                unselectedIconTheme: IconThemeData(color: c.onPrimary),
+                selectedLabelTextStyle: TextStyle(color: c.accent),
+                unselectedLabelTextStyle: TextStyle(color: c.onPrimary),
+                destinations: [
+                  for (final it in _items)
+                    NavigationRailDestination(
+                      icon: Icon(it.icon),
+                      label: Text(it.label),
+                    ),
+                ],
               ),
-              Expanded(
-                child: list.isEmpty
-                    ? const EmptyState(
-                        icon: Icons.account_balance_wallet_outlined,
-                        title: 'No loans here',
-                        subtitle: 'Tap “New loan” to disburse one.',
-                      )
-                    : ListView(
-                        padding: EdgeInsets.fromLTRB(context.screenHPadding, 0,
-                            context.screenHPadding, AppSpacing.xl),
-                        children: [
-                          for (final l in list)
-                            Padding(
-                              padding:
-                                  const EdgeInsets.only(bottom: AppSpacing.lg),
-                              child: _LoanCard(
-                                loan: l,
-                                name: customers.byId(l.customerId)?.fullName ??
-                                    'Unknown',
-                                now: _now,
-                              ),
-                            ),
-                        ],
-                      ),
-              ),
+              Expanded(child: body),
             ],
           ),
         ),
-      ),
-    );
-  }
-}
+      );
+    }
 
-class _LoanCard extends StatelessWidget {
-  const _LoanCard({required this.loan, required this.name, required this.now});
-
-  final Loan loan;
-  final String name;
-  final DateTime now;
-
-  PillVariant get _variant => switch (loan.loanStatus) {
-        'overdue' => PillVariant.danger,
-        'closed' || 'foreclosed' => PillVariant.success,
-        'rejected' => PillVariant.danger,
-        _ => PillVariant.info,
-      };
-
-  String get _statusLabel => switch (loan.loanStatus) {
-        'active' => 'Active',
-        'overdue' => 'Overdue',
-        'closed' => 'Closed',
-        'foreclosed' => 'Foreclosed',
-        'rejected' => 'Rejected',
-        _ => loan.loanStatus,
-      };
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    final nextEmi = loan.nextDueEmi(now);
-    return AppCard(
-      accentLeft: loan.loanStatus == 'overdue',
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => LoanDetailScreen(loanId: loan.id)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(name,
-                    style: AppTextStyles.h2.copyWith(color: c.textMain)),
-              ),
-              StatusPill(label: _statusLabel, variant: _variant),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.xs),
-          Text(
-            'Principal ${Formatters.currency(loan.principal)} · EMI ${Formatters.currency(loan.emiAmount)}',
-            style: AppTextStyles.body.copyWith(color: c.textSub),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            'Outstanding ${Formatters.currency(loan.balanceOutstanding)}'
-            '${nextEmi != null ? ' · Next due ${Formatters.date(nextEmi.dueDate)}' : ''}',
-            style: AppTextStyles.caption.copyWith(color: c.textSub),
-          ),
-          if (loan.isPending) ...[
-            const SizedBox(height: AppSpacing.sm),
-            const StatusPill(label: 'Pending approval', variant: PillVariant.warning),
-          ],
-        ],
+    return Scaffold(
+      backgroundColor: c.bgCanvas,
+      body: body,
+      bottomNavigationBar: BottomNavBar(
+        items: _items,
+        index: _index,
+        onChanged: (i) => setState(() => _index = i),
       ),
     );
   }

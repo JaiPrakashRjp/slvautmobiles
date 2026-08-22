@@ -2,59 +2,84 @@ import 'package:flutter/material.dart';
 
 import '../controllers/auth_controller.dart';
 import '../models/customer.dart';
-import '../models/enums.dart';
-import '../models/loan.dart';
+import '../models/vehicle.dart';
 import '../services/customer_service.dart';
 import '../services/loan_service.dart';
+import '../services/vehicle_service.dart';
 
-/// Backs the new-loan form with a live EMI/interest preview (spec 8.7.3).
+/// Backs the new-loan form. No interest: the operator types the EMI amount, the
+/// tenure (months) and the loan amount; the schedule is EMI × tenure, one EMI a
+/// month from the loan date. The loan is booked against a loan customer and a
+/// loan vehicle.
 class NewLoanViewModel extends ChangeNotifier {
-  NewLoanViewModel(this._loans, this._customers, this._auth);
+  NewLoanViewModel(this._loans, this._customers, this._vehicles, this._auth,
+      {String? initialCustomerId, String? initialVehicleId})
+      : _customerId = initialCustomerId,
+        _vehicleId = initialVehicleId;
 
   final LoanService _loans;
   final CustomerService _customers;
+  final VehicleService _vehicles;
   final AuthController _auth;
 
-  final principalController = TextEditingController();
-  final rateController = TextEditingController(text: '12');
-  final tenureController = TextEditingController(text: '12');
-  final penaltyValueController = TextEditingController(text: '50');
+  final principalController = TextEditingController(); // loan amount
+  final tenureController = TextEditingController();
+  final emiController = TextEditingController();
 
   String? _customerId;
-  DateTime? _disbursementDate;
-  PenaltyType _penaltyType = PenaltyType.flatPerDay;
+  String? _vehicleId;
+  DateTime? _loanDate;
 
   String? get customerId => _customerId;
-  DateTime? get disbursementDate => _disbursementDate;
-  PenaltyType get penaltyType => _penaltyType;
+  String? get vehicleId => _vehicleId;
+  DateTime? get loanDate => _loanDate;
 
   List<Customer> get verifiedCustomers =>
       _customers.all().where((c) => c.isActive).toList();
   Customer? get customer =>
       _customerId == null ? null : _customers.byId(_customerId!);
 
+  /// Vehicle ids currently tied up in a live loan (active/overdue/pending — not
+  /// seized, closed or rejected). These are blocked from a new loan until a
+  /// confirm-seize frees the vehicle.
+  Set<String> get _onLoanVehicleIds => {
+        for (final l in _loans.all())
+          if (l.vehicleId != null &&
+              !l.isSeized &&
+              !l.isClosed &&
+              l.loanStatus != 'rejected')
+            l.vehicleId!,
+      };
+
+  /// Active (verified) loan vehicles that aren't already on a live loan.
+  List<Vehicle> get availableVehicles => _vehicles
+      .all()
+      .where((v) => v.isActive && !_onLoanVehicleIds.contains(v.id))
+      .toList();
+  Vehicle? get vehicle =>
+      _vehicleId == null ? null : _vehicles.byId(_vehicleId!);
+
   int get principal =>
       int.tryParse(principalController.text.replaceAll(RegExp(r'[^\d]'), '')) ?? 0;
-  double get rate => double.tryParse(rateController.text.trim()) ?? 0;
   int get tenure => int.tryParse(tenureController.text.trim()) ?? 0;
+  int get emiAmount =>
+      int.tryParse(emiController.text.replaceAll(RegExp(r'[^\d]'), '')) ?? 0;
 
-  // Live preview
-  int get emiAmount => Loan.emiFor(principal, rate, tenure);
-  int get totalInterest => Loan.totalInterest(principal, rate, tenure);
-  int get totalPayable => Loan.totalPayable(principal, rate, tenure);
+  /// Total repayable across the schedule (no interest) = EMI × tenure.
+  int get totalPayable => emiAmount * tenure;
 
   set customerId(String? v) {
     _customerId = v;
     notifyListeners();
   }
 
-  set disbursementDate(DateTime? v) {
-    _disbursementDate = v;
+  set vehicleId(String? v) {
+    _vehicleId = v;
     notifyListeners();
   }
 
-  set penaltyType(PenaltyType v) {
-    _penaltyType = v;
+  set loanDate(DateTime? v) {
+    _loanDate = v;
     notifyListeners();
   }
 
@@ -62,10 +87,11 @@ class NewLoanViewModel extends ChangeNotifier {
 
   String? validate() {
     if (_customerId == null) return 'Please select a customer';
-    if (principal <= 0) return 'Enter the principal amount';
-    if (rate <= 0) return 'Enter the interest rate';
+    if (_vehicleId == null) return 'Please select the loan vehicle';
+    if (_loanDate == null) return 'Pick the loan date';
+    if (principal <= 0) return 'Enter the loan amount';
     if (tenure <= 0) return 'Enter the tenure in months';
-    if (_disbursementDate == null) return 'Pick the disbursement date';
+    if (emiAmount <= 0) return 'Enter the EMI amount';
     return null;
   }
 
@@ -75,12 +101,11 @@ class NewLoanViewModel extends ChangeNotifier {
       actorRole: user.role,
       actorId: user.id,
       customerId: _customerId!,
+      vehicleId: _vehicleId,
       principal: principal,
-      rate: rate,
       tenureMonths: tenure,
-      disbursementDate: _disbursementDate!,
-      penaltyType: _penaltyType,
-      penaltyValue: num.tryParse(penaltyValueController.text.trim()) ?? 0,
+      emiAmount: emiAmount,
+      disbursementDate: _loanDate!,
     );
     return !user.isSuperAdmin;
   }
@@ -88,9 +113,8 @@ class NewLoanViewModel extends ChangeNotifier {
   @override
   void dispose() {
     principalController.dispose();
-    rateController.dispose();
     tenureController.dispose();
-    penaltyValueController.dispose();
+    emiController.dispose();
     super.dispose();
   }
 }

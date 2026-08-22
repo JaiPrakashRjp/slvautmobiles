@@ -10,23 +10,61 @@ abstract class LoanService extends ChangeNotifier {
   List<Loan> all();
   Loan? byId(String id);
   List<Loan> forCustomer(String customerId);
+
+  /// Books a loan against a customer (and optionally a vehicle). No interest:
+  /// each month owes the typed [emiAmount], repeated for [tenureMonths].
   Loan create({
     required Role actorRole,
     required String actorId,
     required String customerId,
+    String? vehicleId,
     required int principal,
-    required double rate,
     required int tenureMonths,
+    required int emiAmount,
     required DateTime disbursementDate,
-    required PenaltyType penaltyType,
-    required num penaltyValue,
   });
-  void recordEmiPayment(String loanId, String emiId, int amount);
+
+  /// Records a (possibly partial) payment against one EMI. [penalty] is the late
+  /// penalty for the month, [amount] is what is being paid now; [receivedDate],
+  /// [remarks] and [screenshotName] capture the proof/notes. Auto-closes the
+  /// loan once every EMI is fully cleared.
+  void recordEmiPayment(
+    String loanId,
+    String emiId,
+    int amount, {
+    int penalty = 0,
+    DateTime? receivedDate,
+    String? remarks,
+    String? screenshotName,
+    Uint8List? screenshotBytes,
+    String? screenshotMime,
+  });
+
   void foreclose(String loanId, {int charge});
   void waivePenalty(String loanId, String emiId);
   void confirm(String id, String byUserId);
   void reject(String id, String reason, String byUserId);
   void delete(String id);
+
+  // ── Seizure (repossession) ─────────────────────────────────────────────────
+  /// Requests seizing the loan vehicle. A super admin's request seizes at once;
+  /// an admin's waits pending a super admin's confirm/cancel.
+  void requestSeize(String loanId, String reason,
+      {required bool superAdmin, required String byUserId});
+  void confirmSeize(String loanId, String byUserId);
+
+  /// Cancels a seize — the vehicle goes back to the customer, loan continues.
+  void cancelSeize(String loanId, String byUserId, {String? remarks});
+
+  // ── Payment screenshots ─────────────────────────────────────────────────────
+  /// Raw bytes of a stored payment screenshot, for in-app preview.
+  Future<Uint8List> paymentDocBytes(int docId);
+
+  /// Absolute URL of a stored payment screenshot.
+  String paymentDocUrl(int docId);
+
+  /// Deletes a stored payment screenshot by its backend id.
+  void deletePaymentDoc(String loanId, int docId);
 }
 
 class MockLoanService extends LoanService {
@@ -36,80 +74,47 @@ class MockLoanService extends LoanService {
 
   final List<Loan> _loans = [];
 
-  /// Builds a flat-rate EMI schedule; the final EMI absorbs rounding.
+  /// Builds a flat, no-interest EMI schedule: [tenureMonths] rows each owing
+  /// [emiAmount], due one month apart starting at [firstDue].
   static List<Emi> buildSchedule({
-    required int principal,
-    required double rate,
+    required int emiAmount,
     required int tenureMonths,
     required DateTime firstDue,
     int paidUpTo = 0,
   }) {
-    final total = Loan.totalPayable(principal, rate, tenureMonths);
-    final emi = Loan.emiFor(principal, rate, tenureMonths);
     return List.generate(tenureMonths, (i) {
       final due = DateTime(firstDue.year, firstDue.month + i, firstDue.day);
-      // Last EMI = remainder so the schedule sums exactly to total payable.
-      final amount = i == tenureMonths - 1 ? total - emi * (tenureMonths - 1) : emi;
       return Emi(
         id: IdGen.nextId('emi'),
         sequenceNumber: i + 1,
         dueDate: due,
-        amountDue: amount,
-        amountPaid: i < paidUpTo ? amount : 0,
+        amountDue: emiAmount,
+        amountPaid: i < paidUpTo ? emiAmount : 0,
         paidDate: i < paidUpTo ? due : null,
+        receivedDate: i < paidUpTo ? due : null,
       );
     });
   }
 
   void _seed() {
-    // Active loan, 4 of 12 EMIs paid.
+    // Active loan, 2 of 20 EMIs paid — ₹7,000/month.
     _loans.add(Loan(
       id: IdGen.nextId('loan'),
       customerId: 'c_001',
-      principal: 50000,
-      rate: 12,
-      tenureMonths: 12,
-      disbursementDate: DateTime(2026, 1, 5),
-      firstEmiDueDate: DateTime(2026, 2, 5),
-      emiAmount: Loan.emiFor(50000, 12, 12),
+      principal: 140000,
+      tenureMonths: 20,
+      disbursementDate: DateTime(2026, 6, 5),
+      firstEmiDueDate: DateTime(2026, 7, 5),
+      emiAmount: 7000,
       emis: buildSchedule(
-        principal: 50000,
-        rate: 12,
-        tenureMonths: 12,
-        firstDue: DateTime(2026, 2, 5),
-        paidUpTo: 4,
+        emiAmount: 7000,
+        tenureMonths: 20,
+        firstDue: DateTime(2026, 7, 5),
+        paidUpTo: 1,
       ),
-      penaltyType: PenaltyType.flatPerDay,
-      penaltyValue: 50,
       loanStatus: 'active',
       createdBy: 'u_super',
-      createdAt: DateTime(2026, 1, 5),
-      status: EntityStatus.active,
-    ));
-
-    // Overdue loan — first EMI just lapsed.
-    final overdueEmis = buildSchedule(
-      principal: 30000,
-      rate: 10,
-      tenureMonths: 6,
-      firstDue: DateTime(2026, 6, 1),
-    );
-    overdueEmis.first.penalty = 50; // 1 day late at ₹50/day
-    _loans.add(Loan(
-      id: IdGen.nextId('loan'),
-      customerId: 'c_001',
-      principal: 30000,
-      rate: 10,
-      tenureMonths: 6,
-      disbursementDate: DateTime(2026, 5, 1),
-      firstEmiDueDate: DateTime(2026, 6, 1),
-      emiAmount: Loan.emiFor(30000, 10, 6),
-      emis: overdueEmis,
-      penaltyType: PenaltyType.flatPerDay,
-      penaltyValue: 50,
-      loanStatus: 'overdue',
-      createdBy: 'u_admin_ravi',
-      createdAt: DateTime(2026, 5, 1),
+      createdAt: DateTime(2026, 6, 5),
       status: EntityStatus.active,
     ));
   }
@@ -130,32 +135,28 @@ class MockLoanService extends LoanService {
     required Role actorRole,
     required String actorId,
     required String customerId,
+    String? vehicleId,
     required int principal,
-    required double rate,
     required int tenureMonths,
+    required int emiAmount,
     required DateTime disbursementDate,
-    required PenaltyType penaltyType,
-    required num penaltyValue,
   }) {
     final firstDue = DateTime(
         disbursementDate.year, disbursementDate.month + 1, disbursementDate.day);
     final loan = Loan(
       id: IdGen.nextId('loan'),
       customerId: customerId,
+      vehicleId: vehicleId,
       principal: principal,
-      rate: rate,
       tenureMonths: tenureMonths,
       disbursementDate: disbursementDate,
       firstEmiDueDate: firstDue,
-      emiAmount: Loan.emiFor(principal, rate, tenureMonths),
+      emiAmount: emiAmount,
       emis: buildSchedule(
-        principal: principal,
-        rate: rate,
+        emiAmount: emiAmount,
         tenureMonths: tenureMonths,
         firstDue: firstDue,
       ),
-      penaltyType: penaltyType,
-      penaltyValue: penaltyValue,
       loanStatus: 'active',
       createdBy: actorId,
       createdAt: DateTime.now(),
@@ -167,20 +168,30 @@ class MockLoanService extends LoanService {
   }
 
   @override
-  void recordEmiPayment(String loanId, String emiId, int amount) {
+  void recordEmiPayment(
+    String loanId,
+    String emiId,
+    int amount, {
+    int penalty = 0,
+    DateTime? receivedDate,
+    String? remarks,
+    String? screenshotName,
+    Uint8List? screenshotBytes,
+    String? screenshotMime,
+  }) {
     final loan = byId(loanId);
-    final emi =
-        loan?.emis.where((e) => e.id == emiId).cast<Emi?>().firstOrNull;
+    final emi = loan?.emis.where((e) => e.id == emiId).cast<Emi?>().firstOrNull;
     if (loan == null || emi == null) return;
-    // Allocate to penalty first, then to the EMI (spec 7.4 / 8.5).
-    var left = amount;
-    if (emi.penalty > 0) {
-      final toPenalty = left.clamp(0, emi.penalty);
-      emi.penalty -= toPenalty;
-      left -= toPenalty;
+
+    emi.penalty = penalty;
+    emi.amountPaid = (emi.amountPaid + amount).clamp(0, emi.totalDue);
+    emi.receivedDate = receivedDate ?? DateTime.now();
+    if (remarks != null && remarks.isNotEmpty) emi.remarks = remarks;
+    if (screenshotName != null && screenshotName.isNotEmpty) {
+      emi.screenshotName = screenshotName;
     }
-    emi.amountPaid = (emi.amountPaid + left).clamp(0, emi.amountDue);
-    if (emi.isPaid) emi.paidDate = DateTime.now();
+    if (emi.isPaid) emi.paidDate = emi.receivedDate;
+
     if (loan.emis.every((e) => e.isPaid)) {
       loan.loanStatus = 'closed';
     } else if (loan.emis.any((e) =>
@@ -198,8 +209,9 @@ class MockLoanService extends LoanService {
     if (loan == null) return;
     for (final e in loan.emis) {
       if (!e.isPaid) {
-        e.amountPaid = e.amountDue;
+        e.amountPaid = e.totalDue;
         e.paidDate = DateTime.now();
+        e.receivedDate = DateTime.now();
       }
     }
     loan.loanStatus = 'foreclosed';
@@ -241,4 +253,47 @@ class MockLoanService extends LoanService {
     _loans.removeWhere((l) => l.id == id);
     notifyListeners();
   }
+
+  @override
+  void requestSeize(String loanId, String reason,
+      {required bool superAdmin, required String byUserId}) {
+    final l = byId(loanId);
+    if (l == null) return;
+    l.seizeReason = reason;
+    l.seizedAt = DateTime.now();
+    if (superAdmin) {
+      l.seizeStage = 'seized';
+      l.loanStatus = 'seized';
+    } else {
+      l.seizeStage = 'pending';
+    }
+    notifyListeners();
+  }
+
+  @override
+  void confirmSeize(String loanId, String byUserId) {
+    final l = byId(loanId);
+    if (l == null) return;
+    l.seizeStage = 'seized';
+    l.loanStatus = 'seized';
+    notifyListeners();
+  }
+
+  @override
+  void cancelSeize(String loanId, String byUserId, {String? remarks}) {
+    final l = byId(loanId);
+    if (l == null) return;
+    l.seizeStage = null;
+    if (l.loanStatus == 'seized') l.loanStatus = 'active';
+    notifyListeners();
+  }
+
+  @override
+  Future<Uint8List> paymentDocBytes(int docId) async => Uint8List(0);
+
+  @override
+  String paymentDocUrl(int docId) => '';
+
+  @override
+  void deletePaymentDoc(String loanId, int docId) {}
 }

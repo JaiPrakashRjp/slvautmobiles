@@ -17,6 +17,7 @@ class Vehicle with GatedEntity {
     this.buyingExpenses,
     this.showroom,
     this.rc = false,
+    this.fc = false,
     this.permit = false,
     this.insurance = false,
     this.insuranceDate,
@@ -63,8 +64,10 @@ class Vehicle with GatedEntity {
 
   // First-hand only: source showroom.
   Showroom? showroom;
-  // RC / Permit / Insurance — independent flags (both hand types).
+  // RC / FC / Permit / Insurance — independent "document available" flags
+  // (both hand types). `fc` backs the Loan module vehicle's FC toggle.
   bool rc;
+  bool fc;
   bool permit;
   bool insurance;
 

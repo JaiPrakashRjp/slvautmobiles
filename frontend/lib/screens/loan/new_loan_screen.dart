@@ -3,9 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../controllers/auth_controller.dart';
-import '../../models/enums.dart';
-import '../../services/customer_service.dart';
+import '../../services/loan_customer_service.dart';
 import '../../services/loan_service.dart';
+import '../../services/loan_vehicle_service.dart';
 import '../../theme/app_colors.dart';
 import '../../utils/app_radius.dart';
 import '../../utils/app_spacing.dart';
@@ -17,19 +17,29 @@ import '../../widgets/app_text_field.dart';
 import '../../widgets/option_sheet.dart';
 import '../../widgets/picker_field.dart';
 import '../../widgets/primary_button.dart';
-import '../../widgets/tab_bar_navy.dart';
+import '../auto_sale/create_customer_screen.dart';
 
-/// New loan — spec 8.7.3, single form with a live EMI preview.
+/// New loan — no interest. Pick a loan customer + loan vehicle, then enter the
+/// loan date, loan amount, tenure (months) and EMI amount.
 class NewLoanScreen extends StatelessWidget {
-  const NewLoanScreen({super.key});
+  const NewLoanScreen({super.key, this.customerId, this.vehicleId});
+
+  /// Pre-selected customer (opened from a customer's detail).
+  final String? customerId;
+
+  /// Pre-selected vehicle (opened from a vehicle's "Assign loan").
+  final String? vehicleId;
 
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
       create: (_) => NewLoanViewModel(
         context.read<LoanService>(),
-        context.read<CustomerService>(),
+        context.read<LoanCustomerService>(),
+        context.read<LoanVehicleService>(),
         context.read<AuthController>(),
+        initialCustomerId: customerId,
+        initialVehicleId: vehicleId,
       ),
       child: const _NewLoanView(),
     );
@@ -40,29 +50,61 @@ class _NewLoanView extends StatelessWidget {
   const _NewLoanView();
 
   Future<void> _pickCustomer(BuildContext context, NewLoanViewModel vm) async {
+    final navigator = Navigator.of(context);
+    final loanCustomers = context.read<LoanCustomerService>();
     final picked = await OptionSheet.show<String>(
       context,
       title: 'Select customer',
       selected: vm.customerId,
-      options: vm.verifiedCustomers
-          .map((c) => SheetOption(
-                value: c.id,
-                label: c.fullName,
-                subtitle: Formatters.phone(c.phone),
+      options: [
+        const SheetOption(value: '__add__', label: '＋ Add new customer'),
+        ...vm.verifiedCustomers.map((c) => SheetOption(
+              value: c.id,
+              label: c.fullName,
+              subtitle: Formatters.phone(c.phone),
+            )),
+      ],
+    );
+    if (picked == null) return;
+    if (picked == '__add__') {
+      // Create a new loan customer inline, then select it on return.
+      final newId = await navigator.push<String>(MaterialPageRoute(
+        builder: (_) => CreateCustomerScreen(
+          service: loanCustomers,
+          extendedAssurity: true,
+          returnOnCreate: true,
+        ),
+      ));
+      if (newId != null) vm.customerId = newId;
+      return;
+    }
+    vm.customerId = picked;
+  }
+
+  Future<void> _pickVehicle(BuildContext context, NewLoanViewModel vm) async {
+    final picked = await OptionSheet.show<String>(
+      context,
+      title: 'Select vehicle',
+      selected: vm.vehicleId,
+      options: vm.availableVehicles
+          .map((v) => SheetOption(
+                value: v.id,
+                label: v.displayLabel,
+                subtitle: v.model ?? '',
               ))
           .toList(),
     );
-    if (picked != null) vm.customerId = picked;
+    if (picked != null) vm.vehicleId = picked;
   }
 
   Future<void> _pickDate(BuildContext context, NewLoanViewModel vm) async {
     final picked = await showDatePicker(
       context: context,
-      initialDate: vm.disbursementDate ?? DateTime(2026, 6, 2),
+      initialDate: vm.loanDate ?? DateTime(2026, 6, 5),
       firstDate: DateTime(2024),
-      lastDate: DateTime(2030),
+      lastDate: DateTime(2032),
     );
-    if (picked != null) vm.disbursementDate = picked;
+    if (picked != null) vm.loanDate = picked;
   }
 
   void _submit(BuildContext context, NewLoanViewModel vm) {
@@ -78,7 +120,7 @@ class _NewLoanView extends StatelessWidget {
       SnackBar(
         content: Text(pending
             ? 'Submitted. Awaiting Super admin confirmation.'
-            : 'Loan created. Agreement will be generated.'),
+            : 'Loan created.'),
       ),
     );
   }
@@ -99,18 +141,39 @@ class _NewLoanView extends StatelessWidget {
             children: [
               PickerField(
                 label: 'Customer',
+                required: true,
                 placeholder: 'Select customer',
                 value: vm.customer?.fullName,
                 onTap: () => _pickCustomer(context, vm),
               ),
               const SizedBox(height: AppSpacing.lg),
+              PickerField(
+                label: 'Vehicle',
+                required: true,
+                leadingIcon: Icons.electric_rickshaw,
+                placeholder: 'Select the loan vehicle',
+                value: vm.vehicle?.displayLabel,
+                onTap: () => _pickVehicle(context, vm),
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              PickerField(
+                label: 'Loan date',
+                required: true,
+                leadingIcon: Icons.calendar_today_outlined,
+                placeholder: 'Select date',
+                value: vm.loanDate == null
+                    ? null
+                    : Formatters.date(vm.loanDate!),
+                onTap: () => _pickDate(context, vm),
+              ),
+              const SizedBox(height: AppSpacing.lg),
               AppTextField(
-                label: 'Principal',
+                label: 'Loan amount',
+                required: true,
                 prefixText: '₹ ',
                 controller: vm.principalController,
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                onChanged: (_) => vm.refreshPreview(),
               ),
               const SizedBox(height: AppSpacing.lg),
               Row(
@@ -118,18 +181,21 @@ class _NewLoanView extends StatelessWidget {
                 children: [
                   Expanded(
                     child: AppTextField(
-                      label: 'Interest rate (% / yr)',
-                      controller: vm.rateController,
-                      keyboardType:
-                          const TextInputType.numberWithOptions(decimal: true),
+                      label: 'Tenure (months)',
+                      required: true,
+                      controller: vm.tenureController,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                       onChanged: (_) => vm.refreshPreview(),
                     ),
                   ),
                   const SizedBox(width: AppSpacing.md),
                   Expanded(
                     child: AppTextField(
-                      label: 'Tenure (months)',
-                      controller: vm.tenureController,
+                      label: 'EMI amount',
+                      required: true,
+                      prefixText: '₹ ',
+                      controller: vm.emiController,
                       keyboardType: TextInputType.number,
                       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                       onChanged: (_) => vm.refreshPreview(),
@@ -137,37 +203,8 @@ class _NewLoanView extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: AppSpacing.lg),
-              PickerField(
-                label: 'Disbursement date',
-                leadingIcon: Icons.calendar_today_outlined,
-                placeholder: 'Select date',
-                value: vm.disbursementDate == null
-                    ? null
-                    : Formatters.date(vm.disbursementDate!),
-                onTap: () => _pickDate(context, vm),
-              ),
-              const SizedBox(height: AppSpacing.lg),
-              Text('Penalty rule',
-                  style: AppTextStyles.label.copyWith(color: c.textSub)),
-              const SizedBox(height: AppSpacing.xs),
-              TabBarNavy(
-                tabs: const ['Flat ₹/day', '% of EMI/day'],
-                index: vm.penaltyType == PenaltyType.flatPerDay ? 0 : 1,
-                onChanged: (i) => vm.penaltyType =
-                    i == 0 ? PenaltyType.flatPerDay : PenaltyType.percentPerDay,
-              ),
-              const SizedBox(height: AppSpacing.md),
-              AppTextField(
-                label: vm.penaltyType == PenaltyType.flatPerDay
-                    ? 'Penalty (₹ per day)'
-                    : 'Penalty (% of EMI per day)',
-                controller: vm.penaltyValueController,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-              ),
               const SizedBox(height: AppSpacing.xl),
-              _EmiPreview(vm: vm),
+              _TotalPreview(vm: vm),
               const SizedBox(height: AppSpacing.xxl),
               PrimaryButton(
                 label: 'Create loan',
@@ -181,17 +218,16 @@ class _NewLoanView extends StatelessWidget {
   }
 }
 
-class _EmiPreview extends StatelessWidget {
-  const _EmiPreview({required this.vm});
+class _TotalPreview extends StatelessWidget {
+  const _TotalPreview({required this.vm});
 
   final NewLoanViewModel vm;
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    if (vm.principal <= 0 || vm.tenure <= 0 || vm.rate <= 0) {
-      return const SizedBox.shrink();
-    }
+    if (vm.emiAmount <= 0 || vm.tenure <= 0) return const SizedBox.shrink();
+
     Widget row(String label, String value, {bool strong = false}) => Padding(
           padding: const EdgeInsets.symmetric(vertical: 4),
           child: Row(
@@ -223,8 +259,8 @@ class _EmiPreview extends StatelessWidget {
               style: AppTextStyles.label.copyWith(color: c.accent)),
           const SizedBox(height: AppSpacing.sm),
           row('Monthly EMI', Formatters.currency(vm.emiAmount), strong: true),
-          row('Total interest', Formatters.currency(vm.totalInterest)),
-          row('Total payable', Formatters.currency(vm.totalPayable)),
+          row('Months', '${vm.tenure}'),
+          row('Total repayable', Formatters.currency(vm.totalPayable)),
         ],
       ),
     );

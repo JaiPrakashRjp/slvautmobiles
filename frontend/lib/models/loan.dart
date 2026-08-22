@@ -7,8 +7,9 @@ class Loan with GatedEntity {
   Loan({
     required this.id,
     required this.customerId,
+    this.vehicleId,
     required this.principal,
-    required this.rate,
+    this.rate = 0,
     required this.tenureMonths,
     required this.disbursementDate,
     required this.firstEmiDueDate,
@@ -19,6 +20,9 @@ class Loan with GatedEntity {
     this.loanStatus = 'active',
     this.agreementPath,
     this.nocPath,
+    this.seizeStage,
+    this.seizeReason,
+    this.seizedAt,
     required this.createdBy,
     required this.createdAt,
     this.status = EntityStatus.active,
@@ -30,8 +34,11 @@ class Loan with GatedEntity {
   @override
   final String id;
   final String customerId;
+
+  /// The loan vehicle this loan is booked against (collateral), if any.
+  final String? vehicleId;
   final int principal;
-  final double rate; // annual %
+  final double rate; // annual % — 0 for typed-EMI loans (no interest)
   final int tenureMonths;
   final DateTime disbursementDate;
   final DateTime firstEmiDueDate;
@@ -44,6 +51,12 @@ class Loan with GatedEntity {
   String loanStatus;
   String? agreementPath;
   String? nocPath;
+
+  /// Seizure (repossession): null (none) | 'pending' (admin requested, awaiting
+  /// super admin) | 'seized' (confirmed — vehicle repossessed, loan ended).
+  String? seizeStage;
+  String? seizeReason;
+  DateTime? seizedAt;
 
   @override
   final String createdBy;
@@ -72,13 +85,17 @@ class Loan with GatedEntity {
     return (totalPayable(principal, rate, tenureMonths) / tenureMonths).round();
   }
 
-  int get totalPayableAmount => principal + interest;
   int get interest => totalInterest(principal, rate, tenureMonths);
 
+  /// Total repayable across the schedule = Σ EMI + Σ penalty. For a typed-EMI
+  /// loan (no interest) this is EMI × tenure plus any late penalties.
+  int get totalPayableAmount => emis.fold(0, (s, e) => s + e.totalDue);
+
   int get totalPaid => emis.fold(0, (s, e) => s + e.amountPaid);
-  int get balanceOutstanding => (totalPayableAmount - totalPaid).clamp(0, totalPayableAmount);
+  int get balanceOutstanding => emis.fold(0, (s, e) => s + e.remaining);
   int get paidEmis => emis.where((e) => e.isPaid).length;
-  int get penaltyAccrued => emis.fold(0, (s, e) => s + e.penalty);
+  int get penaltyAccrued =>
+      emis.where((e) => !e.isPaid).fold(0, (s, e) => s + e.penalty);
 
   Emi? nextDueEmi(DateTime now) {
     final unpaid = emis.where((e) => !e.isPaid).toList()
@@ -87,4 +104,10 @@ class Loan with GatedEntity {
   }
 
   bool get isClosed => loanStatus == 'closed' || loanStatus == 'foreclosed';
+
+  /// Fully repaid (all EMIs cleared) — shows as "Paid".
+  bool get isFullyPaid => loanStatus == 'closed';
+
+  bool get isSeizePending => seizeStage == 'pending';
+  bool get isSeized => seizeStage == 'seized' || loanStatus == 'seized';
 }

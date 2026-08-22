@@ -8,6 +8,8 @@ import '../models/enums.dart';
 import '../models/search_result.dart';
 import '../services/api_notification_service.dart';
 import '../services/global_search_service.dart';
+import '../services/loan_customer_service.dart';
+import '../services/loan_vehicle_service.dart';
 import '../services/rental_customer_service.dart';
 import '../services/rental_vehicle_service.dart';
 import '../theme/app_colors.dart';
@@ -19,7 +21,9 @@ import '../widgets/app_card.dart';
 import 'auto_sale/auto_sale_home_screen.dart';
 import 'auto_sale/customer_detail_screen.dart';
 import 'auto_sale/vehicle_detail_screen.dart';
-import 'loan/loan_home_screen.dart';
+import 'loan/loan_customer_detail_screen.dart';
+import 'loan/loan_module_chooser_screen.dart';
+import 'loan/loan_vehicle_detail_screen.dart';
 import 'notifications_screen.dart';
 import 'rental/rental_customer_rentals_screen.dart';
 import 'rental/rental_home_screen.dart';
@@ -65,7 +69,8 @@ class _ModuleChooserView extends StatelessWidget {
       case AppModule.rentals:
         return MaterialPageRoute(builder: (_) => const RentalHomeScreen());
       case AppModule.loans:
-        return MaterialPageRoute(builder: (_) => const LoanHomeScreen());
+        return MaterialPageRoute(
+            builder: (_) => const LoanModuleChooserScreen());
       case AppModule.users:
         return MaterialPageRoute(builder: (_) => const UsersHomeScreen());
     }
@@ -187,30 +192,46 @@ class _GlobalSearchBarState extends State<_GlobalSearchBar> {
     final id = '${r.id}';
     final MaterialPageRoute<void> route;
     if (r.kind == 'customer') {
-      // A rental customer lives in the rental-scoped service — open the rental
-      // detail; otherwise the sale customer detail.
-      route = context.read<RentalCustomerService>().byId(id) != null
-          ? MaterialPageRoute(
-              builder: (_) => RentalCustomerRentalsScreen(customerId: id))
-          : MaterialPageRoute(
-              builder: (_) => CustomerDetailScreen(customerId: id));
+      // Customer ids are globally unique, so whichever module-scoped service has
+      // it decides which detail screen opens: rental → rental rentals, loan →
+      // loan customer detail, otherwise the auto-sale customer detail.
+      if (context.read<RentalCustomerService>().byId(id) != null) {
+        route =
+            MaterialPageRoute(builder: (_) => RentalCustomerRentalsScreen(customerId: id));
+      } else if (context.read<LoanCustomerService>().byId(id) != null) {
+        route =
+            MaterialPageRoute(builder: (_) => LoanCustomerDetailScreen(customerId: id));
+      } else {
+        route = MaterialPageRoute(builder: (_) => CustomerDetailScreen(customerId: id));
+      }
     } else {
-      route = context.read<RentalVehicleService>().byId(id) != null
-          ? MaterialPageRoute(
-              builder: (_) => RentalVehicleDetailsScreen(vehicleId: id))
-          : MaterialPageRoute(
-              builder: (_) => VehicleDetailScreen(vehicleId: id));
+      if (context.read<RentalVehicleService>().byId(id) != null) {
+        route = MaterialPageRoute(
+            builder: (_) => RentalVehicleDetailsScreen(vehicleId: id));
+      } else if (context.read<LoanVehicleService>().byId(id) != null) {
+        route = MaterialPageRoute(
+            builder: (_) => LoanVehicleDetailScreen(vehicleId: id));
+      } else {
+        route =
+            MaterialPageRoute(builder: (_) => VehicleDetailScreen(vehicleId: id));
+      }
     }
     Navigator.of(context).push(route);
   }
 
   void _openVehicle(int id) {
     final vid = '$id';
-    final route = context.read<RentalVehicleService>().byId(vid) != null
-        ? MaterialPageRoute<void>(
-            builder: (_) => RentalVehicleDetailsScreen(vehicleId: vid))
-        : MaterialPageRoute<void>(
-            builder: (_) => VehicleDetailScreen(vehicleId: vid));
+    final MaterialPageRoute<void> route;
+    if (context.read<RentalVehicleService>().byId(vid) != null) {
+      route = MaterialPageRoute<void>(
+          builder: (_) => RentalVehicleDetailsScreen(vehicleId: vid));
+    } else if (context.read<LoanVehicleService>().byId(vid) != null) {
+      route = MaterialPageRoute<void>(
+          builder: (_) => LoanVehicleDetailScreen(vehicleId: vid));
+    } else {
+      route = MaterialPageRoute<void>(
+          builder: (_) => VehicleDetailScreen(vehicleId: vid));
+    }
     Navigator.of(context).push(route);
   }
 
