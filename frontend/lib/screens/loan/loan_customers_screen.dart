@@ -1,6 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../controllers/auth_controller.dart';
 import '../../models/customer.dart';
@@ -21,6 +22,7 @@ import '../../widgets/status_pill.dart';
 import '../../widgets/tab_bar_navy.dart';
 import '../auto_sale/create_customer_screen.dart';
 import 'loan_customer_detail_screen.dart';
+import 'loan_report_screen.dart';
 
 /// Loan-module customers — same tables/fields/approval flow as the sale
 /// customers, scoped to module = loan, with the richer assurity document set.
@@ -74,6 +76,13 @@ class _LoanCustomersScreenState extends State<LoanCustomersScreen> {
       appBar: AppBar(
         title: const Text('Loan customers'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.assessment_outlined),
+            tooltip: 'Loan report',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const LoanReportScreen()),
+            ),
+          ),
           GoldCreateButton(
             iconOnly: true,
             onPressed: () => _openCreate(context, service),
@@ -176,6 +185,72 @@ class _LoanCustomerCard extends StatelessWidget {
     if (ok == true) service.delete(customer.id);
   }
 
+  /// Tap the avatar → enlarged, zoomable photo in a dialog with a Share button.
+  void _showPhoto(
+      BuildContext context, LoanCustomerService customers, DocRef ref) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(24),
+        child: Stack(
+          children: [
+            GestureDetector(
+              onTap: () => Navigator.pop(ctx),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: InteractiveViewer(
+                  child: CachedNetworkImage(
+                    imageUrl: customers.documentUrl(ref.id),
+                    fit: BoxFit.contain,
+                    placeholder: (_, __) => const SizedBox(
+                      height: 240,
+                      child: Center(child: CircularProgressIndicator()),
+                    ),
+                    errorWidget: (_, __, ___) => const SizedBox(
+                      height: 240,
+                      child: Center(
+                          child: Icon(Icons.broken_image_outlined, size: 48)),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              top: 8,
+              right: 8,
+              child: Material(
+                color: Colors.black54,
+                shape: const CircleBorder(),
+                child: IconButton(
+                  icon: const Icon(Icons.share, color: Colors.white),
+                  tooltip: 'Share photo',
+                  onPressed: () => _sharePhoto(customers, ref),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _sharePhoto(LoanCustomerService customers, DocRef ref) async {
+    final bytes = await customers.documentBytes(ref.id);
+    if (bytes.isEmpty) return;
+    final name = ref.fileName.isEmpty ? 'photo.jpg' : ref.fileName;
+    final lower = name.toLowerCase();
+    final mime = lower.endsWith('.png')
+        ? 'image/png'
+        : lower.endsWith('.heic')
+            ? 'image/heic'
+            : 'image/jpeg';
+    await Share.shareXFiles(
+      [XFile.fromData(bytes, name: name, mimeType: mime)],
+      subject: '${customer.fullName} — photo',
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
@@ -183,6 +258,10 @@ class _LoanCustomerCard extends StatelessWidget {
     final service = context.read<LoanCustomerService>();
     final canModify =
         auth.isSuperAdmin || customer.createdBy == auth.currentUser?.id;
+    // No delete once the customer has any loan (active or history) — keeps the
+    // records intact.
+    final hasLoans =
+        context.read<LoanService>().forCustomer(customer.id).isNotEmpty;
     final photoRef = customer.uploadedDocs
         .where((d) => d.docTypeWire == 'photo')
         .cast<DocRef?>()
@@ -198,16 +277,21 @@ class _LoanCustomerCard extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              CircleAvatar(
-                radius: 22,
-                backgroundColor: c.bgSurface,
-                backgroundImage: photoRef == null
+              GestureDetector(
+                onTap: photoRef == null
                     ? null
-                    : CachedNetworkImageProvider(
-                        service.documentUrl(photoRef.id)),
-                child: photoRef == null
-                    ? Icon(Icons.person_outline, color: c.textSub)
-                    : null,
+                    : () => _showPhoto(context, service, photoRef),
+                child: CircleAvatar(
+                  radius: 22,
+                  backgroundColor: c.bgSurface,
+                  backgroundImage: photoRef == null
+                      ? null
+                      : CachedNetworkImageProvider(
+                          service.documentUrl(photoRef.id)),
+                  child: photoRef == null
+                      ? Icon(Icons.person_outline, color: c.textSub)
+                      : null,
+                ),
               ),
               const SizedBox(width: AppSpacing.md),
               Expanded(
@@ -242,20 +326,13 @@ class _LoanCustomerCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: AppSpacing.sm),
-          Divider(height: 1, color: c.borderColor),
-          const SizedBox(height: AppSpacing.sm),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              IconButtonSoft(
-                icon: Icons.visibility_outlined,
-                tooltip: 'View customer',
-                compact: true,
-                onPressed: () => _open(context),
-              ),
-              if (canModify) ...[
-                const SizedBox(width: AppSpacing.sm),
+          if (canModify) ...[
+            const SizedBox(height: AppSpacing.sm),
+            Divider(height: 1, color: c.borderColor),
+            const SizedBox(height: AppSpacing.sm),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
                 IconButtonSoft(
                   icon: Icons.edit_outlined,
                   tooltip: 'Edit',
@@ -270,17 +347,19 @@ class _LoanCustomerCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(width: AppSpacing.sm),
-                IconButtonSoft(
-                  icon: Icons.delete_outline,
-                  tooltip: 'Delete',
-                  danger: true,
-                  compact: true,
-                  onPressed: () => _confirmDelete(context, service),
-                ),
+                if (!hasLoans) ...[
+                  const SizedBox(width: AppSpacing.sm),
+                  IconButtonSoft(
+                    icon: Icons.delete_outline,
+                    tooltip: 'Delete',
+                    danger: true,
+                    compact: true,
+                    onPressed: () => _confirmDelete(context, service),
+                  ),
+                ],
               ],
-            ],
-          ),
+            ),
+          ],
         ],
       ),
     );

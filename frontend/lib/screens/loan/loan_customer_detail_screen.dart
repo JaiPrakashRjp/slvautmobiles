@@ -11,12 +11,14 @@ import '../../utils/app_text_styles.dart';
 import '../../utils/formatters.dart';
 import '../../utils/responsive.dart';
 import '../../widgets/app_card.dart';
+import '../../widgets/primary_button.dart';
 import '../../widgets/role_gate_actions.dart';
 import '../../widgets/role_gate_banner.dart';
 import '../../widgets/status_pill.dart';
 import '../auto_sale/create_customer_screen.dart';
 import '../document_preview_screen.dart';
 import 'loan_detail_screen.dart';
+import 'new_loan_screen.dart';
 
 /// Loan-module customer detail — borrower + assurity (with photo & documents) +
 /// approval flow, plus any loans booked against this customer.
@@ -198,6 +200,18 @@ class LoanCustomerDetailScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: AppSpacing.sm),
                 ],
+              if (customer.isActive) ...[
+                const SizedBox(height: AppSpacing.sm),
+                PrimaryButton(
+                  label: 'Assign loan',
+                  icon: Icons.request_quote_outlined,
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => NewLoanScreen(customerId: customer.id),
+                    ),
+                  ),
+                ),
+              ],
 
               // ── Approve / reject ────────────────────────────────────────
               const SizedBox(height: AppSpacing.lg),

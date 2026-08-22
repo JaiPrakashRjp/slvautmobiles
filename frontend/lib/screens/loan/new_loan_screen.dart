@@ -21,7 +21,13 @@ import '../../widgets/primary_button.dart';
 /// New loan — no interest. Pick a loan customer + loan vehicle, then enter the
 /// loan date, loan amount, tenure (months) and EMI amount.
 class NewLoanScreen extends StatelessWidget {
-  const NewLoanScreen({super.key});
+  const NewLoanScreen({super.key, this.customerId, this.vehicleId});
+
+  /// Pre-selected customer (opened from a customer's detail).
+  final String? customerId;
+
+  /// Pre-selected vehicle (opened from a vehicle's "Assign loan").
+  final String? vehicleId;
 
   @override
   Widget build(BuildContext context) {
@@ -31,6 +37,8 @@ class NewLoanScreen extends StatelessWidget {
         context.read<LoanCustomerService>(),
         context.read<LoanVehicleService>(),
         context.read<AuthController>(),
+        initialCustomerId: customerId,
+        initialVehicleId: vehicleId,
       ),
       child: const _NewLoanView(),
     );
@@ -125,7 +133,7 @@ class _NewLoanView extends StatelessWidget {
               PickerField(
                 label: 'Vehicle',
                 required: true,
-                leadingIcon: Icons.two_wheeler_outlined,
+                leadingIcon: Icons.electric_rickshaw,
                 placeholder: 'Select the loan vehicle',
                 value: vm.vehicle?.displayLabel,
                 onTap: () => _pickVehicle(context, vm),

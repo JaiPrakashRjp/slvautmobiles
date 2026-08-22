@@ -1,6 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../controllers/auth_controller.dart';
 import '../../models/doc_ref.dart';
@@ -20,6 +21,7 @@ import '../../widgets/status_pill.dart';
 import '../../widgets/tab_bar_navy.dart';
 import 'loan_vehicle_detail_screen.dart';
 import 'loan_vehicle_form_screen.dart';
+import 'new_loan_screen.dart';
 
 /// Loan-module vehicles — the vehicle a loan is booked against. Same `vehicles`
 /// table, scoped to module = loan, with photo + Insurance/FC/Permit and the
@@ -135,7 +137,7 @@ class _LoanVehiclesScreenState extends State<LoanVehiclesScreen> {
                         Padding(
                           padding: const EdgeInsets.only(top: 40),
                           child: EmptyState(
-                            icon: Icons.two_wheeler_outlined,
+                            icon: Icons.electric_rickshaw,
                             title: 'No loan vehicles yet',
                             subtitle: 'Tap “+” to add a vehicle.',
                             ctaLabel: 'Add vehicle',
@@ -147,7 +149,11 @@ class _LoanVehiclesScreenState extends State<LoanVehiclesScreen> {
                           Padding(
                             padding:
                                 const EdgeInsets.only(bottom: AppSpacing.lg),
-                            child: _LoanVehicleCard(vehicle: v),
+                            child: _LoanVehicleCard(
+                              vehicle: v,
+                              canAssign:
+                                  v.isActive && !onLoan.contains(v.id),
+                            ),
                           ),
                     ],
                   ),
@@ -162,9 +168,12 @@ class _LoanVehiclesScreenState extends State<LoanVehiclesScreen> {
 }
 
 class _LoanVehicleCard extends StatelessWidget {
-  const _LoanVehicleCard({required this.vehicle});
+  const _LoanVehicleCard({required this.vehicle, this.canAssign = false});
 
   final Vehicle vehicle;
+
+  /// True when this vehicle can be loaned (active + not already on a live loan).
+  final bool canAssign;
 
   void _open(BuildContext context) {
     Navigator.of(context).push(MaterialPageRoute(
@@ -185,6 +194,72 @@ class _LoanVehicleCard extends StatelessWidget {
     if (ok == true) service.delete(vehicle.id);
   }
 
+  /// Tap the photo → enlarged, zoomable image in a dialog with a Share button.
+  void _showPhoto(
+      BuildContext context, LoanVehicleService vehicles, DocRef ref) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(24),
+        child: Stack(
+          children: [
+            GestureDetector(
+              onTap: () => Navigator.pop(ctx),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: InteractiveViewer(
+                  child: CachedNetworkImage(
+                    imageUrl: vehicles.documentUrl(ref.id),
+                    fit: BoxFit.contain,
+                    placeholder: (_, __) => const SizedBox(
+                      height: 240,
+                      child: Center(child: CircularProgressIndicator()),
+                    ),
+                    errorWidget: (_, __, ___) => const SizedBox(
+                      height: 240,
+                      child: Center(
+                          child: Icon(Icons.broken_image_outlined, size: 48)),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              top: 8,
+              right: 8,
+              child: Material(
+                color: Colors.black54,
+                shape: const CircleBorder(),
+                child: IconButton(
+                  icon: const Icon(Icons.share, color: Colors.white),
+                  tooltip: 'Share photo',
+                  onPressed: () => _sharePhoto(vehicles, ref),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _sharePhoto(LoanVehicleService vehicles, DocRef ref) async {
+    final bytes = await vehicles.documentBytes(ref.id);
+    if (bytes.isEmpty) return;
+    final name = ref.fileName.isEmpty ? 'photo.jpg' : ref.fileName;
+    final lower = name.toLowerCase();
+    final mime = lower.endsWith('.png')
+        ? 'image/png'
+        : lower.endsWith('.heic')
+            ? 'image/heic'
+            : 'image/jpeg';
+    await Share.shareXFiles(
+      [XFile.fromData(bytes, name: name, mimeType: mime)],
+      subject: '${vehicle.displayLabel} — photo',
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
@@ -192,6 +267,11 @@ class _LoanVehicleCard extends StatelessWidget {
     final service = context.read<LoanVehicleService>();
     final canModify =
         auth.isSuperAdmin || vehicle.createdBy == auth.currentUser?.id;
+    // No delete once the vehicle has any loan (current or past history).
+    final hasLoans = context
+        .read<LoanService>()
+        .all()
+        .any((l) => l.vehicleId == vehicle.id);
     final photoRef = vehicle.uploadedDocs
         .where((d) => d.docTypeWire == 'photo')
         .cast<DocRef?>()
@@ -207,27 +287,33 @@ class _LoanVehicleCard extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: SizedBox(
-                  width: 48,
-                  height: 48,
-                  child: photoRef == null
-                      ? Container(
-                          color: c.bgSurface,
-                          child: Icon(Icons.two_wheeler_outlined,
-                              color: c.textSub),
-                        )
-                      : CachedNetworkImage(
-                          imageUrl: service.documentUrl(photoRef.id),
-                          fit: BoxFit.cover,
-                          placeholder: (_, __) => Container(color: c.bgSurface),
-                          errorWidget: (_, __, ___) => Container(
+              GestureDetector(
+                onTap: photoRef == null
+                    ? null
+                    : () => _showPhoto(context, service, photoRef),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: SizedBox(
+                    width: 48,
+                    height: 48,
+                    child: photoRef == null
+                        ? Container(
                             color: c.bgSurface,
-                            child: Icon(Icons.two_wheeler_outlined,
+                            child: Icon(Icons.electric_rickshaw,
                                 color: c.textSub),
+                          )
+                        : CachedNetworkImage(
+                            imageUrl: service.documentUrl(photoRef.id),
+                            fit: BoxFit.cover,
+                            placeholder: (_, __) =>
+                                Container(color: c.bgSurface),
+                            errorWidget: (_, __, ___) => Container(
+                              color: c.bgSurface,
+                              child: Icon(Icons.electric_rickshaw,
+                                  color: c.textSub),
+                            ),
                           ),
-                        ),
+                  ),
                 ),
               ),
               const SizedBox(width: AppSpacing.md),
@@ -268,16 +354,26 @@ class _LoanVehicleCard extends StatelessWidget {
           Divider(height: 1, color: c.borderColor),
           const SizedBox(height: AppSpacing.sm),
           Row(
-            mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              IconButtonSoft(
-                icon: Icons.visibility_outlined,
-                tooltip: 'View vehicle',
-                compact: true,
-                onPressed: () => _open(context),
-              ),
+              if (canAssign)
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              NewLoanScreen(vehicleId: vehicle.id),
+                        ),
+                      ),
+                      icon: const Icon(Icons.request_quote_outlined, size: 18),
+                      label: const Text('Assign loan'),
+                    ),
+                  ),
+                )
+              else
+                const Spacer(),
               if (canModify) ...[
-                const SizedBox(width: AppSpacing.sm),
                 IconButtonSoft(
                   icon: Icons.edit_outlined,
                   tooltip: 'Edit',
@@ -288,14 +384,16 @@ class _LoanVehicleCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(width: AppSpacing.sm),
-                IconButtonSoft(
-                  icon: Icons.delete_outline,
-                  tooltip: 'Delete',
-                  danger: true,
-                  compact: true,
-                  onPressed: () => _confirmDelete(context, service),
-                ),
+                if (!hasLoans) ...[
+                  const SizedBox(width: AppSpacing.sm),
+                  IconButtonSoft(
+                    icon: Icons.delete_outline,
+                    tooltip: 'Delete',
+                    danger: true,
+                    compact: true,
+                    onPressed: () => _confirmDelete(context, service),
+                  ),
+                ],
               ],
             ],
           ),

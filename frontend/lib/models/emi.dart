@@ -15,6 +15,7 @@ class Emi {
     this.receivedDate,
     this.remarks,
     this.screenshotName,
+    this.screenshotDocId,
   });
 
   final String id;
@@ -35,6 +36,10 @@ class Emi {
 
   /// File name of the attached payment screenshot (proof).
   String? screenshotName;
+
+  /// Backend id of the stored payment screenshot (for view / delete). Null when
+  /// none is stored yet.
+  int? screenshotDocId;
 
   /// Total owed this month = EMI + any late penalty.
   int get totalDue => amountDue + penalty;

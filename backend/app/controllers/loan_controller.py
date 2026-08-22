@@ -154,6 +154,16 @@ def download_payment_document(doc_id: int, db: Session = Depends(get_db)):
     )
 
 
+@router.delete("/payment-documents/{doc_id}", status_code=204)
+def delete_payment_document(
+    doc_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    LoanService.delete_payment_document(db, doc_id)
+    return Response(status_code=204)
+
+
 @router.post("/reminders/run")
 def run_loan_reminders(
     db: Session = Depends(get_db),

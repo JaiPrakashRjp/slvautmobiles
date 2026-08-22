@@ -19,12 +19,14 @@ import '../../utils/responsive.dart';
 import '../../widgets/app_card.dart';
 import '../../widgets/detail_field_card.dart';
 import '../../widgets/doc_manager_tile.dart';
+import '../../widgets/primary_button.dart';
 import '../../widgets/role_gate_actions.dart';
 import '../../widgets/role_gate_banner.dart';
 import '../../widgets/status_pill.dart';
 import '../document_preview_screen.dart';
 import 'loan_detail_screen.dart';
 import 'loan_vehicle_form_screen.dart';
+import 'new_loan_screen.dart';
 
 /// Loan-module vehicle detail — fields, photo, documents (view / upload /
 /// delete), and the admin → super-admin approval actions.
@@ -71,6 +73,15 @@ class _LoanVehicleDetailScreenState extends State<LoanVehicleDetailScreen> {
 
     final canModify =
         auth.isSuperAdmin || vehicle.createdBy == auth.currentUser?.id;
+    // Loanable only if active and not already tied up in a live loan
+    // (blocked until a confirm-seize frees it).
+    final loans = context.watch<LoanService>();
+    final onLiveLoan = loans.all().any((l) =>
+        l.vehicleId == vehicle.id &&
+        !l.isSeized &&
+        !l.isClosed &&
+        l.loanStatus != 'rejected');
+    final canAssign = vehicle.isActive && !onLiveLoan;
     final photoRef = vehicle.uploadedDocs
         .where((d) => d.docTypeWire == 'photo')
         .cast<DocRef?>()
@@ -123,7 +134,7 @@ class _LoanVehicleDetailScreenState extends State<LoanVehicleDetailScreen> {
                       errorWidget: (_, __, ___) => Container(
                         height: 180,
                         color: c.bgSurface,
-                        child: Icon(Icons.two_wheeler_outlined,
+                        child: Icon(Icons.electric_rickshaw,
                             size: 48, color: c.textSub),
                       ),
                     ),
@@ -131,6 +142,18 @@ class _LoanVehicleDetailScreenState extends State<LoanVehicleDetailScreen> {
                   const SizedBox(height: AppSpacing.lg),
                 ],
                 ..._detailRows(vehicle),
+                if (canAssign) ...[
+                  const SizedBox(height: AppSpacing.lg),
+                  PrimaryButton(
+                    label: 'Assign loan',
+                    icon: Icons.request_quote_outlined,
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => NewLoanScreen(vehicleId: vehicle.id),
+                      ),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: AppSpacing.lg),
                 Text('Documents',
                     style: AppTextStyles.label.copyWith(color: c.textSub)),

@@ -242,6 +242,32 @@ class ApiLoanService extends LoanService {
         .catchError((_) => null));
   }
 
+  @override
+  Future<Uint8List> paymentDocBytes(int docId) =>
+      _api.getBytes('/loans/payment-documents/$docId');
+
+  @override
+  String paymentDocUrl(int docId) =>
+      _api.absoluteUrl('/loans/payment-documents/$docId');
+
+  @override
+  void deletePaymentDoc(String loanId, int docId) {
+    final loan = byId(loanId);
+    final emi = loan?.emis
+        .where((e) => e.screenshotDocId == docId)
+        .cast<Emi?>()
+        .firstOrNull;
+    if (emi != null) {
+      emi.screenshotDocId = null;
+      emi.screenshotName = null;
+      notifyListeners();
+    }
+    unawaited(_api
+        .delete('/loans/payment-documents/$docId')
+        .then((_) => refresh())
+        .catchError((_) => null));
+  }
+
   // ── JSON mapping ────────────────────────────────────────────────────────────
   static String _dateStr(DateTime d) => d.toIso8601String().split('T').first;
 
@@ -263,7 +289,10 @@ class ApiLoanService extends LoanService {
       if (ids.isEmpty || pm['emi_id'] == null) continue;
       final emiId = pm['emi_id'].toString();
       for (final e in emis) {
-        if (e.id == emiId) e.screenshotName ??= 'Screenshot attached';
+        if (e.id == emiId) {
+          e.screenshotDocId = (ids.first as num).toInt();
+          e.screenshotName = 'Screenshot attached';
+        }
       }
     }
     return Loan(

@@ -55,6 +55,16 @@ abstract class LoanService extends ChangeNotifier {
 
   /// Cancels a seize — the vehicle goes back to the customer, loan continues.
   void cancelSeize(String loanId, String byUserId, {String? remarks});
+
+  // ── Payment screenshots ─────────────────────────────────────────────────────
+  /// Raw bytes of a stored payment screenshot, for in-app preview.
+  Future<Uint8List> paymentDocBytes(int docId);
+
+  /// Absolute URL of a stored payment screenshot.
+  String paymentDocUrl(int docId);
+
+  /// Deletes a stored payment screenshot by its backend id.
+  void deletePaymentDoc(String loanId, int docId);
 }
 
 class MockLoanService extends LoanService {
@@ -277,4 +287,13 @@ class MockLoanService extends LoanService {
     if (l.loanStatus == 'seized') l.loanStatus = 'active';
     notifyListeners();
   }
+
+  @override
+  Future<Uint8List> paymentDocBytes(int docId) async => Uint8List(0);
+
+  @override
+  String paymentDocUrl(int docId) => '';
+
+  @override
+  void deletePaymentDoc(String loanId, int docId) {}
 }

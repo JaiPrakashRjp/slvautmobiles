@@ -65,9 +65,25 @@ abstract class PdfService {
     required Customer customer,
   });
 
+  /// Bytes of the receipt for one month's loan EMI payment (for the in-app
+  /// preview, which offers Share + Print).
+  Future<Uint8List> loanEmiReceiptBytes({
+    required String customerName,
+    required String customerPhone,
+    required String vehicleLabel,
+    required int emiNumber,
+    required DateTime dueDate,
+    DateTime? receivedDate,
+    required int emiAmount,
+    required int penalty,
+    required int totalDue,
+    required int amountPaid,
+  });
+
   /// Per-customer loan statement — all loans, each EMI schedule and headline
-  /// totals. [previewLoanReport] opens the print preview; [shareLoanReport]
-  /// hands the PDF to the OS share/save sheet.
+  /// totals. [loanReportBytes] backs the in-app preview (Share + Print);
+  /// [previewLoanReport] opens the print preview; [shareLoanReport] shares it.
+  Future<Uint8List> loanReportBytes(LoanCustomerReport report);
   Future<void> previewLoanReport(LoanCustomerReport report);
   Future<void> shareLoanReport(LoanCustomerReport report);
 
@@ -311,10 +327,15 @@ class RealPdfService implements PdfService {
             crossAxisAlignment: pw.CrossAxisAlignment.center,
             children: [
               pw.Container(
-                width: 130,
+                width: 150,
                 child: pw.Divider(color: _gold, thickness: 1),
               ),
               pw.SizedBox(height: 2),
+              pw.Text('SLV Auto Consultant',
+                  style: pw.TextStyle(
+                      fontSize: 9,
+                      fontWeight: pw.FontWeight.bold,
+                      color: _navy)),
               pw.Text('Authorised Signature',
                   style: const pw.TextStyle(
                       fontSize: 8, color: PdfColors.grey600)),
@@ -937,7 +958,73 @@ class RealPdfService implements PdfService {
     await Printing.layoutPdf(onLayout: (_) => doc.save());
   }
 
+  // ── Loan EMI receipt ─────────────────────────────────────────────────────
+
+  @override
+  Future<Uint8List> loanEmiReceiptBytes({
+    required String customerName,
+    required String customerPhone,
+    required String vehicleLabel,
+    required int emiNumber,
+    required DateTime dueDate,
+    DateTime? receivedDate,
+    required int emiAmount,
+    required int penalty,
+    required int totalDue,
+    required int amountPaid,
+  }) async {
+    final logo = await _loadLogo();
+    final doc = pw.Document();
+    doc.addPage(pw.Page(
+      pageFormat: PdfPageFormat.a4,
+      margin: pw.EdgeInsets.zero,
+      build: (_) => pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+        children: [
+          _header('Loan EMI Receipt', logo),
+          pw.Expanded(
+            child: pw.Container(
+              color: _bgWarm,
+              padding: const pw.EdgeInsets.fromLTRB(28, 16, 28, 24),
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+                children: [
+                  _label('CUSTOMER'),
+                  _card([
+                    _row('Name', customerName),
+                    if (customerPhone.isNotEmpty)
+                      _row('Mobile', Formatters.phone(customerPhone)),
+                  ]),
+                  _label('VEHICLE'),
+                  _card([_row('Vehicle', vehicleLabel)]),
+                  _label('EMI'),
+                  _card([
+                    _row('Month', 'EMI $emiNumber'),
+                    _row('Due date', Formatters.date(dueDate)),
+                    if (receivedDate != null)
+                      _row('Received on', Formatters.date(receivedDate)),
+                    _row('EMI amount', _curr(emiAmount)),
+                    if (penalty > 0) _row('Penalty', _curr(penalty)),
+                    _row('Total', _curr(totalDue)),
+                  ]),
+                  _totalBar('AMOUNT PAID', _curr(amountPaid)),
+                  pw.Spacer(),
+                  _footer(),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    ));
+    return doc.save();
+  }
+
   // ── Loan customer statement ─────────────────────────────────────────────
+
+  @override
+  Future<Uint8List> loanReportBytes(LoanCustomerReport report) async =>
+      (await _loanReportDoc(report)).save();
 
   @override
   Future<void> previewLoanReport(LoanCustomerReport report) async {

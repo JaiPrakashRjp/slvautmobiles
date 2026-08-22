@@ -5,10 +5,12 @@ import 'package:provider/provider.dart';
 import '../../controllers/auth_controller.dart';
 import '../../models/emi.dart';
 import '../../models/loan.dart';
+import '../../models/loan_customer_report.dart';
 import '../../models/picked_doc.dart';
 import '../../services/loan_customer_service.dart';
 import '../../services/loan_service.dart';
 import '../../services/loan_vehicle_service.dart';
+import '../../services/pdf_service.dart';
 import '../../theme/app_colors.dart';
 import '../../utils/app_radius.dart';
 import '../../utils/app_spacing.dart';
@@ -19,7 +21,10 @@ import '../../utils/responsive.dart';
 import '../../widgets/app_card.dart';
 import '../../widgets/app_text_field.dart';
 import '../../widgets/confirmation_dialog.dart';
+import '../../widgets/doc_manager_tile.dart';
 import '../../widgets/primary_button.dart';
+import '../document_preview_screen.dart';
+import '../pdf_preview_screen.dart';
 import '../../widgets/role_gate_actions.dart';
 import '../../widgets/role_gate_banner.dart';
 import '../../widgets/secondary_button.dart';
@@ -51,22 +56,76 @@ class LoanDetailScreen extends StatelessWidget {
       );
     }
 
-    final name = customers.byId(loan.customerId)?.fullName ?? 'Unknown';
+    final customer = customers.byId(loan.customerId);
+    final name = customer?.fullName ?? 'Unknown';
+    final phone = customer?.phone ?? '';
     final vehicle =
         loan.vehicleId == null ? null : vehicles.byId(loan.vehicleId!);
+    final pdf = context.read<PdfService>();
     final nextEmi = loan.nextDueEmi(_now);
+
+    // Full loan receipt (customer + vehicle + the whole EMI schedule + totals),
+    // rendered via the branded loan-statement layout.
+    LoanCustomerReport buildReceipt() {
+      final now = DateTime.now();
+      return LoanCustomerReport(
+        customerName: name,
+        phone: phone,
+        branch: customer?.branch?.label ?? '',
+        address: customer?.address ?? '',
+        assurityName: customer?.assurityName,
+        assurityMobile: customer?.assurityMobile,
+        totalLoaned: loan.principal,
+        totalPaid: loan.totalPaid,
+        totalOutstanding: loan.balanceOutstanding,
+        totalPenalty: loan.penaltyAccrued,
+        loans: [
+          LoanReportLoan(
+            vehicleLabel: vehicle?.displayLabel ?? '—',
+            principal: loan.principal,
+            emiAmount: loan.emiAmount,
+            tenureMonths: loan.tenureMonths,
+            loanDate: loan.disbursementDate,
+            status: _statusLabel(loan),
+            paid: loan.totalPaid,
+            outstanding: loan.balanceOutstanding,
+            penalty: loan.penaltyAccrued,
+            emis: [
+              for (final e in loan.emis)
+                LoanReportEmi(
+                  seq: e.sequenceNumber,
+                  dueDate: e.dueDate,
+                  amount: e.amountDue,
+                  penalty: e.penalty,
+                  paid: e.amountPaid,
+                  balance: e.remaining,
+                  status: e.statusAt(now).label,
+                  receivedDate: e.receivedDate,
+                ),
+            ],
+          ),
+        ],
+      );
+    }
 
     return Scaffold(
       backgroundColor: c.bgCanvas,
       appBar: AppBar(
         title: const Text('Loan detail'),
         actions: [
-          if (auth.isSuperAdmin && !loan.isClosed && loan.isActive)
-            IconButton(
-              icon: const Icon(Icons.verified_outlined),
-              tooltip: 'Foreclose',
-              onPressed: () => _foreclose(context, loans, loan),
-            ),
+          IconButton(
+            icon: const Icon(Icons.receipt_long_outlined),
+            tooltip: 'Loan receipt',
+            onPressed: customer == null
+                ? null
+                : () => Navigator.of(context).push(MaterialPageRoute(
+                      builder: (_) => PdfPreviewScreen(
+                        title: 'Loan receipt',
+                        fileName: 'loan-receipt-${name.replaceAll(' ', '-')}.pdf',
+                        builder: () => pdf.loanReportBytes(buildReceipt()),
+                      ),
+                    )),
+          ),
         ],
       ),
       body: SafeArea(
@@ -195,6 +254,36 @@ class LoanDetailScreen extends StatelessWidget {
                     );
                   },
                   onWaive: () => loans.waivePenalty(loan.id, emi.id),
+                  onPrint: () => Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) => PdfPreviewScreen(
+                      title: 'EMI ${emi.sequenceNumber} receipt',
+                      fileName:
+                          'emi-${emi.sequenceNumber}-${name.replaceAll(' ', '-')}.pdf',
+                      builder: () => pdf.loanEmiReceiptBytes(
+                        customerName: name,
+                        customerPhone: phone,
+                        vehicleLabel: vehicle?.displayLabel ?? '—',
+                        emiNumber: emi.sequenceNumber,
+                        dueDate: emi.dueDate,
+                        receivedDate: emi.receivedDate,
+                        emiAmount: emi.amountDue,
+                        penalty: emi.penalty,
+                        totalDue: emi.totalDue,
+                        amountPaid: emi.amountPaid,
+                      ),
+                    ),
+                  )),
+                  onViewScreenshot: (docId) => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => DocumentPreviewScreen(
+                        title: 'Payment screenshot',
+                        fileName: emi.screenshotName ?? 'Screenshot',
+                        loader: () => loans.paymentDocBytes(docId),
+                      ),
+                    ),
+                  ),
+                  onDeleteScreenshot: (docId) =>
+                      loans.deletePaymentDoc(loan.id, docId),
                 ),
                 const SizedBox(height: AppSpacing.sm),
               ],
@@ -243,25 +332,6 @@ class LoanDetailScreen extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  Future<void> _foreclose(
-      BuildContext context, LoanService loans, Loan loan) async {
-    final ok = await ConfirmationDialog.show(
-      context,
-      title: 'Foreclose loan',
-      message:
-          'Settle the full balance of ${Formatters.currency(loan.balanceOutstanding)} and close the loan?',
-      confirmLabel: 'Foreclose',
-    );
-    if (ok == true) {
-      loans.foreclose(loan.id);
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Loan foreclosed.')),
-        );
-      }
-    }
   }
 
   // ── Seizure ─────────────────────────────────────────────────────────────────
@@ -430,6 +500,9 @@ class _EmiTile extends StatefulWidget {
     required this.canWaive,
     required this.onSave,
     required this.onWaive,
+    required this.onPrint,
+    required this.onViewScreenshot,
+    required this.onDeleteScreenshot,
   });
 
   final Emi emi;
@@ -438,6 +511,9 @@ class _EmiTile extends StatefulWidget {
   final bool canWaive;
   final _SavePayment onSave;
   final VoidCallback onWaive;
+  final VoidCallback onPrint;
+  final void Function(int docId) onViewScreenshot;
+  final void Function(int docId) onDeleteScreenshot;
 
   @override
   State<_EmiTile> createState() => _EmiTileState();
@@ -501,6 +577,41 @@ class _EmiTileState extends State<_EmiTile> {
     }
   }
 
+  bool get _hasScreenshot =>
+      _screenshot != null || widget.emi.screenshotDocId != null;
+
+  String? get _screenshotFileName =>
+      _screenshot?.name ??
+      (widget.emi.screenshotDocId != null
+          ? (widget.emi.screenshotName ?? 'Screenshot')
+          : null);
+
+  void _viewScreenshot() {
+    final picked = _screenshot;
+    if (picked != null) {
+      Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => DocumentPreviewScreen(
+          title: 'Payment screenshot',
+          fileName: picked.name,
+          loader: () async => picked.bytes,
+        ),
+      ));
+    } else if (widget.emi.screenshotDocId != null) {
+      widget.onViewScreenshot(widget.emi.screenshotDocId!);
+    }
+  }
+
+  void _removeScreenshot() {
+    if (_screenshot != null) {
+      setState(() {
+        _screenshot = null;
+        _screenshotName = null;
+      });
+    } else if (widget.emi.screenshotDocId != null) {
+      widget.onDeleteScreenshot(widget.emi.screenshotDocId!);
+    }
+  }
+
   void _save() {
     if (_paying <= 0 && _penalty == widget.emi.penalty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -524,13 +635,7 @@ class _EmiTileState extends State<_EmiTile> {
     );
   }
 
-  void _print() {
-    // Receipt generation lands with the loan backend; acknowledge for now.
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Receipt for EMI ${widget.emi.sequenceNumber} '
-          '(${Formatters.currency(widget.emi.amountPaid)} paid).')),
-    );
-  }
+  void _print() => widget.onPrint();
 
   @override
   Widget build(BuildContext context) {
@@ -624,7 +729,22 @@ class _EmiTileState extends State<_EmiTile> {
         row('Amount', Formatters.currency(e.amountDue)),
         if (e.penalty > 0) row('Penalty', Formatters.currency(e.penalty)),
         row('Total', Formatters.currency(e.totalDue)),
-        if (e.screenshotName != null) row('Screenshot', e.screenshotName!),
+        if (e.screenshotDocId != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 3),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Screenshot',
+                    style: AppTextStyles.caption.copyWith(color: c.textSub)),
+                TextButton.icon(
+                  onPressed: () => widget.onViewScreenshot(e.screenshotDocId!),
+                  icon: const Icon(Icons.visibility_outlined, size: 16),
+                  label: const Text('View'),
+                ),
+              ],
+            ),
+          ),
         if (e.remarks != null && e.remarks!.isNotEmpty)
           row('Remarks', e.remarks!),
         const SizedBox(height: AppSpacing.md),
@@ -706,37 +826,17 @@ class _EmiTileState extends State<_EmiTile> {
           onChanged: (_) => setState(() {}),
         ),
         const SizedBox(height: AppSpacing.md),
-        // Screenshot
-        InkWell(
-          onTap: () async => _attach(await pickFileDoc()),
-          borderRadius: BorderRadius.circular(AppRadius.card),
-          child: Container(
-            padding: const EdgeInsets.all(AppSpacing.md),
-            decoration: BoxDecoration(
-              color: c.bgSurface,
-              borderRadius: BorderRadius.circular(AppRadius.card),
-              border: Border.all(color: c.borderColor),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.receipt_long_outlined, color: c.primary, size: 20),
-                const SizedBox(width: AppSpacing.sm),
-                Expanded(
-                  child: Text(
-                    _screenshotName ?? 'Attach payment screenshot',
-                    style: AppTextStyles.body.copyWith(
-                        color: _screenshotName == null
-                            ? c.textSub
-                            : c.textMain),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                if (_screenshotName == null)
-                  Icon(Icons.upload_outlined, color: c.textSub, size: 18),
-              ],
-            ),
-          ),
+        // Screenshot — attach / view / replace / delete.
+        Text('Payment screenshot',
+            style: AppTextStyles.label.copyWith(color: c.textSub)),
+        const SizedBox(height: AppSpacing.xs),
+        DocManagerTile(
+          label: 'Payment screenshot',
+          fileName: _screenshotFileName,
+          onTakePhoto: () async => _attach(await pickPhotoDoc()),
+          onUpload: () async => _attach(await pickFileDoc()),
+          onDownload: _hasScreenshot ? _viewScreenshot : null,
+          onDelete: _hasScreenshot ? _removeScreenshot : null,
         ),
         const SizedBox(height: AppSpacing.md),
         AppTextField(

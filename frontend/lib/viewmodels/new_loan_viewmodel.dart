@@ -12,7 +12,10 @@ import '../services/vehicle_service.dart';
 /// month from the loan date. The loan is booked against a loan customer and a
 /// loan vehicle.
 class NewLoanViewModel extends ChangeNotifier {
-  NewLoanViewModel(this._loans, this._customers, this._vehicles, this._auth);
+  NewLoanViewModel(this._loans, this._customers, this._vehicles, this._auth,
+      {String? initialCustomerId, String? initialVehicleId})
+      : _customerId = initialCustomerId,
+        _vehicleId = initialVehicleId;
 
   final LoanService _loans;
   final CustomerService _customers;
@@ -36,9 +39,23 @@ class NewLoanViewModel extends ChangeNotifier {
   Customer? get customer =>
       _customerId == null ? null : _customers.byId(_customerId!);
 
-  /// Active (verified) loan vehicles to pick as collateral.
-  List<Vehicle> get availableVehicles =>
-      _vehicles.all().where((v) => v.isActive).toList();
+  /// Vehicle ids currently tied up in a live loan (active/overdue/pending — not
+  /// seized, closed or rejected). These are blocked from a new loan until a
+  /// confirm-seize frees the vehicle.
+  Set<String> get _onLoanVehicleIds => {
+        for (final l in _loans.all())
+          if (l.vehicleId != null &&
+              !l.isSeized &&
+              !l.isClosed &&
+              l.loanStatus != 'rejected')
+            l.vehicleId!,
+      };
+
+  /// Active (verified) loan vehicles that aren't already on a live loan.
+  List<Vehicle> get availableVehicles => _vehicles
+      .all()
+      .where((v) => v.isActive && !_onLoanVehicleIds.contains(v.id))
+      .toList();
   Vehicle? get vehicle =>
       _vehicleId == null ? null : _vehicles.byId(_vehicleId!);
 

@@ -263,3 +263,9 @@ class LoanService:
         if doc is None:
             raise HTTPException(status_code=404, detail="Document not found")
         return doc
+
+    @staticmethod
+    def delete_payment_document(db: Session, doc_id: int) -> None:
+        doc = LoanService.get_payment_document(db, doc_id)
+        db.delete(doc)
+        db.commit()
