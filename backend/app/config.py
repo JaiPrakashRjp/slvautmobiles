@@ -68,16 +68,18 @@ class Settings:
     WHATSAPP_LOAN_REMINDER_TEMPLATE: str = os.getenv(
         "WHATSAPP_LOAN_REMINDER_TEMPLATE", "loan_emi_reminder"
     )
+    # Approved in Meta as plain "English" (en), NOT "English (US)" (en_US) — a
+    # mismatch → Meta error 132001 and every loan reminder logs as failed.
     WHATSAPP_LOAN_REMINDER_LANG: str = os.getenv(
-        "WHATSAPP_LOAN_REMINDER_LANG", "en_US"
+        "WHATSAPP_LOAN_REMINDER_LANG", "en"
     )
     # Personal-loan reminder template (body vars: {{1}} vehicle number,
-    # {{2}} amount, {{3}} due date).
+    # {{2}} amount, {{3}} due date). Also approved as "English" (en).
     WHATSAPP_PERSONAL_LOAN_REMINDER_TEMPLATE: str = os.getenv(
         "WHATSAPP_PERSONAL_LOAN_REMINDER_TEMPLATE", "personal_loan_reminder"
     )
     WHATSAPP_PERSONAL_LOAN_REMINDER_LANG: str = os.getenv(
-        "WHATSAPP_PERSONAL_LOAN_REMINDER_LANG", "en_US"
+        "WHATSAPP_PERSONAL_LOAN_REMINDER_LANG", "en"
     )
 
     @property
