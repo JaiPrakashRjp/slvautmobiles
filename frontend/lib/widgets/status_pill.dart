@@ -27,7 +27,10 @@ class StatusPill extends StatelessWidget {
   }
 
   /// Maps a schedule status (installment/EMI/collection) to a pill.
-  factory StatusPill.forSchedule(ScheduleStatus status, {Key? key}) {
+  /// [labelOverride] replaces the default text (e.g. loan EMIs say "Pending"
+  /// for an overdue month instead of "Overdue").
+  factory StatusPill.forSchedule(ScheduleStatus status,
+      {Key? key, String? labelOverride}) {
     final variant = switch (status) {
       ScheduleStatus.paid => PillVariant.success,
       ScheduleStatus.upcoming => PillVariant.info,
@@ -35,7 +38,8 @@ class StatusPill extends StatelessWidget {
       ScheduleStatus.partial => PillVariant.warning,
       ScheduleStatus.overdue => PillVariant.danger,
     };
-    return StatusPill(key: key, label: status.label, variant: variant);
+    return StatusPill(
+        key: key, label: labelOverride ?? status.label, variant: variant);
   }
 
   @override

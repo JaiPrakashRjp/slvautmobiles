@@ -101,6 +101,42 @@ class RentalDAO:
         return list(db.scalars(stmt).all())
 
     @staticmethod
+    def active_weekly_rentals(db: Session) -> list[Rental]:
+        """All approved, active WEEKLY rentals (with installments loaded). Used to
+        materialize newly-due weeks before the reminder pass — even rentals whose
+        every existing week is paid, since a fresh week may now be due."""
+        from app.models.enums import EntityStatus, RentalLifecycle, RentalType
+
+        stmt = (
+            RentalDAO._with_relations(select(Rental))
+            .where(Rental.rental_status == RentalLifecycle.active)
+            .where(Rental.status == EntityStatus.active)
+            .where(Rental.rental_type == RentalType.weekly)
+        )
+        return list(db.scalars(stmt).all())
+
+    @staticmethod
+    def recent_rental_customer_reminder(
+        db: Session, *, rental_id, recipient_phone, since
+    ) -> bool:
+        """True if a customer WhatsApp reminder was already logged for this rental
+        on/after `since` (a date). Weekly rentals remind once per 7 days, so the
+        job passes since = today - 6 days to enforce that cadence."""
+        from app.models.enums import ReminderRecipient
+
+        row = db.scalar(
+            select(ReminderLog.id)
+            .where(
+                ReminderLog.rental_id == rental_id,
+                ReminderLog.recipient_type == ReminderRecipient.customer,
+                ReminderLog.recipient_phone == recipient_phone,
+                func.date(ReminderLog.created_at) >= since,
+            )
+            .limit(1)
+        )
+        return row is not None
+
+    @staticmethod
     def find_reminder(
         db: Session, *, rental_installment_id, recipient_type, due_date, recipient_phone
     ) -> ReminderLog | None:

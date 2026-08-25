@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../controllers/auth_controller.dart';
 import '../../models/emi.dart';
+import '../../models/enums.dart';
 import '../../models/loan.dart';
 import '../../models/loan_customer_report.dart';
 import '../../models/picked_doc.dart';
@@ -38,7 +39,13 @@ class LoanDetailScreen extends StatelessWidget {
 
   final String loanId;
 
-  static final DateTime _now = DateTime(2026, 6, 2);
+  /// Today (date-only). Drives EMI status: an unpaid EMI whose due date has
+  /// passed reads "Pending", not "Upcoming". Must be the real clock, never a
+  /// frozen date, or past-due months keep showing as upcoming.
+  static DateTime get _now {
+    final n = DateTime.now();
+    return DateTime(n.year, n.month, n.day);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -688,7 +695,12 @@ class _EmiTileState extends State<_EmiTile> {
                   if (e.isPaid)
                     Icon(Icons.check_circle, color: c.success, size: 20)
                   else
-                    StatusPill.forSchedule(status),
+                    StatusPill.forSchedule(
+                      status,
+                      labelOverride: status == ScheduleStatus.overdue
+                          ? 'Pending'
+                          : null,
+                    ),
                 ],
               ),
             ),
