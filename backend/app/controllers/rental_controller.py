@@ -27,14 +27,24 @@ def list_rentals(
     vehicle_id: int | None = None,
     module: str | None = Query(None, description="module code (rental)"),
 ):
-    return RentalService.list(
+    rentals = RentalService.list(
         db, status=status, customer_id=customer_id, vehicle_id=vehicle_id, module=module
     )
+    # Materialize any newly-due weekly rent periods so arrears show in real time.
+    if RentalService.materialize_due_weeks(db, rentals):
+        rentals = RentalService.list(
+            db, status=status, customer_id=customer_id, vehicle_id=vehicle_id,
+            module=module,
+        )
+    return rentals
 
 
 @router.get("/{rental_id}", response_model=RentalOut)
 def get_rental(rental_id: int, db: Session = Depends(get_db)):
-    return RentalService.get(db, rental_id)
+    rental = RentalService.get(db, rental_id)
+    if RentalService.materialize_due_weeks(db, [rental]):
+        rental = RentalService.get(db, rental_id)
+    return rental
 
 
 @router.post("", response_model=RentalOut, status_code=201)

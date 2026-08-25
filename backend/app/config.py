@@ -57,6 +57,26 @@ class Settings:
     WHATSAPP_RENTAL_REMINDER_LANG: str = os.getenv(
         "WHATSAPP_RENTAL_REMINDER_LANG", "en"
     )
+    # ── Weekly rent arrears reminder ─────────────────────────────────────────
+    # Weekly rentals accumulate unpaid weeks and get ONE reminder per ~7 days that
+    # LISTS every unpaid week on its OWN LINE. WhatsApp forbids line breaks inside
+    # a variable (Meta error 132018) and can't hide rows, so a per-week vertical
+    # list needs one approved template per row-count. The app appends the unpaid-
+    # week count to this prefix, e.g. 3 unpaid weeks -> "rent_overdue_3". Templates
+    # rent_overdue_1 .. rent_overdue_{MAX} must be approved in Meta as language
+    # "en" (a mismatch -> Meta error 132001). Variable order per template:
+    # {{1}} renter name, then for each week (oldest first) an amount then a date
+    # ({{2}}=amount1, {{3}}=date1, {{4}}=amount2, {{5}}=date2, ...).
+    WHATSAPP_RENTAL_WEEKLY_REMINDER_TEMPLATE_PREFIX: str = os.getenv(
+        "WHATSAPP_RENTAL_WEEKLY_REMINDER_TEMPLATE_PREFIX", "rent_overdue_"
+    )
+    WHATSAPP_RENTAL_WEEKLY_REMINDER_LANG: str = os.getenv(
+        "WHATSAPP_RENTAL_WEEKLY_REMINDER_LANG", "en"
+    )
+    # Most unpaid weeks a single reminder lists (caps at the largest template).
+    WHATSAPP_RENTAL_WEEKLY_MAX_ROWS: int = int(
+        os.getenv("WHATSAPP_RENTAL_WEEKLY_MAX_ROWS", "10")
+    )
     # Personal-loan reminders all go to this one WhatsApp number (the office /
     # owner follows up), regardless of the loan. Change it via the env var.
     PERSONAL_LOAN_REMINDER_PHONE: str = os.getenv(

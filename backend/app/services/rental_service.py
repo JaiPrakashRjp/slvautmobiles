@@ -104,6 +104,12 @@ class RentalService:
         time (guards against duplicates)."""
         if rental.rental_type is None or rental.rental_status != RentalLifecycle.active:
             return
+        # WEEKLY rentals materialize periods on a FIXED 7-day calendar regardless
+        # of payment (see _ensure_weekly_installments) so unpaid weeks accumulate.
+        # Paying a week must NOT create the next one here, or the schedule would
+        # duplicate/telescope. Daily & legacy rentals keep the roll-on-pay flow.
+        if rental.rental_type == RentalType.weekly:
+            return
         # Invariant: at most one open reminder at a time. If one already exists
         # (e.g. a duplicate payment), don't create another.
         if any(
@@ -128,6 +134,65 @@ class RentalService:
                 created_by=paid_inst.created_by,
             )
         )
+
+    @staticmethod
+    def _ensure_weekly_installments(
+        db: Session, rental: Rental, today: date | None = None
+    ) -> int:
+        """WEEKLY rentals only: create every rent period whose due date has
+        arrived, on a fixed 7-day calendar from the first period, WHETHER OR NOT
+        earlier weeks are paid. This is what makes unpaid weeks pile up as real,
+        payable rows (week 1 + week 2 + ... each ₹period). No-op for daily/legacy
+        rentals. Returns the number of periods created (0 when already caught up).
+        The caller flushes/commits."""
+        if rental.rental_type != RentalType.weekly:
+            return 0
+        if (
+            rental.status != EntityStatus.active
+            or rental.rental_status != RentalLifecycle.active
+        ):
+            return 0
+        insts = list(rental.installments)
+        if not insts:
+            return 0
+        today = today or date.today()
+        last = max(insts, key=lambda i: i.due_date)
+        next_number = max(i.number for i in insts) + 1
+        next_due = last.due_date + timedelta(days=7)
+        created = 0
+        while next_due <= today:
+            inst = RentalInstallment(
+                rental_id=rental.id,
+                module_id=rental.module_id,
+                number=next_number,
+                due_date=next_due,
+                amount=rental.period_amount,
+                status=InstallmentStatus.pending,
+                created_by=last.created_by,
+            )
+            # Append to the loaded collection (not just db.add) so callers reusing
+            # this in-memory rental see the new weeks without a re-query.
+            rental.installments.append(inst)
+            db.add(inst)
+            created += 1
+            next_number += 1
+            next_due += timedelta(days=7)
+        if created:
+            db.flush()
+        return created
+
+    @staticmethod
+    def materialize_due_weeks(db: Session, rentals: list[Rental]) -> bool:
+        """Backfill any newly-due weekly rent periods for the given rentals, then
+        commit if anything changed. Called from the read endpoints so the app
+        shows a weekly renter's current arrears in real time (not just after the
+        nightly reminder job). Returns True if any period was created."""
+        changed = 0
+        for r in rentals:
+            changed += RentalService._ensure_weekly_installments(db, r)
+        if changed:
+            db.commit()
+        return changed > 0
 
     # ── Create ───────────────────────────────────────────────────────────────
     @staticmethod
