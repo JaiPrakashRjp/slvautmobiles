@@ -326,6 +326,16 @@ class ApiLoanService extends LoanService {
   static DateTime? _date(dynamic s) =>
       (s is String && s.isNotEmpty) ? DateTime.tryParse(s) : null;
 
+  /// Parses a server timestamp as UTC. Backend datetimes are UTC but arrive
+  /// without a 'Z', so a plain parse would read them as local time — which
+  /// throws the loan edit window off by the device's tz offset. Returns an
+  /// aware UTC DateTime.
+  static DateTime? _dateUtc(dynamic s) {
+    if (s is! String || s.isEmpty) return null;
+    final hasTz = s.endsWith('Z') || RegExp(r'[+-]\d{2}:?\d{2}$').hasMatch(s);
+    return DateTime.tryParse(hasTz ? s : '${s}Z')?.toUtc();
+  }
+
   static int _int(dynamic v) =>
       v == null ? 0 : (num.tryParse(v.toString())?.round() ?? 0);
 
@@ -362,7 +372,7 @@ class ApiLoanService extends LoanService {
       seizeReason: j['seize_reason'] as String?,
       seizedAt: _date(j['seized_at']),
       createdBy: j['created_by']?.toString() ?? '',
-      createdAt: _date(j['created_at']) ?? DateTime.now(),
+      createdAt: _dateUtc(j['created_at']) ?? DateTime.now().toUtc(),
       status: EntityStatus.fromWire((j['status'] as String?) ?? 'active'),
       confirmedBy: j['confirmed_by']?.toString(),
       confirmedAt: _date(j['confirmed_at']),
