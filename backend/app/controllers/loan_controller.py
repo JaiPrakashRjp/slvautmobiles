@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models.enums import EntityStatus
 from app.models.user import User
-from app.schemas.loan import LoanCreate, LoanOut
+from app.schemas.loan import LoanCreate, LoanEdit, LoanOut
 from app.security import get_current_user, require_super_admin
 from app.services.loan_reminder_service import LoanReminderService
 from app.services.loan_service import LoanService
@@ -44,6 +44,20 @@ def create_loan(
 ):
     return LoanService.create(
         db, payload, actor_role=current_user.role.name, created_by=current_user.id
+    )
+
+
+@router.post("/{loan_id}/edit", response_model=LoanOut)
+def edit_loan(
+    loan_id: int,
+    payload: LoanEdit,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Full edit within the 2-hour grace window; rebuilds the EMI schedule and
+    discards any recorded payments (the client warns first)."""
+    return LoanService.edit(
+        db, loan_id, payload, actor_role=current_user.role.name, actor_id=current_user.id
     )
 
 

@@ -100,6 +100,58 @@ class ApiLoanService extends LoanService {
   }
 
   @override
+  void edit(
+    String loanId, {
+    required String customerId,
+    String? vehicleId,
+    required int principal,
+    required int tenureMonths,
+    required int emiAmount,
+    required DateTime disbursementDate,
+    String? remarks,
+  }) {
+    final i = _loans.indexWhere((l) => l.id == loanId);
+    if (i < 0) return;
+    final old = _loans[i];
+    final firstDue = DateTime(
+        disbursementDate.year, disbursementDate.month + 1, disbursementDate.day);
+    // Optimistic rebuild (fresh schedule, no payments); refresh reconciles.
+    _loans[i] = Loan(
+      id: old.id,
+      customerId: customerId,
+      vehicleId: vehicleId,
+      principal: principal,
+      tenureMonths: tenureMonths,
+      disbursementDate: disbursementDate,
+      firstEmiDueDate: firstDue,
+      emiAmount: emiAmount,
+      emis: MockLoanService.buildSchedule(
+        emiAmount: emiAmount, tenureMonths: tenureMonths, firstDue: firstDue),
+      loanStatus: 'active',
+      createdBy: old.createdBy,
+      createdAt: old.createdAt,
+      status: old.status,
+      confirmedBy: old.confirmedBy,
+      confirmedAt: old.confirmedAt,
+    );
+    notifyListeners();
+
+    final body = <String, dynamic>{
+      'customer_id': int.tryParse(customerId),
+      'vehicle_id': vehicleId == null ? null : int.tryParse(vehicleId),
+      'principal': principal,
+      'emi_amount': emiAmount,
+      'tenure_months': tenureMonths,
+      'loan_date': _dateStr(disbursementDate),
+      if (remarks != null && remarks.isNotEmpty) 'remarks': remarks,
+    }..removeWhere((_, v) => v == null);
+    unawaited(_api
+        .post('/loans/$loanId/edit', body: body)
+        .then((_) => refresh())
+        .catchError((_) => null));
+  }
+
+  @override
   void recordEmiPayment(
     String loanId,
     String emiId,
