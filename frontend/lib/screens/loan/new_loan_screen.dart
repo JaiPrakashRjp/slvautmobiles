@@ -32,7 +32,7 @@ class NewLoanScreen extends StatelessWidget {
   /// Pre-selected vehicle (opened from a vehicle's "Assign loan").
   final String? vehicleId;
 
-  /// When set, the screen edits this existing loan (within its 3-hour window)
+  /// When set, the screen edits this existing loan (within its 5-hour window)
   /// instead of booking a new one — saving rebuilds its EMI schedule.
   final Loan? editLoan;
 

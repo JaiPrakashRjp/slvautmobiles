@@ -40,7 +40,7 @@ abstract class LoanService extends ChangeNotifier {
     String? screenshotMime,
   });
 
-  /// Full edit within the 3-hour grace window: replaces every detail and
+  /// Full edit within the 5-hour grace window: replaces every detail and
   /// REBUILDS the EMI schedule, discarding any recorded payments (the caller
   /// warns first). The server rejects it once the window has passed.
   void edit(
