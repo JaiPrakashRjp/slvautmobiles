@@ -121,16 +121,6 @@ class LoanDetailScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Loan detail'),
         actions: [
-          // Edit is only available for 5 hours after the loan is booked — after
-          // that the schedule is locked (the server enforces it too).
-          if (loan.isEditable())
-            IconButton(
-              icon: const Icon(Icons.edit_outlined),
-              tooltip: 'Edit loan',
-              onPressed: () => Navigator.of(context).push(MaterialPageRoute(
-                builder: (_) => NewLoanScreen(editLoan: loan),
-              )),
-            ),
           IconButton(
             icon: const Icon(Icons.receipt_long_outlined),
             tooltip: 'Loan receipt',
@@ -240,6 +230,18 @@ class LoanDetailScreen extends StatelessWidget {
                   ),
                   Text('${loan.paidEmis}/${loan.tenureMonths} paid',
                       style: AppTextStyles.caption.copyWith(color: c.textSub)),
+                  // Editable only for 5 hours after booking (server-enforced).
+                  if (loan.isEditable())
+                    TextButton.icon(
+                      icon: const Icon(Icons.edit_outlined, size: 18),
+                      label: const Text('Edit loan'),
+                      style: TextButton.styleFrom(foregroundColor: c.primary),
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => NewLoanScreen(editLoan: loan),
+                        ),
+                      ),
+                    ),
                 ],
               ),
               const SizedBox(height: AppSpacing.md),

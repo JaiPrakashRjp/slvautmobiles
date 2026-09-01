@@ -108,9 +108,15 @@ class Loan with GatedEntity {
 
   /// True while still inside the 5-hour post-booking edit window AND not seized.
   /// After this the Edit button is hidden (the server enforces it too).
+  ///
+  /// Compared in UTC on both sides: [createdAt] comes from the server in UTC, so
+  /// a naive local comparison would be off by the device's tz offset (e.g. in
+  /// IST every loan would look 5.5h old the moment it's booked, hiding the
+  /// button immediately).
   bool isEditable([DateTime? now]) {
     if (isSeized || isSeizePending) return false;
-    return (now ?? DateTime.now()).difference(createdAt) <= editWindow;
+    final elapsed = (now ?? DateTime.now()).toUtc().difference(createdAt.toUtc());
+    return !elapsed.isNegative && elapsed <= editWindow;
   }
 
   bool get isClosed => loanStatus == 'closed' || loanStatus == 'foreclosed';
