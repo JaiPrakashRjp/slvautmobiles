@@ -121,7 +121,7 @@ class LoanDetailScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Loan detail'),
         actions: [
-          // Edit is only available for 3 hours after the loan is booked — after
+          // Edit is only available for 5 hours after the loan is booked — after
           // that the schedule is locked (the server enforces it too).
           if (loan.isEditable())
             IconButton(

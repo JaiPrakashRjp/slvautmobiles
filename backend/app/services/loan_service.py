@@ -22,7 +22,7 @@ from app.services.vehicle_service import initial_status
 
 # How long after booking a loan stays editable. After this the schedule is
 # locked and the client hides the Edit button (the server enforces it too).
-EDIT_WINDOW = timedelta(hours=3)
+EDIT_WINDOW = timedelta(hours=5)
 
 
 def _add_months(d: date, n: int) -> date:
@@ -112,14 +112,14 @@ class LoanService:
     def edit(
         db: Session, loan_id: int, data: LoanEdit, *, actor_role: str, actor_id: int
     ) -> Loan:
-        """Replace a loan's details within the 3-hour grace window and REBUILD its
+        """Replace a loan's details within the 5-hour grace window and REBUILD its
         EMI schedule from scratch. Any EMIs/payments already recorded are wiped —
         the client shows a warning first. Rejected once the window has passed."""
         loan = LoanService.get(db, loan_id)
         if not LoanService.is_editable(loan):
             raise HTTPException(
                 status_code=403,
-                detail="This loan can no longer be edited (the 3-hour window has passed).",
+                detail="This loan can no longer be edited (the 5-hour window has passed).",
             )
         if loan.loan_status == "seized" or loan.seize_stage in ("pending", "seized"):
             raise HTTPException(

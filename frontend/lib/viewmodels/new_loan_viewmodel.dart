@@ -41,7 +41,7 @@ class NewLoanViewModel extends ChangeNotifier {
   String? _vehicleId;
   DateTime? _loanDate;
 
-  /// Non-null when editing an existing loan (within its 3-hour window) rather
+  /// Non-null when editing an existing loan (within its 5-hour window) rather
   /// than booking a new one.
   final String? _editLoanId;
 
