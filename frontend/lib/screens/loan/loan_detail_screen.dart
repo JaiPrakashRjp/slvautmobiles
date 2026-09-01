@@ -26,6 +26,7 @@ import '../../widgets/doc_manager_tile.dart';
 import '../../widgets/primary_button.dart';
 import '../document_preview_screen.dart';
 import '../pdf_preview_screen.dart';
+import 'new_loan_screen.dart';
 import '../../widgets/role_gate_actions.dart';
 import '../../widgets/role_gate_banner.dart';
 import '../../widgets/secondary_button.dart';
@@ -120,6 +121,16 @@ class LoanDetailScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Loan detail'),
         actions: [
+          // Edit is only available for 3 hours after the loan is booked — after
+          // that the schedule is locked (the server enforces it too).
+          if (loan.isEditable())
+            IconButton(
+              icon: const Icon(Icons.edit_outlined),
+              tooltip: 'Edit loan',
+              onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => NewLoanScreen(editLoan: loan),
+              )),
+            ),
           IconButton(
             icon: const Icon(Icons.receipt_long_outlined),
             tooltip: 'Loan receipt',

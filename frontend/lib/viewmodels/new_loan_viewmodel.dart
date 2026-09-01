@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../controllers/auth_controller.dart';
 import '../models/customer.dart';
+import '../models/loan.dart';
 import '../models/vehicle.dart';
 import '../services/customer_service.dart';
 import '../services/loan_service.dart';
@@ -13,9 +14,19 @@ import '../services/vehicle_service.dart';
 /// loan vehicle.
 class NewLoanViewModel extends ChangeNotifier {
   NewLoanViewModel(this._loans, this._customers, this._vehicles, this._auth,
-      {String? initialCustomerId, String? initialVehicleId})
-      : _customerId = initialCustomerId,
-        _vehicleId = initialVehicleId;
+      {String? initialCustomerId, String? initialVehicleId, Loan? editLoan})
+      : _customerId = editLoan?.customerId ?? initialCustomerId,
+        _vehicleId = editLoan?.vehicleId ?? initialVehicleId,
+        _editLoanId = editLoan?.id,
+        _editHasPayments =
+            editLoan?.emis.any((e) => e.amountPaid > 0) ?? false,
+        _loanDate = editLoan?.disbursementDate {
+    if (editLoan != null) {
+      principalController.text = '${editLoan.principal}';
+      tenureController.text = '${editLoan.tenureMonths}';
+      emiController.text = '${editLoan.emiAmount}';
+    }
+  }
 
   final LoanService _loans;
   final CustomerService _customers;
@@ -29,6 +40,17 @@ class NewLoanViewModel extends ChangeNotifier {
   String? _customerId;
   String? _vehicleId;
   DateTime? _loanDate;
+
+  /// Non-null when editing an existing loan (within its 3-hour window) rather
+  /// than booking a new one.
+  final String? _editLoanId;
+
+  /// True when the loan being edited already has recorded payments — the screen
+  /// warns that saving wipes them.
+  final bool _editHasPayments;
+
+  bool get isEdit => _editLoanId != null;
+  bool get editHasPayments => _editHasPayments;
 
   String? get customerId => _customerId;
   String? get vehicleId => _vehicleId;
@@ -44,7 +66,8 @@ class NewLoanViewModel extends ChangeNotifier {
   /// confirm-seize frees the vehicle.
   Set<String> get _onLoanVehicleIds => {
         for (final l in _loans.all())
-          if (l.vehicleId != null &&
+          if (l.id != _editLoanId && // the edited loan's own vehicle stays selectable
+              l.vehicleId != null &&
               !l.isSeized &&
               !l.isClosed &&
               l.loanStatus != 'rejected')
@@ -95,8 +118,24 @@ class NewLoanViewModel extends ChangeNotifier {
     return null;
   }
 
+  /// Persists the form. Returns true when the action leaves the loan pending a
+  /// Super Admin's confirmation (only possible for a brand-new admin loan; an
+  /// edit keeps the loan's existing approval state).
   bool submit() {
     final user = _auth.currentUser!;
+    final editId = _editLoanId;
+    if (editId != null) {
+      _loans.edit(
+        editId,
+        customerId: _customerId!,
+        vehicleId: _vehicleId,
+        principal: principal,
+        tenureMonths: tenure,
+        emiAmount: emiAmount,
+        disbursementDate: _loanDate!,
+      );
+      return false;
+    }
     _loans.create(
       actorRole: user.role,
       actorId: user.id,

@@ -4,7 +4,7 @@ Role-gate mirrors the rest of the app: a Super Admin's loan is active at once;
 an Admin's loan waits pending_confirmation until a Super Admin approves it.
 """
 import calendar
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 from fastapi import HTTPException
@@ -16,9 +16,13 @@ from app.models.loan import Loan
 from app.models.loan_emi import LoanEmi
 from app.models.loan_payment import LoanPayment
 from app.models.loan_payment_document import LoanPaymentDocument
-from app.schemas.loan import LoanCreate
+from app.schemas.loan import LoanCreate, LoanEdit
 from app.services.notification_service import NotificationService
 from app.services.vehicle_service import initial_status
+
+# How long after booking a loan stays editable. After this the schedule is
+# locked and the client hides the Edit button (the server enforces it too).
+EDIT_WINDOW = timedelta(hours=3)
 
 
 def _add_months(d: date, n: int) -> date:
@@ -88,6 +92,70 @@ class LoanService:
                 entity_id=loan.id,
                 title="New loan needs approval",
                 message="A loan created by an admin awaits verification.",
+            )
+        db.commit()
+        return LoanDAO.get(db, loan.id)
+
+    @staticmethod
+    def _created_at_utc(loan: Loan) -> datetime:
+        """loan.created_at as an aware UTC datetime (the column is naive)."""
+        c = loan.created_at
+        return c.replace(tzinfo=timezone.utc) if c.tzinfo is None else c
+
+    @staticmethod
+    def is_editable(loan: Loan, now: datetime | None = None) -> bool:
+        """True while the loan is still within its post-booking edit window."""
+        now = now or datetime.now(timezone.utc)
+        return now - LoanService._created_at_utc(loan) <= EDIT_WINDOW
+
+    @staticmethod
+    def edit(
+        db: Session, loan_id: int, data: LoanEdit, *, actor_role: str, actor_id: int
+    ) -> Loan:
+        """Replace a loan's details within the 3-hour grace window and REBUILD its
+        EMI schedule from scratch. Any EMIs/payments already recorded are wiped —
+        the client shows a warning first. Rejected once the window has passed."""
+        loan = LoanService.get(db, loan_id)
+        if not LoanService.is_editable(loan):
+            raise HTTPException(
+                status_code=403,
+                detail="This loan can no longer be edited (the 3-hour window has passed).",
+            )
+        if loan.loan_status == "seized" or loan.seize_stage in ("pending", "seized"):
+            raise HTTPException(
+                status_code=400, detail="A seized loan cannot be edited."
+            )
+        if data.tenure_months <= 0:
+            raise HTTPException(status_code=400, detail="Tenure must be at least 1 month")
+
+        # Wipe the old schedule + every recorded payment (cascades to documents).
+        loan.payments.clear()
+        loan.emis.clear()
+        db.flush()
+
+        # Apply the new details.
+        loan.customer_id = data.customer_id
+        loan.vehicle_id = data.vehicle_id
+        loan.principal = data.principal
+        loan.emi_amount = data.emi_amount
+        loan.tenure_months = data.tenure_months
+        loan.loan_date = data.loan_date
+        loan.first_due_date = _add_months(data.loan_date, 1)
+        loan.remarks = data.remarks
+        loan.loan_status = "active"
+        loan.closed_at = None
+        loan.updated_at = datetime.now(timezone.utc)
+
+        # Rebuild the flat, no-interest EMI schedule.
+        for i in range(data.tenure_months):
+            loan.emis.append(
+                LoanEmi(
+                    module_id=loan.module_id,
+                    sequence_number=i + 1,
+                    due_date=_add_months(data.loan_date, i + 1),
+                    amount=data.emi_amount,
+                    status=InstallmentStatus.pending,
+                )
             )
         db.commit()
         return LoanDAO.get(db, loan.id)

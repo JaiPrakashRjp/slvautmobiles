@@ -103,6 +103,16 @@ class Loan with GatedEntity {
     return unpaid.isEmpty ? null : unpaid.first;
   }
 
+  /// How long after booking a loan stays editable (schedule + all details).
+  static const editWindow = Duration(hours: 3);
+
+  /// True while still inside the 3-hour post-booking edit window AND not seized.
+  /// After this the Edit button is hidden (the server enforces it too).
+  bool isEditable([DateTime? now]) {
+    if (isSeized || isSeizePending) return false;
+    return (now ?? DateTime.now()).difference(createdAt) <= editWindow;
+  }
+
   bool get isClosed => loanStatus == 'closed' || loanStatus == 'foreclosed';
 
   /// Fully repaid (all EMIs cleared) — shows as "Paid".

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../controllers/auth_controller.dart';
+import '../../models/loan.dart';
 import '../../services/loan_customer_service.dart';
 import '../../services/loan_service.dart';
 import '../../services/loan_vehicle_service.dart';
@@ -22,13 +23,18 @@ import '../auto_sale/create_customer_screen.dart';
 /// New loan — no interest. Pick a loan customer + loan vehicle, then enter the
 /// loan date, loan amount, tenure (months) and EMI amount.
 class NewLoanScreen extends StatelessWidget {
-  const NewLoanScreen({super.key, this.customerId, this.vehicleId});
+  const NewLoanScreen(
+      {super.key, this.customerId, this.vehicleId, this.editLoan});
 
   /// Pre-selected customer (opened from a customer's detail).
   final String? customerId;
 
   /// Pre-selected vehicle (opened from a vehicle's "Assign loan").
   final String? vehicleId;
+
+  /// When set, the screen edits this existing loan (within its 3-hour window)
+  /// instead of booking a new one — saving rebuilds its EMI schedule.
+  final Loan? editLoan;
 
   @override
   Widget build(BuildContext context) {
@@ -40,6 +46,7 @@ class NewLoanScreen extends StatelessWidget {
         context.read<AuthController>(),
         initialCustomerId: customerId,
         initialVehicleId: vehicleId,
+        editLoan: editLoan,
       ),
       child: const _NewLoanView(),
     );
@@ -107,20 +114,49 @@ class _NewLoanView extends StatelessWidget {
     if (picked != null) vm.loanDate = picked;
   }
 
-  void _submit(BuildContext context, NewLoanViewModel vm) {
+  Future<void> _submit(BuildContext context, NewLoanViewModel vm) async {
     final error = vm.validate();
     if (error != null) {
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(error)));
       return;
     }
+    // Editing rebuilds the schedule; warn first if payments would be wiped.
+    if (vm.isEdit && vm.editHasPayments) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Overwrite the schedule?'),
+          content: const Text(
+              'This loan already has recorded payments. Saving these changes '
+              'will rebuild the EMI schedule and permanently remove all '
+              'payments recorded so far. This cannot be undone.'),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel')),
+            TextButton(
+              style: TextButton.styleFrom(
+                  foregroundColor: Theme.of(ctx).colorScheme.error),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Overwrite'),
+            ),
+          ],
+        ),
+      );
+      if (ok != true) return;
+    }
+    final isEdit = vm.isEdit;
     final pending = vm.submit();
+    if (!context.mounted) return;
     Navigator.of(context).pop();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(pending
-            ? 'Submitted. Awaiting Super admin confirmation.'
-            : 'Loan created.'),
+        content: Text(isEdit
+            ? 'Loan updated.'
+            : pending
+                ? 'Submitted. Awaiting Super admin confirmation.'
+                : 'Loan created.'),
       ),
     );
   }
@@ -132,7 +168,7 @@ class _NewLoanView extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: c.bgCanvas,
-      appBar: AppBar(title: const Text('New loan')),
+      appBar: AppBar(title: Text(vm.isEdit ? 'Edit loan' : 'New loan')),
       body: SafeArea(
         child: ResponsiveBody(
           maxFormWidth: 520,
@@ -207,7 +243,7 @@ class _NewLoanView extends StatelessWidget {
               _TotalPreview(vm: vm),
               const SizedBox(height: AppSpacing.xxl),
               PrimaryButton(
-                label: 'Create loan',
+                label: vm.isEdit ? 'Save changes' : 'Create loan',
                 onPressed: () => _submit(context, vm),
               ),
             ],

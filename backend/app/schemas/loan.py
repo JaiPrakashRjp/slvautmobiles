@@ -22,6 +22,12 @@ class LoanCreate(LoanBase):
     status: EntityStatus | None = None  # optional override; else derived from role
 
 
+class LoanEdit(LoanBase):
+    """Full edit of a loan within the 2-hour grace window after booking. Every
+    field is replaceable; saving REBUILDS the EMI schedule from scratch and
+    discards any payments already recorded (the client warns first)."""
+
+
 class LoanEmiOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

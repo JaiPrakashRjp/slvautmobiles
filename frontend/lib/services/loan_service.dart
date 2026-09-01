@@ -40,6 +40,20 @@ abstract class LoanService extends ChangeNotifier {
     String? screenshotMime,
   });
 
+  /// Full edit within the 3-hour grace window: replaces every detail and
+  /// REBUILDS the EMI schedule, discarding any recorded payments (the caller
+  /// warns first). The server rejects it once the window has passed.
+  void edit(
+    String loanId, {
+    required String customerId,
+    String? vehicleId,
+    required int principal,
+    required int tenureMonths,
+    required int emiAmount,
+    required DateTime disbursementDate,
+    String? remarks,
+  });
+
   void foreclose(String loanId, {int charge});
   void waivePenalty(String loanId, String emiId);
   void confirm(String id, String byUserId);
@@ -200,6 +214,43 @@ class MockLoanService extends LoanService {
     } else {
       loan.loanStatus = 'active';
     }
+    notifyListeners();
+  }
+
+  @override
+  void edit(
+    String loanId, {
+    required String customerId,
+    String? vehicleId,
+    required int principal,
+    required int tenureMonths,
+    required int emiAmount,
+    required DateTime disbursementDate,
+    String? remarks,
+  }) {
+    final i = _loans.indexWhere((l) => l.id == loanId);
+    if (i < 0) return;
+    final old = _loans[i];
+    final firstDue = DateTime(
+        disbursementDate.year, disbursementDate.month + 1, disbursementDate.day);
+    _loans[i] = Loan(
+      id: old.id,
+      customerId: customerId,
+      vehicleId: vehicleId,
+      principal: principal,
+      tenureMonths: tenureMonths,
+      disbursementDate: disbursementDate,
+      firstEmiDueDate: firstDue,
+      emiAmount: emiAmount,
+      emis: buildSchedule(
+        emiAmount: emiAmount, tenureMonths: tenureMonths, firstDue: firstDue),
+      loanStatus: 'active',
+      createdBy: old.createdBy,
+      createdAt: old.createdAt,
+      status: old.status,
+      confirmedBy: old.confirmedBy,
+      confirmedAt: old.confirmedAt,
+    );
     notifyListeners();
   }
 
