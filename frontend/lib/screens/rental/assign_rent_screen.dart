@@ -84,12 +84,49 @@ class _AssignRentScreenState extends State<AssignRentScreen> {
     if (d != null) setState(() => _startDate = d);
   }
 
+  /// The rental date differs from the one the rental was saved with.
+  bool get _startDateChanged {
+    final a = widget.existing?.startDate;
+    final b = _startDate;
+    if (a == null || b == null) return a != b;
+    return a.year != b.year || a.month != b.month || a.day != b.day;
+  }
+
+  /// Warn before an edit that moves the rental date — the reminder schedule and
+  /// any recorded collections are wiped and rebuilt from the new date.
+  Future<bool> _confirmDateReset() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Reset the rent schedule?'),
+        content: const Text(
+          'Changing the rental date rebuilds the reminder schedule from the new '
+          'date. All existing reminders and recorded collections for this rental '
+          'will be discarded and regenerated. This can’t be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Reset & save'),
+          ),
+        ],
+      ),
+    );
+    return ok ?? false;
+  }
+
   Future<void> _confirm() async {
     if (_loading) return;
     if (_rent <= 0) {
       _snack('Enter the rent amount');
       return;
     }
+    if (_isEditing && _startDateChanged && !await _confirmDateReset()) return;
+    if (!mounted) return;
     setState(() => _loading = true);
     final rentals = context.read<RentalAgreementService>();
     final vehicles = context.read<RentalVehicleService>();
