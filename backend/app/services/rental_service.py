@@ -194,6 +194,37 @@ class RentalService:
             db.commit()
         return changed > 0
 
+    @staticmethod
+    def _rebuild_recurring_schedule(db: Session, rental: Rental) -> None:
+        """Rental date changed on a recurring rental: wipe the ENTIRE schedule —
+        every reminder AND every recorded collection — and rebuild it fresh from
+        the new start date, exactly as a brand-new rental would. The old reminders
+        'go off'. Weekly re-accumulates each due week up to today (arrears); daily
+        gets a single open reminder one day after the new start."""
+        if rental.rental_type is None:
+            return
+        # Full reset: delete-orphan on both relationships removes the rows on flush.
+        rental.installments.clear()
+        rental.payments.clear()
+        db.flush()
+        base = rental.start_date or date.today()
+        first = RentalInstallment(
+            rental_id=rental.id,
+            module_id=rental.module_id,
+            number=1,
+            due_date=base + timedelta(days=RentalService._interval_days(rental)),
+            amount=rental.period_amount,
+            status=InstallmentStatus.pending,
+            created_by=rental.created_by,
+        )
+        # Append to the loaded collection (not just db.add) so the weekly backfill
+        # below sees the first period without a re-query.
+        rental.installments.append(first)
+        db.add(first)
+        db.flush()
+        if rental.rental_type == RentalType.weekly:
+            RentalService._ensure_weekly_installments(db, rental)
+
     # ── Create ───────────────────────────────────────────────────────────────
     @staticmethod
     def create(db: Session, data: RentalCreate, *, actor_role: str, created_by: int) -> Rental:
@@ -378,9 +409,16 @@ class RentalService:
                     ):
                         inst.amount = period
             rental.advance_amount = round(float(payload.get("advance_amount") or 0), 2)
+            date_changed = False
             if payload.get("start_date"):
-                rental.start_date = date.fromisoformat(payload["start_date"])
+                new_start = date.fromisoformat(payload["start_date"])
+                date_changed = new_start != rental.start_date
+                rental.start_date = new_start
             rental.remarks = payload.get("remarks")
+            # Moving the rental date resets the reminder calendar: wipe the old
+            # schedule + collections and rebuild fresh from the new date.
+            if date_changed:
+                RentalService._rebuild_recurring_schedule(db, rental)
             return
         total, advance = RentalService._validate_edit(payload)
         collected = round(
