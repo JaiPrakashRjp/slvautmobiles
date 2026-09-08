@@ -7,6 +7,7 @@ import 'package:printing/printing.dart';
 import '../models/customer.dart';
 import '../models/installment.dart';
 import '../models/loan_customer_report.dart';
+import '../models/loan_report.dart';
 import '../models/monthly_report.dart';
 import '../models/loan.dart';
 import '../models/personal_loan_report.dart';
@@ -102,6 +103,12 @@ abstract class PdfService {
   /// collected in the period, and idle vehicles. No total/outstanding.
   Future<void> previewRentalReport(RentalReport report);
   Future<void> shareRentalReport(RentalReport report);
+
+  /// Loan business report over a period: loans booked, EMI collected, EMIs due,
+  /// and the current outstanding balance across active loans.
+  Future<Uint8List> loanBusinessReportBytes(LoanReport report);
+  Future<void> previewLoanBusinessReport(LoanReport report);
+  Future<void> shareLoanBusinessReport(LoanReport report);
 
   /// Per-customer dues statement: headline totals + a per-rental, per-reminder
   /// breakdown of what is pending, paid, and overdue for one rental customer.
@@ -1408,6 +1415,123 @@ class RealPdfService implements PdfService {
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
               pw.Text('SLV Auto Consultant · Rental report',
+                  style: const pw.TextStyle(
+                      fontSize: 8, color: PdfColors.grey500)),
+              pw.Text('Page ${ctx.pageNumber} of ${ctx.pagesCount}',
+                  style: const pw.TextStyle(
+                      fontSize: 8, color: PdfColors.grey500)),
+            ],
+          ),
+        ),
+      ),
+    );
+    return doc;
+  }
+
+  // ── Loan business report (period) ───────────────────────────────────────
+
+  @override
+  Future<Uint8List> loanBusinessReportBytes(LoanReport report) async =>
+      (await _loanBusinessReportDoc(report)).save();
+
+  @override
+  Future<void> previewLoanBusinessReport(LoanReport report) async {
+    final doc = await _loanBusinessReportDoc(report);
+    await Printing.layoutPdf(onLayout: (_) => doc.save());
+  }
+
+  @override
+  Future<void> shareLoanBusinessReport(LoanReport report) async {
+    final doc = await _loanBusinessReportDoc(report);
+    await Printing.sharePdf(
+      bytes: await doc.save(),
+      filename: 'loan-report-${report.label.replaceAll(' ', '-')}.pdf',
+    );
+  }
+
+  Future<pw.Document> _loanBusinessReportDoc(LoanReport r) async {
+    final logo = await _loadLogo();
+    final doc = pw.Document();
+    doc.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.fromLTRB(28, 22, 28, 28),
+        header: (_) => _reportHeader(logo, r.label, kind: 'Loan report'),
+        build: (_) => [
+          _label('OVERVIEW'),
+          _statGrid([
+            ('Loans booked', '${r.loanCount}', 'this period'),
+            ('Disbursed', _curr(r.disbursedTotal), 'principal'),
+            ('EMI collected', _curr(r.collectedTotal), 'this period'),
+            ('EMIs due', '${r.dueCount}', _curr(r.dueTotal)),
+            ('Outstanding', _curr(r.outstandingTotal), 'active loans'),
+            ('New customers', '${r.newCustomerCount}', 'added this period'),
+          ]),
+          _label('LOANS BOOKED THIS PERIOD'),
+          if (r.loans.isEmpty)
+            _emptyLine('No loans booked in this period.')
+          else
+            _table(
+              ['Date', 'Customer', 'Vehicle', 'Principal', 'Tenure', 'EMI'],
+              [
+                for (final s in r.loans)
+                  [
+                    Formatters.date(s.date),
+                    s.customerName,
+                    s.vehicle,
+                    _curr(s.principal),
+                    '${s.tenureMonths} mo',
+                    _curr(s.emiAmount),
+                  ],
+              ],
+              rightAlign: const {3, 4, 5},
+            ),
+          _label('EMI COLLECTED THIS PERIOD'),
+          if (r.collections.isEmpty)
+            _emptyLine('No EMI collected in this period.')
+          else
+            _table(
+              ['Date', 'Customer', 'Vehicle', 'EMI #', 'Amount'],
+              [
+                for (final p in r.collections)
+                  [
+                    Formatters.date(p.date),
+                    p.customerName,
+                    p.vehicle,
+                    '${p.emiNumber}',
+                    _curr(p.amount),
+                  ],
+                ['Total collected', '', '', '', _curr(r.collectedTotal)],
+              ],
+              rightAlign: const {4},
+              totalLastRow: true,
+            ),
+          _label('EMIS DUE THIS PERIOD'),
+          if (r.dues.isEmpty)
+            _emptyLine('No EMIs due in this period.')
+          else
+            _table(
+              ['Date', 'Customer', 'Vehicle', 'EMI #', 'Amount', 'Status'],
+              [
+                for (final d in r.dues)
+                  [
+                    Formatters.date(d.date),
+                    d.customerName,
+                    d.vehicle,
+                    '${d.emiNumber}',
+                    _curr(d.amount),
+                    d.status,
+                  ],
+              ],
+              rightAlign: const {4},
+            ),
+        ],
+        footer: (ctx) => pw.Padding(
+          padding: const pw.EdgeInsets.only(top: 8),
+          child: pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Text('SLV Auto Consultant · Loan report',
                   style: const pw.TextStyle(
                       fontSize: 8, color: PdfColors.grey500)),
               pw.Text('Page ${ctx.pageNumber} of ${ctx.pagesCount}',

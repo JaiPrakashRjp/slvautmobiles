@@ -20,6 +20,7 @@ class ApiLoanService extends LoanService {
   final ApiClient _api;
   final List<Loan> _loans = [];
 
+  @override
   Future<void> refresh() async {
     try {
       final data = await _api.get('/loans', query: {'module': module});
