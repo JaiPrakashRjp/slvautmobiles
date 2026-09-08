@@ -7,6 +7,10 @@ import '../utils/id_gen.dart';
 import 'gate.dart';
 
 abstract class LoanService extends ChangeNotifier {
+  /// Reloads loans from the backend (no-op for the mock). Used by the report
+  /// screens' pull-to-refresh.
+  Future<void> refresh();
+
   List<Loan> all();
   Loan? byId(String id);
   List<Loan> forCustomer(String customerId);
@@ -132,6 +136,9 @@ class MockLoanService extends LoanService {
       status: EntityStatus.active,
     ));
   }
+
+  @override
+  Future<void> refresh() async {}
 
   @override
   List<Loan> all() => List.unmodifiable(_loans);

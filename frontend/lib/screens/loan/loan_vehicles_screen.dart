@@ -19,6 +19,8 @@ import '../../widgets/gold_create_button.dart';
 import '../../widgets/icon_button_soft.dart';
 import '../../widgets/status_pill.dart';
 import '../../widgets/tab_bar_navy.dart';
+import 'loan_daily_report_screen.dart';
+import 'loan_monthly_report_screen.dart';
 import 'loan_vehicle_detail_screen.dart';
 import 'loan_vehicle_form_screen.dart';
 import 'new_loan_screen.dart';
@@ -130,6 +132,20 @@ class _LoanVehiclesScreenState extends State<LoanVehiclesScreen> {
       appBar: AppBar(
         title: const Text('Loan vehicles'),
         actions: [
+          IconButton(
+            tooltip: 'Daily EMI collections',
+            icon: const Icon(Icons.assignment_outlined),
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => const LoanDailyReportScreen(),
+            )),
+          ),
+          IconButton(
+            tooltip: 'Loan report',
+            icon: const Icon(Icons.insert_chart_outlined),
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => const LoanMonthlyReportScreen(),
+            )),
+          ),
           GoldCreateButton(
             iconOnly: true,
             onPressed: () => _openCreate(context),
