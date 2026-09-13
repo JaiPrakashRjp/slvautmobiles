@@ -71,6 +71,8 @@ class LoanDetailScreen extends StatelessWidget {
         loan.vehicleId == null ? null : vehicles.byId(loan.vehicleId!);
     final pdf = context.read<PdfService>();
     final nextEmi = loan.nextDueEmi(_now);
+    final canDelete =
+        auth.isSuperAdmin || loan.createdBy == auth.currentUser?.id;
 
     // Full loan receipt (customer + vehicle + the whole EMI schedule + totals),
     // rendered via the branded loan-statement layout.
@@ -121,6 +123,38 @@ class LoanDetailScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Loan detail'),
         actions: [
+          if (canDelete)
+            IconButton(
+              icon: const Icon(Icons.delete_outline),
+              tooltip: 'Delete loan',
+              onPressed: () async {
+                final confirmed = await ConfirmationDialog.show(
+                  context,
+                  title: 'Delete loan',
+                  message: 'Delete this loan and all of its EMI payments and '
+                      'payment documents? This cannot be undone. The customer '
+                      'will remain, and the vehicle will become available again.',
+                  confirmLabel: 'Delete loan',
+                  danger: true,
+                );
+                if (confirmed != true) return;
+                try {
+                  await loans.delete(loan.id);
+                  await vehicles.refresh();
+                  if (!context.mounted) return;
+                  Navigator.of(context).pop();
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                    content: Text('Loan deleted. Vehicle is available again.'),
+                  ));
+                } catch (_) {
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                    content:
+                        Text('Could not delete the loan. Please try again.'),
+                  ));
+                }
+              },
+            ),
           IconButton(
             icon: const Icon(Icons.receipt_long_outlined),
             tooltip: 'Loan receipt',
@@ -129,7 +163,8 @@ class LoanDetailScreen extends StatelessWidget {
                 : () => Navigator.of(context).push(MaterialPageRoute(
                       builder: (_) => PdfPreviewScreen(
                         title: 'Loan receipt',
-                        fileName: 'loan-receipt-${name.replaceAll(' ', '-')}.pdf',
+                        fileName:
+                            'loan-receipt-${name.replaceAll(' ', '-')}.pdf',
                         builder: () => pdf.loanReportBytes(buildReceipt()),
                       ),
                     )),
@@ -174,7 +209,8 @@ class LoanDetailScreen extends StatelessWidget {
                     ),
                     if (vehicle != null) ...[
                       const SizedBox(height: 2),
-                      Text('🛵 ${vehicle.displayLabel}'
+                      Text(
+                          '🛵 ${vehicle.displayLabel}'
                           '${vehicle.model != null ? ' · ${vehicle.model}' : ''}',
                           style:
                               AppTextStyles.caption.copyWith(color: c.textSub)),
@@ -310,8 +346,8 @@ class LoanDetailScreen extends StatelessWidget {
               const SizedBox(height: AppSpacing.md),
               RoleGateActions(
                 status: loan.status,
-                onApprove: () => loans.confirm(
-                    loan.id, auth.currentUser?.id ?? 'u_super'),
+                onApprove: () =>
+                    loans.confirm(loan.id, auth.currentUser?.id ?? 'u_super'),
                 onReject: (reason) => loans.reject(
                     loan.id, reason, auth.currentUser?.id ?? 'u_super'),
               ),
@@ -326,8 +362,8 @@ class LoanDetailScreen extends StatelessWidget {
                   ),
                   child: Text(
                       'Loan fully paid — total paid ${Formatters.currency(loan.totalPaid)}.',
-                      style: AppTextStyles.bodyStrong
-                          .copyWith(color: c.success)),
+                      style:
+                          AppTextStyles.bodyStrong.copyWith(color: c.success)),
                 ),
               ],
             ],
@@ -344,7 +380,8 @@ class LoanDetailScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(label, style: AppTextStyles.caption.copyWith(color: c.textSub)),
+            Text(label,
+                style: AppTextStyles.caption.copyWith(color: c.textSub)),
             const SizedBox(height: AppSpacing.xs),
             Text(value,
                 style: AppTextStyles.bodyStrong.copyWith(color: c.textMain)),
@@ -355,11 +392,11 @@ class LoanDetailScreen extends StatelessWidget {
   }
 
   // ── Seizure ─────────────────────────────────────────────────────────────────
-  List<Widget> _seizeSection(BuildContext context, LoanService loans, Loan loan,
-      AuthController auth) {
+  List<Widget> _seizeSection(
+      BuildContext context, LoanService loans, Loan loan, AuthController auth) {
     final c = context.colors;
-    void snack(String m) => ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(m)));
+    void snack(String m) =>
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
 
     Widget banner(String text, Color color, Color tint) => Container(
           width: double.infinity,
@@ -410,7 +447,8 @@ class LoanDetailScreen extends StatelessWidget {
                       requireReason: true,
                     );
                     if (remarks is String) {
-                      loans.cancelSeize(loan.id, auth.currentUser?.id ?? 'u_super',
+                      loans.cancelSeize(
+                          loan.id, auth.currentUser?.id ?? 'u_super',
                           remarks: remarks);
                       snack('Seize cancelled — back to the customer.');
                     }
@@ -425,7 +463,8 @@ class LoanDetailScreen extends StatelessWidget {
                     final ok = await ConfirmationDialog.show(
                       context,
                       title: 'Confirm seize',
-                      message: 'Repossess the vehicle and end this loan as seized?',
+                      message:
+                          'Repossess the vehicle and end this loan as seized?',
                       confirmLabel: 'Confirm seize',
                       danger: true,
                     );
@@ -576,7 +615,8 @@ class _EmiTileState extends State<_EmiTile> {
   int get _paying => int.tryParse(_payCtrl.text.trim()) ?? 0;
   int get _total => widget.emi.amountDue + _penalty;
   int _balance() => (_total - widget.emi.amountPaid).clamp(0, _total);
-  int get _newBalance => (_total - widget.emi.amountPaid - _paying).clamp(0, _total);
+  int get _newBalance =>
+      (_total - widget.emi.amountPaid - _paying).clamp(0, _total);
 
   Future<void> _pickDate() async {
     final picked = await showDatePicker(
@@ -646,12 +686,14 @@ class _EmiTileState extends State<_EmiTile> {
       remarks: _remarksCtrl.text.trim(),
       screenshotName: _screenshotName,
       screenshotBytes: _screenshot?.bytes,
-      screenshotMime: _screenshot?.mimeType ?? PickedDoc.mimeFor(_screenshotName ?? ''),
+      screenshotMime:
+          _screenshot?.mimeType ?? PickedDoc.mimeFor(_screenshotName ?? ''),
     );
     setState(() => _open = false);
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('EMI ${widget.emi.sequenceNumber}: '
-          '${Formatters.currency(_paying)} recorded.')),
+      SnackBar(
+          content: Text('EMI ${widget.emi.sequenceNumber}: '
+              '${Formatters.currency(_paying)} recorded.')),
     );
   }
 
@@ -684,7 +726,8 @@ class _EmiTileState extends State<_EmiTile> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('EMI ${e.sequenceNumber} · ${Formatters.date(e.dueDate)}',
+                        Text(
+                            'EMI ${e.sequenceNumber} · ${Formatters.date(e.dueDate)}',
                             style:
                                 AppTextStyles.body.copyWith(color: c.textMain)),
                         const SizedBox(height: 2),
@@ -697,7 +740,8 @@ class _EmiTileState extends State<_EmiTile> {
                         ),
                         if (e.isPartial) ...[
                           const SizedBox(height: 2),
-                          Text('Paid ${Formatters.currency(e.amountPaid)} · '
+                          Text(
+                              'Paid ${Formatters.currency(e.amountPaid)} · '
                               'balance ${Formatters.currency(e.remaining)}',
                               style: AppTextStyles.caption
                                   .copyWith(color: c.textSub)),
@@ -710,9 +754,8 @@ class _EmiTileState extends State<_EmiTile> {
                   else
                     StatusPill.forSchedule(
                       status,
-                      labelOverride: status == ScheduleStatus.overdue
-                          ? 'Pending'
-                          : null,
+                      labelOverride:
+                          status == ScheduleStatus.overdue ? 'Pending' : null,
                     ),
                 ],
               ),
@@ -741,8 +784,7 @@ class _EmiTileState extends State<_EmiTile> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(k, style: AppTextStyles.caption.copyWith(color: c.textSub)),
-              Text(v,
-                  style: AppTextStyles.body.copyWith(color: c.textMain)),
+              Text(v, style: AppTextStyles.body.copyWith(color: c.textMain)),
             ],
           ),
         );
@@ -803,8 +845,7 @@ class _EmiTileState extends State<_EmiTile> {
           children: [
             Expanded(
               child: _ReadonlyField(
-                  label: 'EMI amount',
-                  value: Formatters.currency(e.amountDue)),
+                  label: 'EMI amount', value: Formatters.currency(e.amountDue)),
             ),
             const SizedBox(width: AppSpacing.md),
             Expanded(
@@ -829,15 +870,13 @@ class _EmiTileState extends State<_EmiTile> {
           ),
           child: Column(
             children: [
-              _calcRow(c, 'Total incl. penalty',
-                  Formatters.currency(_total), big: true),
+              _calcRow(c, 'Total incl. penalty', Formatters.currency(_total),
+                  big: true),
               if (e.amountPaid > 0)
-                _calcRow(c, 'Already paid',
-                    Formatters.currency(e.amountPaid)),
+                _calcRow(c, 'Already paid', Formatters.currency(e.amountPaid)),
               _calcRow(c, 'Paying now', Formatters.currency(_paying)),
               Divider(color: c.onPrimary.withValues(alpha: 0.2)),
-              _calcRow(c, 'Balance carried',
-                  Formatters.currency(_newBalance)),
+              _calcRow(c, 'Balance carried', Formatters.currency(_newBalance)),
             ],
           ),
         ),
@@ -943,8 +982,8 @@ class _ReadonlyField extends StatelessWidget {
             borderRadius: BorderRadius.circular(AppRadius.input),
             border: Border.all(color: c.borderColor),
           ),
-          child: Text(value,
-              style: AppTextStyles.body.copyWith(color: c.textSub)),
+          child:
+              Text(value, style: AppTextStyles.body.copyWith(color: c.textSub)),
         ),
       ],
     );

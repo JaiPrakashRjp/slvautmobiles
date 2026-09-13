@@ -13,6 +13,7 @@ import '../../utils/app_text_styles.dart';
 import '../../utils/formatters.dart';
 import '../../utils/responsive.dart';
 import '../../widgets/app_card.dart';
+import '../../widgets/call_chip.dart';
 import '../../widgets/empty_state.dart';
 import 'loan_detail_screen.dart';
 
@@ -65,17 +66,19 @@ class _LoanDailyReportScreenState extends State<LoanDailyReportScreen> {
 
     // Rows = (loan, emi) for EMIs due on the chosen date, across approved,
     // non-seized loans (filter shared with the monthly report + tests).
-    final rows = <(String loanId, String customer, String vehicle, Emi emi)>[
-      for (final (l, emi) in LoanReport.emisDueOn(loans.all(), _date))
-        (
-          l.id,
-          customers.byId(l.customerId)?.fullName ?? 'Customer',
-          vehicles.byId(l.vehicleId ?? '')?.displayLabel ?? '—',
-          emi,
-        ),
-    ];
+    final rows = <(String loanId, String customer, String phone, String vehicle, Emi emi)>[];
+    for (final (l, emi) in LoanReport.emisDueOn(loans.all(), _date)) {
+      final custObj = customers.byId(l.customerId);
+      rows.add((
+        l.id,
+        custObj?.fullName ?? 'Customer',
+        custObj?.phone ?? '',
+        vehicles.byId(l.vehicleId ?? '')?.displayLabel ?? '—',
+        emi,
+      ));
+    }
     rows.sort((a, b) => a.$2.compareTo(b.$2));
-    final total = rows.fold<int>(0, (s, e) => s + e.$4.totalDue);
+    final total = rows.fold<int>(0, (s, e) => s + e.$5.totalDue);
 
     return Scaffold(
       backgroundColor: c.bgCanvas,
@@ -157,8 +160,9 @@ class _LoanDailyReportScreenState extends State<LoanDailyReportScreen> {
                                           bottom: AppSpacing.sm),
                                       child: _DueRow(
                                         customer: row.$2,
-                                        vehicle: row.$3,
-                                        emi: row.$4,
+                                        phone: row.$3,
+                                        vehicle: row.$4,
+                                        emi: row.$5,
                                         onTap: () => Navigator.of(context).push(
                                             MaterialPageRoute(
                                                 builder: (_) => LoanDetailScreen(
@@ -180,12 +184,14 @@ class _LoanDailyReportScreenState extends State<LoanDailyReportScreen> {
 class _DueRow extends StatelessWidget {
   const _DueRow({
     required this.customer,
+    required this.phone,
     required this.vehicle,
     required this.emi,
     required this.onTap,
   });
 
   final String customer;
+  final String phone;
   final String vehicle;
   final Emi emi;
   final VoidCallback onTap;
@@ -200,30 +206,39 @@ class _DueRow extends StatelessWidget {
             : ('Pending', c.warning);
     return AppCard(
       onTap: onTap,
-      child: Row(children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('$customer · $vehicle',
-                  style: AppTextStyles.bodyStrong.copyWith(color: c.textMain)),
-              const SizedBox(height: 2),
-              Text('EMI ${emi.sequenceNumber} · ${Formatters.currency(emi.totalDue)}',
-                  style: AppTextStyles.caption.copyWith(color: c.textSub)),
-            ],
-          ),
-        ),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: Text(label,
-              style: AppTextStyles.caption
-                  .copyWith(color: color, fontWeight: FontWeight.w600)),
-        ),
-      ]),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('$customer · $vehicle',
+                      style: AppTextStyles.bodyStrong.copyWith(color: c.textMain)),
+                  const SizedBox(height: 2),
+                  Text('EMI ${emi.sequenceNumber} · ${Formatters.currency(emi.totalDue)}',
+                      style: AppTextStyles.caption.copyWith(color: c.textSub)),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(label,
+                  style: AppTextStyles.caption
+                      .copyWith(color: color, fontWeight: FontWeight.w600)),
+            ),
+          ]),
+          if (phone.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.sm),
+            CallChip(phone: phone),
+          ],
+        ],
+      ),
     );
   }
 }

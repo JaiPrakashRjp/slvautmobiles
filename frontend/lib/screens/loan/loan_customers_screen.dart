@@ -8,6 +8,7 @@ import '../../models/customer.dart';
 import '../../models/doc_ref.dart';
 import '../../services/loan_customer_service.dart';
 import '../../services/loan_service.dart';
+import '../../services/loan_vehicle_service.dart';
 import '../../theme/app_colors.dart';
 import '../../utils/app_spacing.dart';
 import '../../utils/app_text_styles.dart';
@@ -23,6 +24,7 @@ import '../../widgets/tab_bar_navy.dart';
 import '../auto_sale/create_customer_screen.dart';
 import 'loan_customer_detail_screen.dart';
 import 'loan_report_screen.dart';
+import 'loan_vehicle_detail_screen.dart';
 
 /// Loan-module customers — same tables/fields/approval flow as the sale
 /// customers, scoped to module = loan, with the richer assurity document set.
@@ -99,7 +101,10 @@ class _LoanCustomersScreenState extends State<LoanCustomersScreen> {
             for (final cust in list)
               Padding(
                 padding: const EdgeInsets.only(bottom: AppSpacing.lg),
-                child: _LoanCustomerCard(customer: cust),
+                child: _LoanCustomerCard(
+                  customer: cust,
+                  showVehicleCards: _query.trim().isNotEmpty,
+                ),
               ),
         ],
       ),
@@ -111,6 +116,7 @@ class _LoanCustomersScreenState extends State<LoanCustomersScreen> {
     final c = context.colors;
     final service = context.watch<LoanCustomerService>();
     final loans = context.watch<LoanService>();
+    context.watch<LoanVehicleService>();
     // Customers whose loan vehicle was seized.
     final seized = <String>{
       for (final l in loans.all())
@@ -156,8 +162,8 @@ class _LoanCustomersScreenState extends State<LoanCustomersScreen> {
                 ),
               ),
               Padding(
-                padding: EdgeInsets.fromLTRB(context.screenHPadding,
-                    0, context.screenHPadding, AppSpacing.sm),
+                padding: EdgeInsets.fromLTRB(context.screenHPadding, 0,
+                    context.screenHPadding, AppSpacing.sm),
                 child: TextField(
                   onChanged: (q) => setState(() => _query = q),
                   decoration: InputDecoration(
@@ -188,9 +194,13 @@ class _LoanCustomersScreenState extends State<LoanCustomersScreen> {
 }
 
 class _LoanCustomerCard extends StatelessWidget {
-  const _LoanCustomerCard({required this.customer});
+  const _LoanCustomerCard({
+    required this.customer,
+    required this.showVehicleCards,
+  });
 
   final Customer customer;
+  final bool showVehicleCards;
 
   void _open(BuildContext context) {
     Navigator.of(context).push(MaterialPageRoute(
@@ -281,12 +291,16 @@ class _LoanCustomerCard extends StatelessWidget {
     final c = context.colors;
     final auth = context.read<AuthController>();
     final service = context.read<LoanCustomerService>();
+    final loanVehicles = context.read<LoanVehicleService>();
     final canModify =
         auth.isSuperAdmin || customer.createdBy == auth.currentUser?.id;
     // No delete once the customer has any loan (active or history) — keeps the
     // records intact.
     final hasLoans =
         context.read<LoanService>().forCustomer(customer.id).isNotEmpty;
+    final customerLoans = showVehicleCards
+        ? context.read<LoanService>().forCustomer(customer.id)
+        : const [];
     final photoRef = customer.uploadedDocs
         .where((d) => d.docTypeWire == 'photo')
         .cast<DocRef?>()
@@ -351,6 +365,26 @@ class _LoanCustomerCard extends StatelessWidget {
               ),
             ],
           ),
+          if (customerLoans.any((loan) => loan.vehicleId != null)) ...[
+            const SizedBox(height: AppSpacing.sm),
+            Divider(height: 1, color: c.borderColor),
+            const SizedBox(height: AppSpacing.sm),
+            Text('Customer vehicles',
+                style: AppTextStyles.label.copyWith(color: c.textSub)),
+            const SizedBox(height: AppSpacing.xs),
+            for (final loan
+                in customerLoans.where((loan) => loan.vehicleId != null)) ...[
+              _LoanVehicleCard(
+                label: loanVehicles.byId(loan.vehicleId!)?.regNo ?? 'Vehicle',
+                subtitle: loan.loanStatus,
+                onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) =>
+                      LoanVehicleDetailScreen(vehicleId: loan.vehicleId!),
+                )),
+              ),
+              const SizedBox(height: AppSpacing.xs),
+            ],
+          ],
           if (canModify) ...[
             const SizedBox(height: AppSpacing.sm),
             Divider(height: 1, color: c.borderColor),
@@ -386,6 +420,50 @@ class _LoanCustomerCard extends StatelessWidget {
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+class _LoanVehicleCard extends StatelessWidget {
+  const _LoanVehicleCard({
+    required this.label,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final String label;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Material(
+      color: c.bgSurface,
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.sm),
+          child: Row(children: [
+            Icon(Icons.directions_car_outlined, color: c.primary, size: 20),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+                child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label,
+                    style:
+                        AppTextStyles.bodyStrong.copyWith(color: c.textMain)),
+                Text(subtitle,
+                    style: AppTextStyles.caption.copyWith(color: c.textSub)),
+              ],
+            )),
+            Icon(Icons.chevron_right, color: c.textSub),
+          ]),
+        ),
       ),
     );
   }

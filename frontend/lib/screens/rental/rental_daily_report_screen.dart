@@ -12,6 +12,7 @@ import '../../utils/app_text_styles.dart';
 import '../../utils/formatters.dart';
 import '../../utils/responsive.dart';
 import '../../widgets/app_card.dart';
+import '../../widgets/call_chip.dart';
 import '../../widgets/empty_state.dart';
 import 'rent_detail_screen.dart';
 
@@ -67,7 +68,7 @@ class _RentalDailyReportScreenState extends State<RentalDailyReportScreen> {
 
     // Rows = (rental, installment) for reminders due on the chosen date, across
     // approved, non-cancelled/seized rentals.
-    final rows = <(String rentalId, String customer, String vehicle, Installment inst)>[];
+    final rows = <(String rentalId, String customer, String phone, String vehicle, Installment inst)>[];
     for (final r in rentals.all()) {
       if (!r.isActive ||
           r.rentalStatus == 'cancelled' ||
@@ -76,17 +77,19 @@ class _RentalDailyReportScreenState extends State<RentalDailyReportScreen> {
       }
       for (final inst in r.installments) {
         if (_sameDay(inst.dueDate, _date)) {
-          final cust = customers.byId(r.customerId)?.fullName ?? 'Customer';
+          final custObj = customers.byId(r.customerId);
+          final cust = custObj?.fullName ?? 'Customer';
+          final phone = custObj?.phone ?? '';
           final veh = vehicles.byId(r.vehicleId);
           final vlabel = veh == null
               ? '—'
               : (veh.regNo.isNotEmpty ? veh.regNo : (veh.chassisNo ?? '—'));
-          rows.add((r.id, cust, vlabel, inst));
+          rows.add((r.id, cust, phone, vlabel, inst));
         }
       }
     }
     rows.sort((a, b) => a.$2.compareTo(b.$2));
-    final total = rows.fold<int>(0, (s, e) => s + e.$4.amount);
+    final total = rows.fold<int>(0, (s, e) => s + e.$5.amount);
 
     return Scaffold(
       backgroundColor: c.bgCanvas,
@@ -167,8 +170,9 @@ class _RentalDailyReportScreenState extends State<RentalDailyReportScreen> {
                                           bottom: AppSpacing.sm),
                                       child: _DueRow(
                                         customer: row.$2,
-                                        vehicle: row.$3,
-                                        inst: row.$4,
+                                        phone: row.$3,
+                                        vehicle: row.$4,
+                                        inst: row.$5,
                                         onTap: () => Navigator.of(context).push(
                                             MaterialPageRoute(
                                                 builder: (_) => RentDetailScreen(
@@ -190,12 +194,14 @@ class _RentalDailyReportScreenState extends State<RentalDailyReportScreen> {
 class _DueRow extends StatelessWidget {
   const _DueRow({
     required this.customer,
+    required this.phone,
     required this.vehicle,
     required this.inst,
     required this.onTap,
   });
 
   final String customer;
+  final String phone;
   final String vehicle;
   final Installment inst;
   final VoidCallback onTap;
@@ -210,30 +216,39 @@ class _DueRow extends StatelessWidget {
             : ('Due', c.warning);
     return AppCard(
       onTap: onTap,
-      child: Row(children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('$customer · $vehicle',
-                  style: AppTextStyles.bodyStrong.copyWith(color: c.textMain)),
-              const SizedBox(height: 2),
-              Text(Formatters.currency(inst.amount),
-                  style: AppTextStyles.caption.copyWith(color: c.textSub)),
-            ],
-          ),
-        ),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: Text(label,
-              style: AppTextStyles.caption
-                  .copyWith(color: color, fontWeight: FontWeight.w600)),
-        ),
-      ]),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('$customer · $vehicle',
+                      style: AppTextStyles.bodyStrong.copyWith(color: c.textMain)),
+                  const SizedBox(height: 2),
+                  Text(Formatters.currency(inst.amount),
+                      style: AppTextStyles.caption.copyWith(color: c.textSub)),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(label,
+                  style: AppTextStyles.caption
+                      .copyWith(color: color, fontWeight: FontWeight.w600)),
+            ),
+          ]),
+          if (phone.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.sm),
+            CallChip(phone: phone),
+          ],
+        ],
+      ),
     );
   }
 }

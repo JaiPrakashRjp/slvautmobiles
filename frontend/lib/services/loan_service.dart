@@ -62,7 +62,7 @@ abstract class LoanService extends ChangeNotifier {
   void waivePenalty(String loanId, String emiId);
   void confirm(String id, String byUserId);
   void reject(String id, String reason, String byUserId);
-  void delete(String id);
+  Future<void> delete(String id);
 
   // ── Seizure (repossession) ─────────────────────────────────────────────────
   /// Requests seizing the loan vehicle. A super admin's request seizes at once;
@@ -162,8 +162,8 @@ class MockLoanService extends LoanService {
     required int emiAmount,
     required DateTime disbursementDate,
   }) {
-    final firstDue = DateTime(
-        disbursementDate.year, disbursementDate.month + 1, disbursementDate.day);
+    final firstDue = DateTime(disbursementDate.year, disbursementDate.month + 1,
+        disbursementDate.day);
     final loan = Loan(
       id: IdGen.nextId('loan'),
       customerId: customerId,
@@ -238,8 +238,8 @@ class MockLoanService extends LoanService {
     final i = _loans.indexWhere((l) => l.id == loanId);
     if (i < 0) return;
     final old = _loans[i];
-    final firstDue = DateTime(
-        disbursementDate.year, disbursementDate.month + 1, disbursementDate.day);
+    final firstDue = DateTime(disbursementDate.year, disbursementDate.month + 1,
+        disbursementDate.day);
     _loans[i] = Loan(
       id: old.id,
       customerId: customerId,
@@ -250,7 +250,7 @@ class MockLoanService extends LoanService {
       firstEmiDueDate: firstDue,
       emiAmount: emiAmount,
       emis: buildSchedule(
-        emiAmount: emiAmount, tenureMonths: tenureMonths, firstDue: firstDue),
+          emiAmount: emiAmount, tenureMonths: tenureMonths, firstDue: firstDue),
       loanStatus: 'active',
       createdBy: old.createdBy,
       createdAt: old.createdAt,
@@ -279,8 +279,7 @@ class MockLoanService extends LoanService {
   @override
   void waivePenalty(String loanId, String emiId) {
     final loan = byId(loanId);
-    final emi =
-        loan?.emis.where((e) => e.id == emiId).cast<Emi?>().firstOrNull;
+    final emi = loan?.emis.where((e) => e.id == emiId).cast<Emi?>().firstOrNull;
     if (emi != null) {
       emi.penalty = 0;
       notifyListeners();
@@ -307,7 +306,7 @@ class MockLoanService extends LoanService {
   }
 
   @override
-  void delete(String id) {
+  Future<void> delete(String id) async {
     _loans.removeWhere((l) => l.id == id);
     notifyListeners();
   }
