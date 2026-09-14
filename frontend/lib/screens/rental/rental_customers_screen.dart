@@ -5,6 +5,7 @@ import '../../controllers/auth_controller.dart';
 import '../../models/customer.dart';
 import '../../services/api_rental_service.dart';
 import '../../services/rental_customer_service.dart';
+import '../../services/rental_vehicle_service.dart';
 import '../../theme/app_colors.dart';
 import '../../utils/app_spacing.dart';
 import '../../utils/app_text_styles.dart';
@@ -19,6 +20,7 @@ import '../../widgets/status_pill.dart';
 import '../../widgets/tab_bar_navy.dart';
 import '../auto_sale/create_customer_screen.dart';
 import 'rental_customer_rentals_screen.dart';
+import 'rental_vehicle_detail_screen.dart';
 
 /// Rental customers — the rental module's own independent customer list
 /// (module = rental). Same create / edit / KYC / approval functionality as the
@@ -108,8 +110,8 @@ class _RentalCustomersScreenState extends State<RentalCustomersScreen> {
                 padding: EdgeInsets.fromLTRB(context.screenHPadding, 0,
                     context.screenHPadding, AppSpacing.sm),
                 child: TextField(
-                  onChanged: (v) => setState(
-                      () => _query = v.trim().length >= 3 ? v : ''),
+                  onChanged: (v) =>
+                      setState(() => _query = v.trim().length >= 3 ? v : ''),
                   decoration: InputDecoration(
                     hintText: 'Search name / phone…',
                     prefixIcon: const Icon(Icons.search, size: 20),
@@ -127,41 +129,44 @@ class _RentalCustomersScreenState extends State<RentalCustomersScreen> {
                     if (vel > 250 && _tab == 1) setState(() => _tab = 0);
                   },
                   child: RefreshIndicator(
-                  onRefresh: customers.refresh,
-                  child: (customers.loading && list.isEmpty)
-                      ? const Center(child: CircularProgressIndicator())
-                      : list.isEmpty
-                          ? ListView(
-                              physics: const AlwaysScrollableScrollPhysics(),
-                              children: [
-                                const SizedBox(height: 60),
-                                EmptyState(
-                                  icon: Icons.people_outline,
-                                  title: _tab == 0
-                                      ? 'No customers with a vehicle'
-                                      : 'No customers without a vehicle',
-                                  subtitle: 'Tap “+” to add a customer.',
-                                  ctaLabel: 'Add customer',
-                                  onCta: () => _openCreate(context),
-                                ),
-                              ],
-                            )
-                          : ListView(
-                              physics: const AlwaysScrollableScrollPhysics(),
-                              padding: EdgeInsets.fromLTRB(
-                                  context.screenHPadding,
-                                  0,
-                                  context.screenHPadding,
-                                  AppSpacing.xl),
-                              children: [
-                                for (final cust in list)
-                                  Padding(
-                                    padding: const EdgeInsets.only(
-                                        bottom: AppSpacing.lg),
-                                    child: _RentalCustomerCard(customer: cust),
+                    onRefresh: customers.refresh,
+                    child: (customers.loading && list.isEmpty)
+                        ? const Center(child: CircularProgressIndicator())
+                        : list.isEmpty
+                            ? ListView(
+                                physics: const AlwaysScrollableScrollPhysics(),
+                                children: [
+                                  const SizedBox(height: 60),
+                                  EmptyState(
+                                    icon: Icons.people_outline,
+                                    title: _tab == 0
+                                        ? 'No customers with a vehicle'
+                                        : 'No customers without a vehicle',
+                                    subtitle: 'Tap “+” to add a customer.',
+                                    ctaLabel: 'Add customer',
+                                    onCta: () => _openCreate(context),
                                   ),
-                              ],
-                            ),
+                                ],
+                              )
+                            : ListView(
+                                physics: const AlwaysScrollableScrollPhysics(),
+                                padding: EdgeInsets.fromLTRB(
+                                    context.screenHPadding,
+                                    0,
+                                    context.screenHPadding,
+                                    AppSpacing.xl),
+                                children: [
+                                  for (final cust in list)
+                                    Padding(
+                                      padding: const EdgeInsets.only(
+                                          bottom: AppSpacing.lg),
+                                      child: _RentalCustomerCard(
+                                        customer: cust,
+                                        showVehicleCards: q.isNotEmpty,
+                                      ),
+                                    ),
+                                ],
+                              ),
                   ),
                 ),
               ),
@@ -174,14 +179,19 @@ class _RentalCustomersScreenState extends State<RentalCustomersScreen> {
 }
 
 class _RentalCustomerCard extends StatelessWidget {
-  const _RentalCustomerCard({required this.customer});
+  const _RentalCustomerCard({
+    required this.customer,
+    required this.showVehicleCards,
+  });
 
   final Customer customer;
+  final bool showVehicleCards;
 
   Future<void> _edit(BuildContext context) {
     final service = context.read<RentalCustomerService>();
     return Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => CreateCustomerScreen(existing: customer, service: service),
+      builder: (_) =>
+          CreateCustomerScreen(existing: customer, service: service),
     ));
   }
 
@@ -208,6 +218,7 @@ class _RentalCustomerCard extends StatelessWidget {
     final c = context.colors;
     final auth = context.read<AuthController>();
     final service = context.read<RentalCustomerService>();
+    final rentalVehicles = context.read<RentalVehicleService>();
     final actorId = auth.currentUser?.id ?? '';
     final canModify = auth.isSuperAdmin || customer.createdBy == actorId;
     final canReview = auth.isSuperAdmin && customer.isPending;
@@ -217,6 +228,9 @@ class _RentalCustomerCard extends StatelessWidget {
         .watch<RentalAgreementService>()
         .all()
         .any((r) => r.customerId == customer.id);
+    final customerRentals = showVehicleCards
+        ? context.read<RentalAgreementService>().forCustomer(customer.id)
+        : const [];
 
     return AppCard(
       onTap: () => _openDetail(context),
@@ -265,6 +279,26 @@ class _RentalCustomerCard extends StatelessWidget {
               ),
             ],
           ),
+          if (customerRentals.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.sm),
+            Divider(height: 1, color: c.borderColor),
+            const SizedBox(height: AppSpacing.sm),
+            Text('Customer vehicles',
+                style: AppTextStyles.label.copyWith(color: c.textSub)),
+            const SizedBox(height: AppSpacing.xs),
+            for (final rental in customerRentals) ...[
+              _RentalVehicleCard(
+                label:
+                    rentalVehicles.byId(rental.vehicleId)?.regNo ?? 'Vehicle',
+                subtitle: rental.rentalStatus,
+                onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) =>
+                      RentalVehicleDetailScreen(vehicleId: rental.vehicleId),
+                )),
+              ),
+              const SizedBox(height: AppSpacing.xs),
+            ],
+          ],
           if (canReview) ...[
             const SizedBox(height: AppSpacing.sm),
             Row(
@@ -331,6 +365,50 @@ class _RentalCustomerCard extends StatelessWidget {
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _RentalVehicleCard extends StatelessWidget {
+  const _RentalVehicleCard({
+    required this.label,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final String label;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Material(
+      color: c.bgSurface,
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.sm),
+          child: Row(children: [
+            Icon(Icons.electric_rickshaw_outlined, color: c.primary, size: 20),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+                child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label,
+                    style:
+                        AppTextStyles.bodyStrong.copyWith(color: c.textMain)),
+                Text(subtitle,
+                    style: AppTextStyles.caption.copyWith(color: c.textSub)),
+              ],
+            )),
+            Icon(Icons.chevron_right, color: c.textSub),
+          ]),
+        ),
       ),
     );
   }

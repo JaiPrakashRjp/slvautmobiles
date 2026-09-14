@@ -25,6 +25,7 @@ import '../../widgets/status_pill.dart';
 import '../../widgets/tab_bar_navy.dart';
 import 'create_customer_screen.dart';
 import 'customer_detail_screen.dart';
+import 'vehicle_detail_screen.dart';
 
 /// Customers list — mockup 07.
 class CustomersListScreen extends StatelessWidget {
@@ -70,7 +71,8 @@ class _CustomersListView extends StatelessWidget {
           onPressed: () => Navigator.of(context).pop(),
         ),
         actions: [
-          GoldCreateButton(iconOnly: true, onPressed: () => _openCreate(context)),
+          GoldCreateButton(
+              iconOnly: true, onPressed: () => _openCreate(context)),
         ],
       ),
       body: SafeArea(
@@ -287,8 +289,16 @@ class _CustomerCard extends StatelessWidget {
     final c = context.colors;
     final auth = context.read<AuthController>();
     final customers = context.read<CustomerService>();
+    final sales = context.read<SaleService>();
+    final vehicles = context.read<VehicleService>();
     final canModify =
         auth.isSuperAdmin || customer.createdBy == auth.currentUser?.id;
+    final customerSales = vm.query.isEmpty
+        ? const []
+        : sales
+            .forCustomer(customer.id)
+            .where((sale) => sale.saleStatus != 'cancelled' && !sale.isRejected)
+            .toList();
     final photoRef = customer.uploadedDocs
         .where((d) => d.docTypeWire == 'photo')
         .cast<DocRef?>()
@@ -357,6 +367,24 @@ class _CustomerCard extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.sm),
           Divider(height: 1, color: c.borderColor),
+          if (customerSales.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.sm),
+            Text('Customer vehicles',
+                style: AppTextStyles.label.copyWith(color: c.textSub)),
+            const SizedBox(height: AppSpacing.xs),
+            for (final sale in customerSales) ...[
+              _CustomerVehicleCard(
+                label: vehicles.byId(sale.vehicleId)?.regNo ?? 'Vehicle',
+                subtitle: sale.saleStatus,
+                onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) =>
+                      VehicleDetailScreen(vehicleId: sale.vehicleId),
+                )),
+              ),
+              const SizedBox(height: AppSpacing.xs),
+            ],
+            Divider(height: 1, color: c.borderColor),
+          ],
           const SizedBox(height: AppSpacing.sm),
           // ── Below: small action icons, right-aligned ──────────────
           Row(
@@ -396,6 +424,50 @@ class _CustomerCard extends StatelessWidget {
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _CustomerVehicleCard extends StatelessWidget {
+  const _CustomerVehicleCard({
+    required this.label,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final String label;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Material(
+      color: c.bgSurface,
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.sm),
+          child: Row(children: [
+            Icon(Icons.directions_car_outlined, color: c.primary, size: 20),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+                child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label,
+                    style:
+                        AppTextStyles.bodyStrong.copyWith(color: c.textMain)),
+                Text(subtitle,
+                    style: AppTextStyles.caption.copyWith(color: c.textSub)),
+              ],
+            )),
+            Icon(Icons.chevron_right, color: c.textSub),
+          ]),
+        ),
       ),
     );
   }

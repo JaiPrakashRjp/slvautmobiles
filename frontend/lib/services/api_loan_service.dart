@@ -58,8 +58,8 @@ class ApiLoanService extends LoanService {
     required int emiAmount,
     required DateTime disbursementDate,
   }) {
-    final firstDue = DateTime(
-        disbursementDate.year, disbursementDate.month + 1, disbursementDate.day);
+    final firstDue = DateTime(disbursementDate.year, disbursementDate.month + 1,
+        disbursementDate.day);
     // Optimistic loan for instant UI; the background POST + refresh reconciles
     // it with the server's authoritative copy (real ids, schedule, status).
     final optimistic = Loan(
@@ -114,8 +114,8 @@ class ApiLoanService extends LoanService {
     final i = _loans.indexWhere((l) => l.id == loanId);
     if (i < 0) return;
     final old = _loans[i];
-    final firstDue = DateTime(
-        disbursementDate.year, disbursementDate.month + 1, disbursementDate.day);
+    final firstDue = DateTime(disbursementDate.year, disbursementDate.month + 1,
+        disbursementDate.day);
     // Optimistic rebuild (fresh schedule, no payments); refresh reconciles.
     _loans[i] = Loan(
       id: old.id,
@@ -127,7 +127,7 @@ class ApiLoanService extends LoanService {
       firstEmiDueDate: firstDue,
       emiAmount: emiAmount,
       emis: MockLoanService.buildSchedule(
-        emiAmount: emiAmount, tenureMonths: tenureMonths, firstDue: firstDue),
+          emiAmount: emiAmount, tenureMonths: tenureMonths, firstDue: firstDue),
       loanStatus: 'active',
       createdBy: old.createdBy,
       createdAt: old.createdAt,
@@ -242,10 +242,10 @@ class ApiLoanService extends LoanService {
   }
 
   @override
-  void delete(String id) {
+  Future<void> delete(String id) async {
+    await _api.delete('/loans/$id');
     _loans.removeWhere((l) => l.id == id);
     notifyListeners();
-    unawaited(_api.delete('/loans/$id').catchError((_) => null));
   }
 
   @override

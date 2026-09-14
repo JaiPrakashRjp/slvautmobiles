@@ -11,11 +11,17 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.dao.loan_dao import LoanDAO
-from app.models.enums import EntityStatus, InstallmentStatus, NotificationEntity
+from app.models.enums import (
+    EntityStatus,
+    InstallmentStatus,
+    InventoryStatus,
+    NotificationEntity,
+)
 from app.models.loan import Loan
 from app.models.loan_emi import LoanEmi
 from app.models.loan_payment import LoanPayment
 from app.models.loan_payment_document import LoanPaymentDocument
+from app.models.vehicle import Vehicle
 from app.schemas.loan import LoanCreate, LoanEdit
 from app.services.notification_service import NotificationService
 from app.services.vehicle_service import initial_status
@@ -184,6 +190,13 @@ class LoanService:
     @staticmethod
     def delete(db: Session, loan_id: int) -> None:
         loan = LoanService.get(db, loan_id)
+        # Removing a loan must not remove its customer or vehicle. Release the
+        # loan-module vehicle back to inventory so it can be assigned again.
+        if loan.vehicle_id is not None:
+            vehicle = db.get(Vehicle, loan.vehicle_id)
+            if vehicle is not None and vehicle.module_id == loan.module_id:
+                vehicle.assigned_to_customer_id = None
+                vehicle.inventory_status = InventoryStatus.available
         db.delete(loan)
         db.commit()
 
