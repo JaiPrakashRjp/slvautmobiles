@@ -42,6 +42,19 @@ class _LoanCustomersScreenState extends State<LoanCustomersScreen> {
   final _pageCtrl = PageController();
 
   @override
+  void initState() {
+    super.initState();
+    // Customer-name search combines all three datasets, so load them together
+    // whenever this tab is first opened.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.read<LoanCustomerService>().refresh();
+      context.read<LoanService>().refresh();
+      context.read<LoanVehicleService>().refresh();
+    });
+  }
+
+  @override
   void dispose() {
     _pageCtrl.dispose();
     super.dispose();
@@ -220,6 +233,34 @@ class _LoanCustomerCard extends StatelessWidget {
     if (ok == true) service.delete(customer.id);
   }
 
+  Future<void> _confirmDeleteLoan(BuildContext context, loan) async {
+    final loans = context.read<LoanService>();
+    final vehicles = context.read<LoanVehicleService>();
+    final confirmed = await ConfirmationDialog.show(
+      context,
+      title: 'Delete loan',
+      message: 'Delete this loan and all of its EMI payments and payment '
+          'documents? This cannot be undone. The customer will remain, and '
+          'the vehicle will become available again.',
+      confirmLabel: 'Delete loan',
+      danger: true,
+    );
+    if (confirmed != true) return;
+    try {
+      await loans.delete(loan.id);
+      await vehicles.refresh();
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Loan deleted. Vehicle is available again.'),
+      ));
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Could not delete the loan. Please try again.'),
+      ));
+    }
+  }
+
   /// Tap the avatar → enlarged, zoomable photo in a dialog with a Share button.
   void _showPhoto(
       BuildContext context, LoanCustomerService customers, DocRef ref) {
@@ -381,6 +422,10 @@ class _LoanCustomerCard extends StatelessWidget {
                   builder: (_) =>
                       LoanVehicleDetailScreen(vehicleId: loan.vehicleId!),
                 )),
+                onDelete:
+                    auth.isSuperAdmin || loan.createdBy == auth.currentUser?.id
+                        ? () => _confirmDeleteLoan(context, loan)
+                        : null,
               ),
               const SizedBox(height: AppSpacing.xs),
             ],
@@ -430,11 +475,13 @@ class _LoanVehicleCard extends StatelessWidget {
     required this.label,
     required this.subtitle,
     required this.onTap,
+    this.onDelete,
   });
 
   final String label;
   final String subtitle;
   final VoidCallback onTap;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -461,6 +508,12 @@ class _LoanVehicleCard extends StatelessWidget {
                     style: AppTextStyles.caption.copyWith(color: c.textSub)),
               ],
             )),
+            if (onDelete != null)
+              IconButton(
+                icon: Icon(Icons.delete_outline, color: c.danger),
+                tooltip: 'Delete loan',
+                onPressed: onDelete,
+              ),
             Icon(Icons.chevron_right, color: c.textSub),
           ]),
         ),

@@ -42,6 +42,19 @@ class _LoanVehiclesScreenState extends State<LoanVehiclesScreen> {
   final _pageCtrl = PageController();
 
   @override
+  void initState() {
+    super.initState();
+    // The search and On loan tab depend on both collections. Refreshing on
+    // entry prevents stale/empty caches from making a newly created loan
+    // vehicle impossible to find.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.read<LoanVehicleService>().refresh();
+      context.read<LoanService>().refresh();
+    });
+  }
+
+  @override
   void dispose() {
     _pageCtrl.dispose();
     super.dispose();
@@ -173,8 +186,8 @@ class _LoanVehiclesScreenState extends State<LoanVehiclesScreen> {
                 ),
               ),
               Padding(
-                padding: EdgeInsets.fromLTRB(context.screenHPadding,
-                    0, context.screenHPadding, AppSpacing.sm),
+                padding: EdgeInsets.fromLTRB(context.screenHPadding, 0,
+                    context.screenHPadding, AppSpacing.sm),
                 child: TextField(
                   onChanged: (q) => setState(() => _query = q),
                   decoration: InputDecoration(
@@ -223,12 +236,39 @@ class _LoanVehicleCard extends StatelessWidget {
     final ok = await ConfirmationDialog.show(
       context,
       title: 'Delete vehicle',
-      message:
-          'Remove ${vehicle.displayLabel}? This cannot be undone.',
+      message: 'Remove ${vehicle.displayLabel}? This cannot be undone.',
       confirmLabel: 'Delete',
       danger: true,
     );
     if (ok == true) service.delete(vehicle.id);
+  }
+
+  Future<void> _confirmDeleteLoan(BuildContext context, loan) async {
+    final loans = context.read<LoanService>();
+    final vehicles = context.read<LoanVehicleService>();
+    final confirmed = await ConfirmationDialog.show(
+      context,
+      title: 'Delete loan',
+      message: 'Delete this loan and all of its EMI payments and payment '
+          'documents? This cannot be undone. The customer will remain, and '
+          'the vehicle will become available again.',
+      confirmLabel: 'Delete loan',
+      danger: true,
+    );
+    if (confirmed != true) return;
+    try {
+      await loans.delete(loan.id);
+      await vehicles.refresh();
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Loan deleted. Vehicle is available again.'),
+      ));
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Could not delete the loan. Please try again.'),
+      ));
+    }
   }
 
   /// Tap the photo → enlarged, zoomable image in a dialog with a Share button.
@@ -305,10 +345,16 @@ class _LoanVehicleCard extends StatelessWidget {
     final canModify =
         auth.isSuperAdmin || vehicle.createdBy == auth.currentUser?.id;
     // No delete once the vehicle has any loan (current or past history).
-    final hasLoans = context
+    final hasLoans =
+        context.read<LoanService>().all().any((l) => l.vehicleId == vehicle.id);
+    final activeLoan = context
         .read<LoanService>()
         .all()
-        .any((l) => l.vehicleId == vehicle.id);
+        .where((l) =>
+            l.vehicleId == vehicle.id &&
+            !l.isSeized &&
+            l.loanStatus != 'rejected')
+        .firstOrNull;
     final photoRef = vehicle.uploadedDocs
         .where((d) => d.docTypeWire == 'photo')
         .cast<DocRef?>()
@@ -336,8 +382,8 @@ class _LoanVehicleCard extends StatelessWidget {
                     child: photoRef == null
                         ? Container(
                             color: c.bgSurface,
-                            child: Icon(Icons.electric_rickshaw,
-                                color: c.textSub),
+                            child:
+                                Icon(Icons.electric_rickshaw, color: c.textSub),
                           )
                         : CachedNetworkImage(
                             imageUrl: service.documentUrl(photoRef.id),
@@ -399,8 +445,7 @@ class _LoanVehicleCard extends StatelessWidget {
                     child: TextButton.icon(
                       onPressed: () => Navigator.of(context).push(
                         MaterialPageRoute(
-                          builder: (_) =>
-                              NewLoanScreen(vehicleId: vehicle.id),
+                          builder: (_) => NewLoanScreen(vehicleId: vehicle.id),
                         ),
                       ),
                       icon: const Icon(Icons.request_quote_outlined, size: 18),
@@ -410,6 +455,16 @@ class _LoanVehicleCard extends StatelessWidget {
                 )
               else
                 const Spacer(),
+              if (activeLoan != null) ...[
+                IconButtonSoft(
+                  icon: Icons.delete_outline,
+                  tooltip: 'Delete loan',
+                  danger: true,
+                  compact: true,
+                  onPressed: () => _confirmDeleteLoan(context, activeLoan),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+              ],
               if (canModify) ...[
                 IconButtonSoft(
                   icon: Icons.edit_outlined,
