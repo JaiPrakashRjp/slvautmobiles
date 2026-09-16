@@ -1,6 +1,7 @@
 """Application settings loaded from environment / .env."""
 import os
 
+
 from dotenv import load_dotenv
 
 # Load .env sitting at backend/python/.env (two levels up from this file).

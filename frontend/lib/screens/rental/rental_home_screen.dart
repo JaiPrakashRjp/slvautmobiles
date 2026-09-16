@@ -104,6 +104,7 @@ class _RentalVehiclesTab extends StatefulWidget {
 }
 
 class _RentalVehiclesTabState extends State<_RentalVehiclesTab> {
+  String _query = '';
   int _tab = 0; // 0 = Not rented, 1 = Rented
 
   @override
@@ -124,7 +125,14 @@ class _RentalVehiclesTabState extends State<_RentalVehiclesTab> {
     final c = context.colors;
     final vehiclesSvc = context.watch<RentalVehicleService>();
     // Not rented = idle (unassigned); Rented = currently out on rent (assigned).
-    final list = _tab == 0 ? vehiclesSvc.unassigned() : vehiclesSvc.assigned();
+    final q = _query.trim().toLowerCase();
+    final list = (_tab == 0 ? vehiclesSvc.unassigned() : vehiclesSvc.assigned())
+        .where((v) {
+      if (q.isEmpty) return true;
+      return v.regNo.toLowerCase().contains(q) ||
+          (v.chassisNo ?? '').toLowerCase().contains(q) ||
+          (v.model ?? '').toLowerCase().contains(q);
+    }).toList();
 
     return Scaffold(
       backgroundColor: c.bgCanvas,
@@ -172,11 +180,25 @@ class _RentalVehiclesTabState extends State<_RentalVehiclesTab> {
             children: [
               Padding(
                 padding: EdgeInsets.fromLTRB(context.screenHPadding,
-                    AppSpacing.lg, context.screenHPadding, AppSpacing.md),
+                    AppSpacing.lg, context.screenHPadding, AppSpacing.sm),
                 child: TabBarNavy(
                   tabs: const ['Not rented', 'Rented'],
                   index: _tab,
                   onChanged: (i) => setState(() => _tab = i),
+                ),
+              ),
+              Padding(
+                padding: EdgeInsets.fromLTRB(context.screenHPadding, 0,
+                    context.screenHPadding, AppSpacing.sm),
+                child: TextField(
+                  onChanged: (q) => setState(() => _query = q),
+                  decoration: InputDecoration(
+                    hintText: 'Search chassis / reg no / model…',
+                    prefixIcon: const Icon(Icons.search, size: 20),
+                    isDense: true,
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                  ),
                 ),
               ),
               Expanded(
