@@ -6,7 +6,6 @@ from sqlalchemy.orm import Session
 
 from app.dao.device_token_dao import DeviceTokenDAO
 from app.dao.notification_dao import NotificationDAO
-from app.dao.user_dao import UserDAO
 from app.models.enums import NotificationEntity, NotificationType
 from app.models.notification import Notification
 from app.services.fcm_service import FcmService
@@ -32,31 +31,36 @@ class NotificationService:
         *,
         entity_type: NotificationEntity,
         entity_id: int,
+        creator_id: int,
         title: str,
         message: str = "",
     ) -> None:
-        """Notify every super admin that an admin-created record needs approval.
+        """Notify the one super admin who owns this admin's data silo that a
+        record needs approval — never every super admin, since data (and
+        therefore approval authority) is isolated per silo. `creator_id` is the
+        admin who created the record; their silo's owner is who gets notified.
 
-        Adds rows in the current transaction (the caller commits). Also fires an
-        FCM push to the super admins' devices so it reaches them even when the
+        Adds a row in the current transaction (the caller commits). Also fires
+        an FCM push to that admin's devices so it reaches them even when the
         app is closed (best-effort; a push failure never breaks the caller).
         """
-        super_admin_ids = [sa.id for sa in UserDAO.super_admins(db)]
-        for sa_id in super_admin_ids:
-            NotificationDAO.add(
-                db,
-                Notification(
-                    recipient_user_id=sa_id,
-                    type=NotificationType.verification_request,
-                    title=title,
-                    message=message,
-                    entity_type=entity_type,
-                    entity_id=entity_id,
-                ),
-            )
+        from app.security import silo_ids_for_creator
+
+        recipient_user_id = silo_ids_for_creator(db, creator_id)[0]
+        NotificationDAO.add(
+            db,
+            Notification(
+                recipient_user_id=recipient_user_id,
+                type=NotificationType.verification_request,
+                title=title,
+                message=message,
+                entity_type=entity_type,
+                entity_id=entity_id,
+            ),
+        )
 
         # Push to their phones (tokens registered earlier, in their own commit).
-        tokens = DeviceTokenDAO.tokens_for_users(db, super_admin_ids)
+        tokens = DeviceTokenDAO.tokens_for_users(db, [recipient_user_id])
         FcmService.send(
             tokens,
             title=title,
@@ -73,13 +77,17 @@ class NotificationService:
         db: Session,
         *,
         vehicle_id: int,
+        creator_id: int,
         title: str,
         message: str = "",
     ) -> None:
-        """Notify all staff that a vehicle document (insurance / FC / permit) is
-        expiring — in-app + FCM. Tapping opens the vehicle so they can renew and
-        update the date. Best-effort push."""
-        staff_ids = [u.id for u in UserDAO.active_staff(db)]
+        """Notify the vehicle's own silo (not every staff member) that a
+        document (insurance / FC / permit) is expiring — in-app + FCM. Tapping
+        opens the vehicle so they can renew and update the date. Best-effort
+        push."""
+        from app.security import silo_ids_for_creator
+
+        staff_ids = silo_ids_for_creator(db, creator_id)
         for uid in staff_ids:
             NotificationDAO.add(
                 db,
@@ -110,14 +118,17 @@ class NotificationService:
         *,
         sale_id: int,
         installment_id: int,
+        creator_id: int,
         title: str,
         message: str = "",
     ) -> None:
-        """Notify all staff (admins + super admins) that an installment is due —
-        in-app + FCM push (reaches closed phones). Tapping opens the sale so they
-        can call the customer and record the payment. Best-effort push.
+        """Notify the sale's own silo that an installment is due — in-app +
+        FCM push (reaches closed phones). Tapping opens the sale so they can
+        call the customer and record the payment. Best-effort push.
         """
-        staff_ids = [u.id for u in UserDAO.active_staff(db)]
+        from app.security import silo_ids_for_creator
+
+        staff_ids = silo_ids_for_creator(db, creator_id)
         for uid in staff_ids:
             NotificationDAO.add(
                 db,
@@ -149,14 +160,17 @@ class NotificationService:
         *,
         loan_id: int,
         emi_id: int,
+        creator_id: int,
         title: str,
         message: str = "",
     ) -> None:
-        """Notify all staff that a loan EMI is due — in-app + FCM push. Tapping
-        opens the loan so they can call the customer and record the payment.
-        Best-effort push (a failure never breaks the caller).
+        """Notify the loan's own silo that an EMI is due — in-app + FCM push.
+        Tapping opens the loan so they can call the customer and record the
+        payment. Best-effort push (a failure never breaks the caller).
         """
-        staff_ids = [u.id for u in UserDAO.active_staff(db)]
+        from app.security import silo_ids_for_creator
+
+        staff_ids = silo_ids_for_creator(db, creator_id)
         for uid in staff_ids:
             NotificationDAO.add(
                 db,
@@ -188,14 +202,17 @@ class NotificationService:
         *,
         rental_id: int,
         installment_id: int,
+        creator_id: int,
         title: str,
         message: str = "",
     ) -> None:
-        """Notify all staff that a rent collection is due — in-app + FCM push.
-        Tapping opens the rental so they can call the renter and record the rent.
-        Best-effort push (a failure never breaks the caller).
+        """Notify the rental's own silo that a rent collection is due — in-app
+        + FCM push. Tapping opens the rental so they can call the renter and
+        record the rent. Best-effort push (a failure never breaks the caller).
         """
-        staff_ids = [u.id for u in UserDAO.active_staff(db)]
+        from app.security import silo_ids_for_creator
+
+        staff_ids = silo_ids_for_creator(db, creator_id)
         for uid in staff_ids:
             NotificationDAO.add(
                 db,

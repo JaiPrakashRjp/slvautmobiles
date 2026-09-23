@@ -22,8 +22,11 @@ class CustomerDAO:
         q: str | None = None,
         limit: int | None = None,
         offset: int | None = None,
+        created_by_in: list[int] | None = None,
     ) -> list[Customer]:
         stmt = select(Customer).options(selectinload(Customer.documents))
+        if created_by_in is not None:
+            stmt = stmt.where(Customer.created_by.in_(created_by_in))
         # Scope to a module (auto_sale / rental / …) so each module keeps its own
         # independent customer list. Unknown module → no rows.
         if module is not None:

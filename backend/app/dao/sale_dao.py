@@ -26,8 +26,13 @@ class SaleDAO:
         )
 
     @staticmethod
-    def list(db: Session, *, status=None, customer_id=None, vehicle_id=None) -> list[Sale]:
+    def list(
+        db: Session, *, status=None, customer_id=None, vehicle_id=None,
+        created_by_in: list[int] | None = None,
+    ) -> list[Sale]:
         stmt = SaleDAO._with_relations(select(Sale))
+        if created_by_in is not None:
+            stmt = stmt.where(Sale.created_by.in_(created_by_in))
         if status is not None:
             stmt = stmt.where(Sale.status == status)
         if customer_id is not None:

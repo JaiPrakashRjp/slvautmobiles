@@ -1,7 +1,9 @@
 """FastAPI router for the customers module (controller layer).
 
 Acting user (id + role) comes from the Bearer token, not client params;
-approvals require the Super Admin.
+approvals require the Super Admin. Every read/write is also scoped to the
+caller's data silo (get_silo_user_ids) so one super_admin's data is never
+visible to, or editable by, another.
 """
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from fastapi.responses import Response
@@ -16,7 +18,7 @@ from app.schemas.customer import (
     CustomerUpdate,
     DocumentOut,
 )
-from app.security import get_current_user, require_super_admin
+from app.security import get_current_user, get_silo_user_ids, require_super_admin
 from app.services.customer_service import CustomerService
 
 router = APIRouter(prefix="/customers", tags=["customers"])
@@ -25,6 +27,7 @@ router = APIRouter(prefix="/customers", tags=["customers"])
 @router.get("", response_model=list[CustomerOut])
 def list_customers(
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
     status: EntityStatus | None = None,
     branch: Branch | None = None,
     module: str | None = Query(None, description="module code (auto_sale / rental)"),
@@ -34,13 +37,17 @@ def list_customers(
 ):
     return CustomerService.list(
         db, status=status, branch=branch, module=module, q=q,
-        limit=limit, offset=offset,
+        limit=limit, offset=offset, silo_ids=get_silo_user_ids(db, current_user),
     )
 
 
 @router.get("/{customer_id}", response_model=CustomerOut)
-def get_customer(customer_id: int, db: Session = Depends(get_db)):
-    return CustomerService.get(db, customer_id)
+def get_customer(
+    customer_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return CustomerService.get(db, customer_id, get_silo_user_ids(db, current_user))
 
 
 @router.post("", response_model=CustomerOut, status_code=201)
@@ -61,7 +68,7 @@ def update_customer(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return CustomerService.update(db, customer_id, payload)
+    return CustomerService.update(db, customer_id, payload, get_silo_user_ids(db, current_user))
 
 
 @router.post("/{customer_id}/confirm", response_model=CustomerOut)
@@ -70,7 +77,9 @@ def confirm_customer(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_super_admin),
 ):
-    return CustomerService.confirm(db, customer_id, current_user.id)
+    return CustomerService.confirm(
+        db, customer_id, current_user.id, get_silo_user_ids(db, current_user)
+    )
 
 
 @router.post("/{customer_id}/reject", response_model=CustomerOut)
@@ -80,7 +89,9 @@ def reject_customer(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_super_admin),
 ):
-    return CustomerService.reject(db, customer_id, reason, current_user.id)
+    return CustomerService.reject(
+        db, customer_id, reason, current_user.id, get_silo_user_ids(db, current_user)
+    )
 
 
 @router.delete("/{customer_id}", status_code=204)
@@ -89,7 +100,7 @@ def delete_customer(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    CustomerService.delete(db, customer_id)
+    CustomerService.delete(db, customer_id, get_silo_user_ids(db, current_user))
     return Response(status_code=204)
 
 
@@ -104,13 +115,18 @@ async def upload_document(
 ):
     content = await file.read()
     return CustomerService.add_document(
-        db, customer_id, doc_type, file.filename, file.content_type, content
+        db, customer_id, doc_type, file.filename, file.content_type, content,
+        get_silo_user_ids(db, current_user),
     )
 
 
 @router.get("/documents/{doc_id}")
-def download_document(doc_id: int, db: Session = Depends(get_db)):
-    doc = CustomerService.get_document(db, doc_id)
+def download_document(
+    doc_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    doc = CustomerService.get_document(db, doc_id, get_silo_user_ids(db, current_user))
     return Response(
         content=doc.content,
         media_type=doc.mime_type,
@@ -127,5 +143,5 @@ def delete_document(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    CustomerService.delete_document(db, doc_id)
+    CustomerService.delete_document(db, doc_id, get_silo_user_ids(db, current_user))
     return Response(status_code=204)

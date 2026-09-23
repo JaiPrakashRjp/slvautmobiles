@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models.user import User
 from app.schemas.search import SearchResult
-from app.security import get_current_user
+from app.security import get_current_user, get_silo_user_ids
 from app.services.search_service import SearchService
 
 router = APIRouter(prefix="/search", tags=["search"])
@@ -18,4 +18,4 @@ def global_search(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return SearchService.search(db, q, limit=limit)
+    return SearchService.search(db, q, limit=limit, silo_ids=get_silo_user_ids(db, current_user))

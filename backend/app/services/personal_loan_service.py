@@ -1,4 +1,6 @@
 """Business logic for personal loans (simple monthly EMI, mark-paid)."""
+from __future__ import annotations  # a `list` staticmethod below shadows builtin list otherwise
+
 import calendar
 from datetime import date, datetime, timezone
 
@@ -46,13 +48,15 @@ class PersonalLoanService:
 
     # ── loans ────────────────────────────────────────────────────────────────
     @staticmethod
-    def list(db: Session) -> list[PersonalLoan]:
-        return PersonalLoanDAO.loans(db)
+    def list(db: Session, *, silo_ids: list[int] | None = None) -> list[PersonalLoan]:
+        return PersonalLoanDAO.loans(db, created_by_in=silo_ids)
 
     @staticmethod
-    def get(db: Session, loan_id: int) -> PersonalLoan:
+    def get(db: Session, loan_id: int, silo_ids: list[int] | None = None) -> PersonalLoan:
         loan = PersonalLoanDAO.get(db, loan_id)
         if loan is None:
+            raise HTTPException(status_code=404, detail="Personal loan not found")
+        if silo_ids is not None and loan.created_by not in silo_ids:
             raise HTTPException(status_code=404, detail="Personal loan not found")
         return loan
 
@@ -88,8 +92,10 @@ class PersonalLoanService:
         return PersonalLoanDAO.get(db, loan.id)
 
     @staticmethod
-    def mark_emi_paid(db: Session, loan_id: int, emi_id: int) -> PersonalLoan:
-        loan = PersonalLoanService.get(db, loan_id)
+    def mark_emi_paid(
+        db: Session, loan_id: int, emi_id: int, silo_ids: list[int] | None = None
+    ) -> PersonalLoan:
+        loan = PersonalLoanService.get(db, loan_id, silo_ids)
         emi = PersonalLoanDAO.get_emi(db, emi_id)
         if emi is None or emi.personal_loan_id != loan.id:
             raise HTTPException(status_code=404, detail="EMI not found")
@@ -102,7 +108,7 @@ class PersonalLoanService:
         return PersonalLoanDAO.get(db, loan_id)
 
     @staticmethod
-    def delete(db: Session, loan_id: int) -> None:
-        loan = PersonalLoanService.get(db, loan_id)
+    def delete(db: Session, loan_id: int, silo_ids: list[int] | None = None) -> None:
+        loan = PersonalLoanService.get(db, loan_id, silo_ids)
         db.delete(loan)
         db.commit()

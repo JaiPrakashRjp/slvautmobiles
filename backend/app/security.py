@@ -44,3 +44,44 @@ def require_super_admin(user: User = Depends(get_current_user)) -> User:
     if user.role.name != "super_admin":
         raise HTTPException(status_code=403, detail="Super admin only")
     return user
+
+
+def silo_member_ids(db: Session, owner_id: int) -> list[int]:
+    """All user ids in a super_admin's data silo: themself plus every admin
+    they created. Each super_admin has their own fully separate pool of
+    business data; an admin shares their creating super admin's silo.
+    """
+    from app.models.role import Role  # local import avoids a circular import
+
+    admin_ids = [
+        u.id
+        for u in db.query(User)
+        .join(Role, User.role_id == Role.id)
+        .filter(User.created_by == owner_id, Role.name == "admin")
+        .all()
+    ]
+    return [owner_id, *admin_ids]
+
+
+def get_silo_user_ids(db: Session, user: User) -> list[int]:
+    """Data-isolation silo for this signed-in user (controllers already have
+    the User object from the JWT via get_current_user, so this skips a
+    redundant lookup). Used to filter created_by on every business-data query
+    so one super_admin's data is never visible to another.
+    """
+    owner_id = user.id if user.role.name == "super_admin" else user.created_by
+    return silo_member_ids(db, owner_id)
+
+
+def silo_ids_for_creator(db: Session, creator_id: int) -> list[int]:
+    """Data-isolation silo that a given entity's `created_by` id belongs to —
+    for background jobs (reminder crons) that only have the entity, not a
+    live signed-in User.
+    """
+    creator = db.get(User, creator_id)
+    owner_id = (
+        creator_id
+        if creator is None or creator.role.name == "super_admin"
+        else creator.created_by
+    )
+    return silo_member_ids(db, owner_id)

@@ -2,7 +2,9 @@
 
 The acting user (id + role) comes from the Bearer token via get_current_user,
 not from client params. Approvals (confirm/reject/cancel) require the Super
-Admin; recording payments only needs an authenticated user.
+Admin; recording payments only needs an authenticated user. Every read/write
+is also scoped to the caller's data silo (get_silo_user_ids) so one
+super_admin's data is never visible to, or editable by, another.
 """
 from datetime import date
 
@@ -20,7 +22,7 @@ from app.schemas.sale import (
     SaleEdit,
     SaleOut,
 )
-from app.security import get_current_user, require_super_admin
+from app.security import get_current_user, get_silo_user_ids, require_super_admin
 from app.services.sale_service import SaleService
 
 router = APIRouter(prefix="/sales", tags=["sales"])
@@ -29,16 +31,24 @@ router = APIRouter(prefix="/sales", tags=["sales"])
 @router.get("", response_model=list[SaleOut])
 def list_sales(
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
     status: EntityStatus | None = None,
     customer_id: int | None = None,
     vehicle_id: int | None = None,
 ):
-    return SaleService.list(db, status=status, customer_id=customer_id, vehicle_id=vehicle_id)
+    return SaleService.list(
+        db, status=status, customer_id=customer_id, vehicle_id=vehicle_id,
+        silo_ids=get_silo_user_ids(db, current_user),
+    )
 
 
 @router.get("/{sale_id}", response_model=SaleOut)
-def get_sale(sale_id: int, db: Session = Depends(get_db)):
-    return SaleService.get(db, sale_id)
+def get_sale(
+    sale_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return SaleService.get(db, sale_id, get_silo_user_ids(db, current_user))
 
 
 @router.post("", response_model=SaleOut, status_code=201)
@@ -63,6 +73,7 @@ def edit_sale(
     return SaleService.edit(
         db, sale_id, payload,
         actor_role=current_user.role.name, by_user_id=current_user.id,
+        silo_ids=get_silo_user_ids(db, current_user),
     )
 
 
@@ -72,7 +83,9 @@ def approve_edit(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_super_admin),
 ):
-    return SaleService.approve_edit(db, sale_id, by_user_id=current_user.id)
+    return SaleService.approve_edit(
+        db, sale_id, by_user_id=current_user.id, silo_ids=get_silo_user_ids(db, current_user)
+    )
 
 
 @router.post("/{sale_id}/edit/reject", response_model=SaleOut)
@@ -82,7 +95,9 @@ def reject_edit(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_super_admin),
 ):
-    return SaleService.reject_edit(db, sale_id, reason, by_user_id=current_user.id)
+    return SaleService.reject_edit(
+        db, sale_id, reason, by_user_id=current_user.id, silo_ids=get_silo_user_ids(db, current_user)
+    )
 
 
 # ── Reminders / collections ─────────────────────────────────────────────────
@@ -95,7 +110,7 @@ def add_reminder(
 ):
     return SaleService.add_reminder(
         db, sale_id, due_date=payload.due_date, amount=payload.amount,
-        created_by=current_user.id,
+        created_by=current_user.id, silo_ids=get_silo_user_ids(db, current_user),
     )
 
 
@@ -105,7 +120,9 @@ def take_call(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return SaleService.take_call(db, installment_id, user_id=current_user.id)
+    return SaleService.take_call(
+        db, installment_id, user_id=current_user.id, silo_ids=get_silo_user_ids(db, current_user)
+    )
 
 
 @router.post("/installments/{installment_id}/cancel", response_model=SaleOut)
@@ -116,7 +133,8 @@ def cancel_reminder(
     current_user: User = Depends(get_current_user),
 ):
     return SaleService.cancel_reminder(
-        db, installment_id, reason, user_id=current_user.id
+        db, installment_id, reason, user_id=current_user.id,
+        silo_ids=get_silo_user_ids(db, current_user),
     )
 
 
@@ -142,6 +160,7 @@ async def submit_installment_payment(
     return SaleService.submit_payment(
         db, installment_id, amount=amount, actor_role=current_user.role.name,
         recorded_by=current_user.id, paid_on=paid_on, screenshot=shot,
+        silo_ids=get_silo_user_ids(db, current_user),
     )
 
 
@@ -169,6 +188,7 @@ async def submit_manual_payment(
     return SaleService.submit_manual_payment(
         db, sale_id, amount=amount, actor_role=current_user.role.name,
         recorded_by=current_user.id, paid_on=paid_on, screenshot=shot,
+        silo_ids=get_silo_user_ids(db, current_user),
     )
 
 
@@ -178,7 +198,9 @@ def approve_payment(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_super_admin),
 ):
-    return SaleService.approve_payment(db, payment_id, by_user_id=current_user.id)
+    return SaleService.approve_payment(
+        db, payment_id, by_user_id=current_user.id, silo_ids=get_silo_user_ids(db, current_user)
+    )
 
 
 @router.post("/payments/{payment_id}/decline", response_model=SaleOut)
@@ -188,12 +210,19 @@ def decline_payment(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_super_admin),
 ):
-    return SaleService.decline_payment(db, payment_id, reason, by_user_id=current_user.id)
+    return SaleService.decline_payment(
+        db, payment_id, reason, by_user_id=current_user.id,
+        silo_ids=get_silo_user_ids(db, current_user),
+    )
 
 
 @router.get("/payments/documents/{doc_id}")
-def payment_screenshot(doc_id: int, db: Session = Depends(get_db)):
-    doc = SaleService.payment_document(db, doc_id)
+def payment_screenshot(
+    doc_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    doc = SaleService.payment_document(db, doc_id, get_silo_user_ids(db, current_user))
     return Response(
         content=doc.content,
         media_type=doc.mime_type,
@@ -207,7 +236,9 @@ def pay_off(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return SaleService.pay_off(db, sale_id, recorded_by=current_user.id)
+    return SaleService.pay_off(
+        db, sale_id, recorded_by=current_user.id, silo_ids=get_silo_user_ids(db, current_user)
+    )
 
 
 @router.post("/{sale_id}/confirm", response_model=SaleOut)
@@ -216,7 +247,7 @@ def confirm_sale(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_super_admin),
 ):
-    return SaleService.confirm(db, sale_id, current_user.id)
+    return SaleService.confirm(db, sale_id, current_user.id, get_silo_user_ids(db, current_user))
 
 
 @router.post("/{sale_id}/confirm-sold", response_model=SaleOut)
@@ -226,7 +257,9 @@ def confirm_sold(
     current_user: User = Depends(get_current_user),
 ):
     """Confirm a fully-paid sale as sold (hides the Seize option)."""
-    return SaleService.confirm_sold(db, sale_id, by_user_id=current_user.id)
+    return SaleService.confirm_sold(
+        db, sale_id, by_user_id=current_user.id, silo_ids=get_silo_user_ids(db, current_user)
+    )
 
 
 @router.post("/{sale_id}/reject", response_model=SaleOut)
@@ -236,7 +269,9 @@ def reject_sale(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_super_admin),
 ):
-    return SaleService.reject(db, sale_id, reason, current_user.id)
+    return SaleService.reject(
+        db, sale_id, reason, current_user.id, get_silo_user_ids(db, current_user)
+    )
 
 
 @router.post("/{sale_id}/cancel", response_model=SaleOut)
@@ -248,7 +283,8 @@ def cancel_sale(
 ):
     # Super admin → immediate; admin → pending super-admin approval.
     return SaleService.cancel(
-        db, sale_id, reason, current_user.id, current_user.role.name
+        db, sale_id, reason, current_user.id, current_user.role.name,
+        get_silo_user_ids(db, current_user),
     )
 
 
@@ -258,7 +294,9 @@ def approve_unsell(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_super_admin),
 ):
-    return SaleService.approve_unsell(db, sale_id, by_user_id=current_user.id)
+    return SaleService.approve_unsell(
+        db, sale_id, by_user_id=current_user.id, silo_ids=get_silo_user_ids(db, current_user)
+    )
 
 
 @router.post("/{sale_id}/cancel/reject", response_model=SaleOut)
@@ -268,7 +306,9 @@ def reject_unsell(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_super_admin),
 ):
-    return SaleService.reject_unsell(db, sale_id, reason, by_user_id=current_user.id)
+    return SaleService.reject_unsell(
+        db, sale_id, reason, by_user_id=current_user.id, silo_ids=get_silo_user_ids(db, current_user)
+    )
 
 
 @router.post("/{sale_id}/seize", response_model=SaleOut)
@@ -280,7 +320,8 @@ def seize_sale(
 ):
     # Super admin → immediate; admin → pending super-admin approval.
     return SaleService.seize(
-        db, sale_id, reason, current_user.id, current_user.role.name
+        db, sale_id, reason, current_user.id, current_user.role.name,
+        get_silo_user_ids(db, current_user),
     )
 
 
@@ -290,7 +331,9 @@ def approve_seize(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_super_admin),
 ):
-    return SaleService.approve_seize(db, sale_id, by_user_id=current_user.id)
+    return SaleService.approve_seize(
+        db, sale_id, by_user_id=current_user.id, silo_ids=get_silo_user_ids(db, current_user)
+    )
 
 
 @router.post("/{sale_id}/seize/reject", response_model=SaleOut)
@@ -300,7 +343,9 @@ def reject_seize(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_super_admin),
 ):
-    return SaleService.reject_seize(db, sale_id, reason, by_user_id=current_user.id)
+    return SaleService.reject_seize(
+        db, sale_id, reason, by_user_id=current_user.id, silo_ids=get_silo_user_ids(db, current_user)
+    )
 
 
 @router.post("/{sale_id}/seize/cancel", response_model=SaleOut)
@@ -310,7 +355,9 @@ def cancel_seize(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return SaleService.cancel_seize(db, sale_id, remarks, by_user_id=current_user.id)
+    return SaleService.cancel_seize(
+        db, sale_id, remarks, by_user_id=current_user.id, silo_ids=get_silo_user_ids(db, current_user)
+    )
 
 
 @router.post("/{sale_id}/seize/confirm", response_model=SaleOut)
@@ -320,7 +367,9 @@ def confirm_seize(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return SaleService.confirm_seize(db, sale_id, remarks, by_user_id=current_user.id)
+    return SaleService.confirm_seize(
+        db, sale_id, remarks, by_user_id=current_user.id, silo_ids=get_silo_user_ids(db, current_user)
+    )
 
 
 @router.delete("/{sale_id}", status_code=204)
@@ -329,10 +378,14 @@ def delete_sale(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    SaleService.delete(db, sale_id)
+    SaleService.delete(db, sale_id, get_silo_user_ids(db, current_user))
     return Response(status_code=204)
 
 
 @router.get("/{sale_id}/reminders", response_model=list[ReminderLogOut])
-def sale_reminders(sale_id: int, db: Session = Depends(get_db)):
-    return SaleService.reminders_for_sale(db, sale_id)
+def sale_reminders(
+    sale_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return SaleService.reminders_for_sale(db, sale_id, get_silo_user_ids(db, current_user))

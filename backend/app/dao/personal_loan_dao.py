@@ -42,10 +42,12 @@ class PersonalLoanDAO:
         return stmt.options(selectinload(PersonalLoan.emis))
 
     @staticmethod
-    def loans(db: Session) -> list[PersonalLoan]:
+    def loans(db: Session, *, created_by_in: list[int] | None = None) -> list[PersonalLoan]:
         stmt = PersonalLoanDAO._with_relations(select(PersonalLoan)).order_by(
             PersonalLoan.created_at.desc()
         )
+        if created_by_in is not None:
+            stmt = stmt.where(PersonalLoan.created_by.in_(created_by_in))
         return list(db.scalars(stmt).all())
 
     @staticmethod

@@ -33,8 +33,11 @@ class LoanDAO:
         module: str | None = None,
         status=None,
         customer_id: int | None = None,
+        created_by_in: list[int] | None = None,
     ) -> list[Loan]:
         stmt = LoanDAO._with_relations(select(Loan))
+        if created_by_in is not None:
+            stmt = stmt.where(Loan.created_by.in_(created_by_in))
         if module is not None:
             stmt = stmt.where(
                 Loan.module_id

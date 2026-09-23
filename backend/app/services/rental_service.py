@@ -41,16 +41,21 @@ def initial_status(actor_role: str) -> EntityStatus:
 class RentalService:
     # ── Reads ────────────────────────────────────────────────────────────────
     @staticmethod
-    def list(db: Session, *, status=None, customer_id=None, vehicle_id=None, module=None):
+    def list(
+        db: Session, *, status=None, customer_id=None, vehicle_id=None, module=None,
+        silo_ids: list[int] | None = None,
+    ):
         return RentalDAO.list(
             db, status=status, customer_id=customer_id, vehicle_id=vehicle_id,
-            module=module,
+            module=module, created_by_in=silo_ids,
         )
 
     @staticmethod
-    def get(db: Session, rental_id: int) -> Rental:
+    def get(db: Session, rental_id: int, silo_ids: list[int] | None = None) -> Rental:
         rental = RentalDAO.get(db, rental_id)
         if rental is None:
+            raise HTTPException(status_code=404, detail="Rental not found")
+        if silo_ids is not None and rental.created_by not in silo_ids:
             raise HTTPException(status_code=404, detail="Rental not found")
         return rental
 
@@ -316,6 +321,7 @@ class RentalService:
                 db,
                 entity_type=NotificationEntity.rental,
                 entity_id=rental.id,
+                creator_id=created_by,
                 title="New rental needs approval",
                 message=f"Rental {rental.invoice_no} created by an admin awaits verification.",
             )
@@ -324,8 +330,8 @@ class RentalService:
 
     # ── Approval (create) ────────────────────────────────────────────────────
     @staticmethod
-    def confirm(db: Session, rental_id: int, by_user_id: int) -> Rental:
-        rental = RentalService.get(db, rental_id)
+    def confirm(db: Session, rental_id: int, by_user_id: int, silo_ids: list[int] | None = None) -> Rental:
+        rental = RentalService.get(db, rental_id, silo_ids)
         rental.status = EntityStatus.active
         rental.confirmed_by = by_user_id
         rental.confirmed_at = datetime.now(timezone.utc)
@@ -336,8 +342,8 @@ class RentalService:
         return RentalService.get(db, rental_id)
 
     @staticmethod
-    def reject(db: Session, rental_id: int, reason: str, by_user_id: int) -> Rental:
-        rental = RentalService.get(db, rental_id)
+    def reject(db: Session, rental_id: int, reason: str, by_user_id: int, silo_ids: list[int] | None = None) -> Rental:
+        rental = RentalService.get(db, rental_id, silo_ids)
         rental.status = EntityStatus.rejected
         rental.confirmed_by = by_user_id
         rental.confirmed_at = datetime.now(timezone.utc)
@@ -438,8 +444,11 @@ class RentalService:
             rental.rental_status = RentalLifecycle.active
 
     @staticmethod
-    def edit(db: Session, rental_id: int, data: RentalEdit, *, actor_role: str, by_user_id: int) -> Rental:
-        rental = RentalService.get(db, rental_id)
+    def edit(
+        db: Session, rental_id: int, data: RentalEdit, *, actor_role: str, by_user_id: int,
+        silo_ids: list[int] | None = None,
+    ) -> Rental:
+        rental = RentalService.get(db, rental_id, silo_ids)
         RentalService._editable(rental)
         payload = RentalService._edit_payload(data)
         if rental.rental_type is None:
@@ -457,6 +466,7 @@ class RentalService:
                 db,
                 entity_type=NotificationEntity.rental,
                 entity_id=rental.id,
+                creator_id=by_user_id,
                 title="Rental edit needs approval",
                 message=f"Edit of {rental.invoice_no} by an admin awaits verification.",
             )
@@ -464,8 +474,8 @@ class RentalService:
         return RentalService.get(db, rental_id)
 
     @staticmethod
-    def approve_edit(db: Session, rental_id: int, *, by_user_id: int) -> Rental:
-        rental = RentalService.get(db, rental_id)
+    def approve_edit(db: Session, rental_id: int, *, by_user_id: int, silo_ids: list[int] | None = None) -> Rental:
+        rental = RentalService.get(db, rental_id, silo_ids)
         if rental.edit_stage != "pending" or not rental.pending_edit:
             raise HTTPException(status_code=400, detail="No pending edit to approve.")
         RentalService._apply_edit(db, rental, rental.pending_edit)
@@ -476,8 +486,10 @@ class RentalService:
         return RentalService.get(db, rental_id)
 
     @staticmethod
-    def reject_edit(db: Session, rental_id: int, reason: str, *, by_user_id: int) -> Rental:
-        rental = RentalService.get(db, rental_id)
+    def reject_edit(
+        db: Session, rental_id: int, reason: str, *, by_user_id: int, silo_ids: list[int] | None = None
+    ) -> Rental:
+        rental = RentalService.get(db, rental_id, silo_ids)
         if rental.edit_stage != "pending":
             raise HTTPException(status_code=400, detail="No pending edit to reject.")
         rental.pending_edit = None
@@ -488,11 +500,11 @@ class RentalService:
 
     # ── Completion ───────────────────────────────────────────────────────────
     @staticmethod
-    def complete(db: Session, rental_id: int, *, by_user_id: int) -> Rental:
+    def complete(db: Session, rental_id: int, *, by_user_id: int, silo_ids: list[int] | None = None) -> Rental:
         """End a rental. Recurring rentals can end anytime; legacy balance rentals
         require a zero balance. Frees the vehicle (→ Not-rented) and moves the
         customer to Without-vehicle; the rental stays as history."""
-        rental = RentalService.get(db, rental_id)
+        rental = RentalService.get(db, rental_id, silo_ids)
         if rental.rental_type is None and float(rental.remaining_amount) > 0:
             raise HTTPException(status_code=400, detail="Rent still has an outstanding balance.")
         rental.rental_status = RentalLifecycle.completed
@@ -514,8 +526,11 @@ class RentalService:
         RentalService._release_vehicle(db, rental, seized=True)
 
     @staticmethod
-    def seize(db: Session, rental_id: int, reason: str, by_user_id: int, actor_role: str) -> Rental:
-        rental = RentalService.get(db, rental_id)
+    def seize(
+        db: Session, rental_id: int, reason: str, by_user_id: int, actor_role: str,
+        silo_ids: list[int] | None = None,
+    ) -> Rental:
+        rental = RentalService.get(db, rental_id, silo_ids)
         if rental.rental_status != RentalLifecycle.active:
             raise HTTPException(status_code=400, detail="Only an active rental can be seized.")
         rental.seized_at = datetime.now(timezone.utc)
@@ -529,6 +544,7 @@ class RentalService:
                 db,
                 entity_type=NotificationEntity.rental,
                 entity_id=rental.id,
+                creator_id=by_user_id,
                 title="Rental seize needs approval",
                 message=f"Seize of {rental.invoice_no} by an admin awaits verification. Reason: {reason}",
             )
@@ -536,8 +552,8 @@ class RentalService:
         return RentalService.get(db, rental_id)
 
     @staticmethod
-    def approve_seize(db: Session, rental_id: int, *, by_user_id: int) -> Rental:
-        rental = RentalService.get(db, rental_id)
+    def approve_seize(db: Session, rental_id: int, *, by_user_id: int, silo_ids: list[int] | None = None) -> Rental:
+        rental = RentalService.get(db, rental_id, silo_ids)
         if rental.seize_stage != "pending":
             raise HTTPException(status_code=400, detail="No pending seize to approve.")
         RentalService._apply_seize(db, rental)
@@ -545,8 +561,10 @@ class RentalService:
         return RentalService.get(db, rental_id)
 
     @staticmethod
-    def reject_seize(db: Session, rental_id: int, reason: str, *, by_user_id: int) -> Rental:
-        rental = RentalService.get(db, rental_id)
+    def reject_seize(
+        db: Session, rental_id: int, reason: str, *, by_user_id: int, silo_ids: list[int] | None = None
+    ) -> Rental:
+        rental = RentalService.get(db, rental_id, silo_ids)
         if rental.seize_stage != "pending":
             raise HTTPException(status_code=400, detail="No pending seize to reject.")
         rental.seize_stage = None
@@ -558,10 +576,12 @@ class RentalService:
         return RentalService.get(db, rental_id)
 
     @staticmethod
-    def cancel_seize(db: Session, rental_id: int, remarks: str, *, by_user_id: int) -> Rental:
+    def cancel_seize(
+        db: Session, rental_id: int, remarks: str, *, by_user_id: int, silo_ids: list[int] | None = None
+    ) -> Rental:
         """Cancel an active seize: return the vehicle to the renter and reactivate
         the rental. Only valid while the seize is in the active 'seized' stage."""
-        rental = RentalService.get(db, rental_id)
+        rental = RentalService.get(db, rental_id, silo_ids)
         if rental.seize_stage != "seized":
             raise HTTPException(status_code=400, detail="No active seize to cancel.")
         rental.rental_status = RentalLifecycle.active
@@ -576,10 +596,12 @@ class RentalService:
         return RentalService.get(db, rental_id)
 
     @staticmethod
-    def confirm_seize(db: Session, rental_id: int, remarks: str, *, by_user_id: int) -> Rental:
+    def confirm_seize(
+        db: Session, rental_id: int, remarks: str, *, by_user_id: int, silo_ids: list[int] | None = None
+    ) -> Rental:
         """Finalise an active seize: the vehicle becomes a plain available vehicle
         (badge cleared); the seized rental stays as history."""
-        rental = RentalService.get(db, rental_id)
+        rental = RentalService.get(db, rental_id, silo_ids)
         if rental.seize_stage != "seized":
             raise HTTPException(status_code=400, detail="No active seize to confirm.")
         rental.seize_stage = "confirmed"
@@ -594,8 +616,10 @@ class RentalService:
 
     # ── Reminders / collections ──────────────────────────────────────────────
     @staticmethod
-    def add_reminder(db: Session, rental_id: int, *, due_date, amount, created_by) -> Rental:
-        rental = RentalService.get(db, rental_id)
+    def add_reminder(
+        db: Session, rental_id: int, *, due_date, amount, created_by, silo_ids: list[int] | None = None
+    ) -> Rental:
+        rental = RentalService.get(db, rental_id, silo_ids)
         if rental.status != EntityStatus.active:
             raise HTTPException(status_code=403, detail="Rental is not active")
         if float(amount) <= 0:
@@ -616,10 +640,13 @@ class RentalService:
         return RentalService.get(db, rental_id)
 
     @staticmethod
-    def take_call(db: Session, installment_id: int, *, user_id: int) -> Rental:
+    def take_call(
+        db: Session, installment_id: int, *, user_id: int, silo_ids: list[int] | None = None
+    ) -> Rental:
         inst = RentalDAO.get_installment(db, installment_id)
         if inst is None:
             raise HTTPException(status_code=404, detail="Reminder not found")
+        RentalService.get(db, inst.rental_id, silo_ids)  # 404s if out of silo
         if inst.status == InstallmentStatus.paid:
             raise HTTPException(status_code=400, detail="Already paid")
         if inst.due_date > date.today():
@@ -637,10 +664,13 @@ class RentalService:
         return RentalService.get(db, inst.rental_id)
 
     @staticmethod
-    def cancel_reminder(db: Session, installment_id: int, reason: str, *, user_id: int) -> Rental:
+    def cancel_reminder(
+        db: Session, installment_id: int, reason: str, *, user_id: int, silo_ids: list[int] | None = None
+    ) -> Rental:
         inst = RentalDAO.get_installment(db, installment_id)
         if inst is None:
             raise HTTPException(status_code=404, detail="Reminder not found")
+        RentalService.get(db, inst.rental_id, silo_ids)  # 404s if out of silo
         if inst.status == InstallmentStatus.paid:
             raise HTTPException(status_code=400, detail="Already paid")
         inst.status = InstallmentStatus.cancelled
@@ -687,11 +717,14 @@ class RentalService:
             )
 
     @staticmethod
-    def submit_payment(db, installment_id, *, amount, actor_role, recorded_by, paid_on=None, screenshot=None) -> Rental:
+    def submit_payment(
+        db, installment_id, *, amount, actor_role, recorded_by, paid_on=None, screenshot=None,
+        silo_ids: list[int] | None = None,
+    ) -> Rental:
         inst = RentalDAO.get_installment(db, installment_id)
         if inst is None:
             raise HTTPException(status_code=404, detail="Reminder not found")
-        rental = RentalService.get(db, inst.rental_id)
+        rental = RentalService.get(db, inst.rental_id, silo_ids)
         if rental.status != EntityStatus.active:
             raise HTTPException(status_code=403, detail="Rental is not active")
         if inst.status == InstallmentStatus.paid:
@@ -721,6 +754,7 @@ class RentalService:
                 db,
                 entity_type=NotificationEntity.rental,
                 entity_id=rental.id,
+                creator_id=recorded_by,
                 title="Rent payment needs approval",
                 message=f"A ₹{float(amount):,.0f} payment for {rental.invoice_no} awaits verification.",
             )
@@ -728,8 +762,11 @@ class RentalService:
         return RentalService.get(db, inst.rental_id)
 
     @staticmethod
-    def submit_manual_payment(db, rental_id, *, amount, actor_role, recorded_by, paid_on=None, screenshot=None) -> Rental:
-        rental = RentalService.get(db, rental_id)
+    def submit_manual_payment(
+        db, rental_id, *, amount, actor_role, recorded_by, paid_on=None, screenshot=None,
+        silo_ids: list[int] | None = None,
+    ) -> Rental:
+        rental = RentalService.get(db, rental_id, silo_ids)
         if rental.status != EntityStatus.active:
             raise HTTPException(status_code=403, detail="Rental is not active")
 
@@ -757,6 +794,7 @@ class RentalService:
                 db,
                 entity_type=NotificationEntity.rental,
                 entity_id=rental.id,
+                creator_id=recorded_by,
                 title="Manual rent payment needs approval",
                 message=f"A ₹{float(amount):,.0f} manual payment for {rental.invoice_no} awaits verification.",
             )
@@ -764,16 +802,16 @@ class RentalService:
         return RentalService.get(db, rental_id)
 
     @staticmethod
-    def approve_payment(db, payment_id, *, by_user_id) -> Rental:
+    def approve_payment(db, payment_id, *, by_user_id, silo_ids: list[int] | None = None) -> Rental:
         payment = db.get(RentalPayment, payment_id)
         if payment is None:
             raise HTTPException(status_code=404, detail="Payment not found")
+        rental = RentalService.get(db, payment.rental_id, silo_ids)  # 404s if out of silo
         if payment.status != EntityStatus.active:
             payment.status = EntityStatus.active
             payment.confirmed_by = by_user_id
             payment.confirmed_at = datetime.now(timezone.utc)
             payment.rejection_reason = None
-            rental = RentalService.get(db, payment.rental_id)
             inst = (
                 RentalDAO.get_installment(db, payment.installment_id)
                 if payment.installment_id
@@ -790,10 +828,11 @@ class RentalService:
         return RentalService.get(db, payment.rental_id)
 
     @staticmethod
-    def decline_payment(db, payment_id, reason, *, by_user_id) -> Rental:
+    def decline_payment(db, payment_id, reason, *, by_user_id, silo_ids: list[int] | None = None) -> Rental:
         payment = db.get(RentalPayment, payment_id)
         if payment is None:
             raise HTTPException(status_code=404, detail="Payment not found")
+        RentalService.get(db, payment.rental_id, silo_ids)  # 404s if out of silo
         payment.status = EntityStatus.rejected
         payment.confirmed_by = by_user_id
         payment.confirmed_at = datetime.now(timezone.utc)
@@ -811,15 +850,19 @@ class RentalService:
         return RentalService.get(db, payment.rental_id)
 
     @staticmethod
-    def payment_document(db, doc_id) -> RentalPaymentDocument:
+    def payment_document(db, doc_id, silo_ids: list[int] | None = None) -> RentalPaymentDocument:
         doc = db.get(RentalPaymentDocument, doc_id)
         if doc is None:
             raise HTTPException(status_code=404, detail="Screenshot not found")
+        if silo_ids is not None:
+            payment = db.get(RentalPayment, doc.payment_id)
+            if payment is not None:
+                RentalService.get(db, payment.rental_id, silo_ids)  # 404s if out of silo
         return doc
 
     @staticmethod
-    def delete(db: Session, rental_id: int) -> None:
-        rental = RentalService.get(db, rental_id)
+    def delete(db: Session, rental_id: int, silo_ids: list[int] | None = None) -> None:
+        rental = RentalService.get(db, rental_id, silo_ids)
         RentalService._release_vehicle(db, rental)
         RentalDAO.delete(db, rental)
         db.commit()

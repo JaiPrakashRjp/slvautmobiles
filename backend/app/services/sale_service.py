@@ -51,13 +51,21 @@ def _add_months(d: date, months: int) -> date:
 
 class SaleService:
     @staticmethod
-    def list(db: Session, *, status=None, customer_id=None, vehicle_id=None) -> list[Sale]:
-        return SaleDAO.list(db, status=status, customer_id=customer_id, vehicle_id=vehicle_id)
+    def list(
+        db: Session, *, status=None, customer_id=None, vehicle_id=None,
+        silo_ids: list[int] | None = None,
+    ) -> list[Sale]:
+        return SaleDAO.list(
+            db, status=status, customer_id=customer_id, vehicle_id=vehicle_id,
+            created_by_in=silo_ids,
+        )
 
     @staticmethod
-    def get(db: Session, sale_id: int) -> Sale:
+    def get(db: Session, sale_id: int, silo_ids: list[int] | None = None) -> Sale:
         sale = SaleDAO.get(db, sale_id)
         if sale is None:
+            raise HTTPException(status_code=404, detail="Sale not found")
+        if silo_ids is not None and sale.created_by not in silo_ids:
             raise HTTPException(status_code=404, detail="Sale not found")
         return sale
 
@@ -162,6 +170,7 @@ class SaleService:
                 db,
                 entity_type=NotificationEntity.sale,
                 entity_id=sale.id,
+                creator_id=created_by,
                 title="New sale needs approval",
                 message=f"Sale {sale.invoice_no} created by an admin awaits verification.",
             )
@@ -277,11 +286,12 @@ class SaleService:
 
     @staticmethod
     def edit(
-        db: Session, sale_id: int, data: SaleEdit, *, actor_role: str, by_user_id: int
+        db: Session, sale_id: int, data: SaleEdit, *, actor_role: str, by_user_id: int,
+        silo_ids: list[int] | None = None,
     ) -> Sale:
         """Edit a sale. Super admin → applied at once; admin → held pending until a
         super admin approves (the live sale keeps its current values)."""
-        sale = SaleService.get(db, sale_id)
+        sale = SaleService.get(db, sale_id, silo_ids)
         SaleService._editable(sale)
         payload = SaleService._edit_payload(data)
         # Validate up front so bad input is rejected for both roles immediately.
@@ -299,6 +309,7 @@ class SaleService:
                 db,
                 entity_type=NotificationEntity.sale,
                 entity_id=sale.id,
+                creator_id=by_user_id,
                 title="Sale edit needs approval",
                 message=f"Edit of {sale.invoice_no} by an admin awaits verification.",
             )
@@ -306,9 +317,9 @@ class SaleService:
         return SaleService.get(db, sale_id)
 
     @staticmethod
-    def approve_edit(db: Session, sale_id: int, *, by_user_id: int) -> Sale:
+    def approve_edit(db: Session, sale_id: int, *, by_user_id: int, silo_ids: list[int] | None = None) -> Sale:
         """Super admin approves an admin's pending edit — it now takes effect."""
-        sale = SaleService.get(db, sale_id)
+        sale = SaleService.get(db, sale_id, silo_ids)
         if sale.edit_stage != "pending" or not sale.pending_edit:
             raise HTTPException(status_code=400, detail="No pending edit to approve.")
         SaleService._apply_edit(db, sale, sale.pending_edit)
@@ -320,11 +331,11 @@ class SaleService:
 
     @staticmethod
     def reject_edit(
-        db: Session, sale_id: int, reason: str, *, by_user_id: int
+        db: Session, sale_id: int, reason: str, *, by_user_id: int, silo_ids: list[int] | None = None
     ) -> Sale:
         """Super admin rejects an admin's pending edit — nothing changes; the
         proposed values are discarded."""
-        sale = SaleService.get(db, sale_id)
+        sale = SaleService.get(db, sale_id, silo_ids)
         if sale.edit_stage != "pending":
             raise HTTPException(status_code=400, detail="No pending edit to reject.")
         sale.pending_edit = None
@@ -370,8 +381,8 @@ class SaleService:
         return SaleService.get(db, inst.sale_id)
 
     @staticmethod
-    def pay_off(db: Session, sale_id: int, *, recorded_by: int) -> Sale:
-        sale = SaleService.get(db, sale_id)
+    def pay_off(db: Session, sale_id: int, *, recorded_by: int, silo_ids: list[int] | None = None) -> Sale:
+        sale = SaleService.get(db, sale_id, silo_ids)
         if sale.status != EntityStatus.active:
             raise HTTPException(status_code=403, detail="Sale is not active — awaiting super admin approval")
         unpaid = [i for i in sale.installments if i.status != InstallmentStatus.paid]
@@ -399,8 +410,8 @@ class SaleService:
         return SaleService.get(db, sale_id)
 
     @staticmethod
-    def confirm(db: Session, sale_id: int, by_user_id: int) -> Sale:
-        sale = SaleService.get(db, sale_id)
+    def confirm(db: Session, sale_id: int, by_user_id: int, silo_ids: list[int] | None = None) -> Sale:
+        sale = SaleService.get(db, sale_id, silo_ids)
         sale.status = EntityStatus.active
         sale.confirmed_by = by_user_id
         sale.confirmed_at = datetime.now(timezone.utc)
@@ -414,10 +425,10 @@ class SaleService:
         return SaleService.get(db, sale_id)
 
     @staticmethod
-    def confirm_sold(db: Session, sale_id: int, *, by_user_id: int) -> Sale:
+    def confirm_sold(db: Session, sale_id: int, *, by_user_id: int, silo_ids: list[int] | None = None) -> Sale:
         """User confirms a fully-paid sale as sold. Only allowed once the balance
         is cleared. Sets sold=true, which hides the Seize option."""
-        sale = SaleService.get(db, sale_id)
+        sale = SaleService.get(db, sale_id, silo_ids)
         if float(sale.remaining_amount) > 0:
             raise HTTPException(
                 status_code=400,
@@ -428,8 +439,8 @@ class SaleService:
         return SaleService.get(db, sale_id)
 
     @staticmethod
-    def reject(db: Session, sale_id: int, reason: str, by_user_id: int) -> Sale:
-        sale = SaleService.get(db, sale_id)
+    def reject(db: Session, sale_id: int, reason: str, by_user_id: int, silo_ids: list[int] | None = None) -> Sale:
+        sale = SaleService.get(db, sale_id, silo_ids)
         sale.status = EntityStatus.rejected
         sale.confirmed_by = by_user_id
         sale.confirmed_at = datetime.now(timezone.utc)
@@ -467,12 +478,13 @@ class SaleService:
 
     @staticmethod
     def cancel(
-        db: Session, sale_id: int, reason: str, by_user_id: int, actor_role: str
+        db: Session, sale_id: int, reason: str, by_user_id: int, actor_role: str,
+        silo_ids: list[int] | None = None,
     ) -> "Sale":
         """Unsell a sale. A super admin's unsell applies immediately; an admin's
         is held 'pending' and a verification notification goes to the super
         admins to approve or reject. Both are gated by the 1-day window."""
-        sale = SaleService.get(db, sale_id)
+        sale = SaleService.get(db, sale_id, silo_ids)
         # Enforce the 1-day unsell window (applies to everyone, incl. super admin).
         if not SaleService._unsell_window_open(sale):
             raise HTTPException(
@@ -489,6 +501,7 @@ class SaleService:
                 db,
                 entity_type=NotificationEntity.sale,
                 entity_id=sale.id,
+                creator_id=by_user_id,
                 title="Unsell needs approval",
                 message=(
                     f"Unsell of {sale.invoice_no} by an admin awaits verification. "
@@ -499,10 +512,10 @@ class SaleService:
         return SaleService.get(db, sale_id)
 
     @staticmethod
-    def approve_unsell(db: Session, sale_id: int, *, by_user_id: int) -> "Sale":
+    def approve_unsell(db: Session, sale_id: int, *, by_user_id: int, silo_ids: list[int] | None = None) -> "Sale":
         """Super admin approves an admin's pending unsell — it now takes effect.
         Strict window: must still be within 1 day of the sale."""
-        sale = SaleService.get(db, sale_id)
+        sale = SaleService.get(db, sale_id, silo_ids)
         if sale.unsell_stage != "pending":
             raise HTTPException(status_code=400, detail="No pending unsell to approve.")
         if not SaleService._unsell_window_open(sale):
@@ -516,11 +529,11 @@ class SaleService:
 
     @staticmethod
     def reject_unsell(
-        db: Session, sale_id: int, reason: str, *, by_user_id: int
+        db: Session, sale_id: int, reason: str, *, by_user_id: int, silo_ids: list[int] | None = None
     ) -> "Sale":
         """Super admin rejects an admin's pending unsell — nothing changes; the
         sale stays sold."""
-        sale = SaleService.get(db, sale_id)
+        sale = SaleService.get(db, sale_id, silo_ids)
         if sale.unsell_stage != "pending":
             raise HTTPException(status_code=400, detail="No pending unsell to reject.")
         sale.unsell_stage = None
@@ -542,12 +555,13 @@ class SaleService:
 
     @staticmethod
     def seize(
-        db: Session, sale_id: int, reason: str, by_user_id: int, actor_role: str
+        db: Session, sale_id: int, reason: str, by_user_id: int, actor_role: str,
+        silo_ids: list[int] | None = None,
     ) -> "Sale":
         """Repossess the vehicle from a defaulting customer. A super admin's seize
         takes effect immediately; an admin's seize is held 'pending' and a
         verification notification goes to the super admins to approve or reject."""
-        sale = SaleService.get(db, sale_id)
+        sale = SaleService.get(db, sale_id, silo_ids)
         # Seizable only while the sale is live (an outstanding balance). A
         # fully-paid (closed) sale can't be seized — the customer owns it.
         if sale.sale_status != SaleLifecycle.active:
@@ -567,6 +581,7 @@ class SaleService:
                 db,
                 entity_type=NotificationEntity.sale,
                 entity_id=sale.id,
+                creator_id=by_user_id,
                 title="Vehicle seize needs approval",
                 message=(
                     f"Seize of {sale.invoice_no} by an admin awaits verification. "
@@ -577,9 +592,9 @@ class SaleService:
         return SaleService.get(db, sale_id)
 
     @staticmethod
-    def approve_seize(db: Session, sale_id: int, *, by_user_id: int) -> "Sale":
+    def approve_seize(db: Session, sale_id: int, *, by_user_id: int, silo_ids: list[int] | None = None) -> "Sale":
         """Super admin approves an admin's pending seize — it now takes effect."""
-        sale = SaleService.get(db, sale_id)
+        sale = SaleService.get(db, sale_id, silo_ids)
         if sale.seize_stage != "pending":
             raise HTTPException(status_code=400, detail="No pending seize to approve.")
         vehicle = db.get(Vehicle, sale.vehicle_id)
@@ -589,11 +604,11 @@ class SaleService:
 
     @staticmethod
     def reject_seize(
-        db: Session, sale_id: int, reason: str, *, by_user_id: int
+        db: Session, sale_id: int, reason: str, *, by_user_id: int, silo_ids: list[int] | None = None
     ) -> "Sale":
         """Super admin rejects an admin's pending seize — nothing changes; the
         vehicle stays sold to the same customer."""
-        sale = SaleService.get(db, sale_id)
+        sale = SaleService.get(db, sale_id, silo_ids)
         if sale.seize_stage != "pending":
             raise HTTPException(status_code=400, detail="No pending seize to reject.")
         sale.seize_stage = None
@@ -606,11 +621,11 @@ class SaleService:
 
     @staticmethod
     def cancel_seize(
-        db: Session, sale_id: int, remarks: str, *, by_user_id: int
+        db: Session, sale_id: int, remarks: str, *, by_user_id: int, silo_ids: list[int] | None = None
     ) -> "Sale":
         """Cancel an active seize (no time limit): give the vehicle back to the
         same customer and reactivate the sale."""
-        sale = SaleService.get(db, sale_id)
+        sale = SaleService.get(db, sale_id, silo_ids)
         if sale.seize_stage != "seized":
             raise HTTPException(status_code=400, detail="No active seize to cancel.")
         # Restore the pre-seize status: a fully-paid sale returns to closed,
@@ -635,11 +650,11 @@ class SaleService:
 
     @staticmethod
     def confirm_seize(
-        db: Session, sale_id: int, remarks: str, *, by_user_id: int
+        db: Session, sale_id: int, remarks: str, *, by_user_id: int, silo_ids: list[int] | None = None
     ) -> "Sale":
         """Finalise an active seize: the vehicle becomes a plain available vehicle
         (badge cleared); the seized sale stays as history."""
-        sale = SaleService.get(db, sale_id)
+        sale = SaleService.get(db, sale_id, silo_ids)
         if sale.seize_stage != "seized":
             raise HTTPException(status_code=400, detail="No active seize to confirm.")
         sale.seize_stage = "confirmed"
@@ -653,21 +668,23 @@ class SaleService:
         return SaleService.get(db, sale_id)
 
     @staticmethod
-    def delete(db: Session, sale_id: int) -> None:
-        sale = SaleService.get(db, sale_id)
+    def delete(db: Session, sale_id: int, silo_ids: list[int] | None = None) -> None:
+        sale = SaleService.get(db, sale_id, silo_ids)
         SaleDAO.delete(db, sale)
         db.commit()
 
     @staticmethod
-    def reminders_for_sale(db: Session, sale_id: int):
-        SaleService.get(db, sale_id)  # 404 guard
+    def reminders_for_sale(db: Session, sale_id: int, silo_ids: list[int] | None = None):
+        SaleService.get(db, sale_id, silo_ids)  # 404 guard
         return SaleDAO.reminders_for_sale(db, sale_id)
 
     # ── Reminders / collections flow ────────────────────────────────────────
     @staticmethod
-    def add_reminder(db: Session, sale_id: int, *, due_date, amount, created_by) -> Sale:
+    def add_reminder(
+        db: Session, sale_id: int, *, due_date, amount, created_by, silo_ids: list[int] | None = None
+    ) -> Sale:
         """Admin/super-admin schedules a collection reminder (date + amount)."""
-        sale = SaleService.get(db, sale_id)
+        sale = SaleService.get(db, sale_id, silo_ids)
         if sale.status != EntityStatus.active:
             raise HTTPException(status_code=403, detail="Sale is not active")
         if float(amount) <= 0:
@@ -688,11 +705,14 @@ class SaleService:
         return SaleService.get(db, sale_id)
 
     @staticmethod
-    def take_call(db: Session, installment_id: int, *, user_id: int) -> Sale:
+    def take_call(
+        db: Session, installment_id: int, *, user_id: int, silo_ids: list[int] | None = None
+    ) -> Sale:
         """Claim a reminder to handle the call — locks it to this user."""
         inst = SaleDAO.get_installment(db, installment_id)
         if inst is None:
             raise HTTPException(status_code=404, detail="Reminder not found")
+        SaleService.get(db, inst.sale_id, silo_ids)  # 404s if out of silo
         if inst.status == InstallmentStatus.paid:
             raise HTTPException(status_code=400, detail="Already paid")
         # the call only opens on/after the reminder's due date
@@ -716,12 +736,13 @@ class SaleService:
 
     @staticmethod
     def cancel_reminder(
-        db: Session, installment_id: int, reason: str, *, user_id: int
+        db: Session, installment_id: int, reason: str, *, user_id: int, silo_ids: list[int] | None = None
     ) -> Sale:
         """Call made but no payment — defer. Balance stays the same."""
         inst = SaleDAO.get_installment(db, installment_id)
         if inst is None:
             raise HTTPException(status_code=404, detail="Reminder not found")
+        SaleService.get(db, inst.sale_id, silo_ids)  # 404s if out of silo
         if inst.status == InstallmentStatus.paid:
             raise HTTPException(status_code=400, detail="Already paid")
         inst.status = InstallmentStatus.cancelled
@@ -755,13 +776,14 @@ class SaleService:
         recorded_by: int,
         paid_on: date | None = None,
         screenshot: dict | None = None,
+        silo_ids: list[int] | None = None,
     ) -> Sale:
         """Record an installment payment. Super-admin → applied immediately;
         admin → pending_confirmation (super admin approves/declines)."""
         inst = SaleDAO.get_installment(db, installment_id)
         if inst is None:
             raise HTTPException(status_code=404, detail="Reminder not found")
-        sale = SaleService.get(db, inst.sale_id)
+        sale = SaleService.get(db, inst.sale_id, silo_ids)
         if sale.status != EntityStatus.active:
             raise HTTPException(status_code=403, detail="Sale is not active")
         if inst.status == InstallmentStatus.paid:
@@ -804,6 +826,7 @@ class SaleService:
                 db,
                 entity_type=NotificationEntity.sale,
                 entity_id=sale.id,
+                creator_id=recorded_by,
                 title="Installment payment needs approval",
                 message=f"A ₹{float(amount):,.0f} payment for {sale.invoice_no} awaits verification.",
             )
@@ -830,11 +853,12 @@ class SaleService:
         recorded_by: int,
         paid_on: date | None = None,
         screenshot: dict | None = None,
+        silo_ids: list[int] | None = None,
     ) -> Sale:
         """Record a standalone (manual) payment against a sale — not tied to any
         installment/reminder. Super-admin → applied to the balance immediately;
         admin → held pending_confirmation until a super admin approves."""
-        sale = SaleService.get(db, sale_id)
+        sale = SaleService.get(db, sale_id, silo_ids)
         if sale.status != EntityStatus.active:
             raise HTTPException(status_code=403, detail="Sale is not active")
 
@@ -873,6 +897,7 @@ class SaleService:
                 db,
                 entity_type=NotificationEntity.sale,
                 entity_id=sale.id,
+                creator_id=recorded_by,
                 title="Manual payment needs approval",
                 message=f"A ₹{float(amount):,.0f} manual payment for {sale.invoice_no} awaits verification.",
             )
@@ -880,16 +905,18 @@ class SaleService:
         return SaleService.get(db, sale_id)
 
     @staticmethod
-    def approve_payment(db: Session, payment_id: int, *, by_user_id: int) -> Sale:
+    def approve_payment(
+        db: Session, payment_id: int, *, by_user_id: int, silo_ids: list[int] | None = None
+    ) -> Sale:
         payment = db.get(SalePayment, payment_id)
         if payment is None:
             raise HTTPException(status_code=404, detail="Payment not found")
+        sale = SaleService.get(db, payment.sale_id, silo_ids)  # 404s if out of silo
         if payment.status != EntityStatus.active:
             payment.status = EntityStatus.active
             payment.confirmed_by = by_user_id
             payment.confirmed_at = datetime.now(timezone.utc)
             payment.rejection_reason = None
-            sale = SaleService.get(db, payment.sale_id)
             inst = (
                 SaleDAO.get_installment(db, payment.installment_id)
                 if payment.installment_id
@@ -911,11 +938,12 @@ class SaleService:
 
     @staticmethod
     def decline_payment(
-        db: Session, payment_id: int, reason: str, *, by_user_id: int
+        db: Session, payment_id: int, reason: str, *, by_user_id: int, silo_ids: list[int] | None = None
     ) -> Sale:
         payment = db.get(SalePayment, payment_id)
         if payment is None:
             raise HTTPException(status_code=404, detail="Payment not found")
+        SaleService.get(db, payment.sale_id, silo_ids)  # 404s if out of silo
         payment.status = EntityStatus.rejected
         payment.confirmed_by = by_user_id
         payment.confirmed_at = datetime.now(timezone.utc)
@@ -934,8 +962,12 @@ class SaleService:
         return SaleService.get(db, payment.sale_id)
 
     @staticmethod
-    def payment_document(db: Session, doc_id: int) -> SalePaymentDocument:
+    def payment_document(db: Session, doc_id: int, silo_ids: list[int] | None = None) -> SalePaymentDocument:
         doc = db.get(SalePaymentDocument, doc_id)
         if doc is None:
             raise HTTPException(status_code=404, detail="Screenshot not found")
+        if silo_ids is not None:
+            payment = db.get(SalePayment, doc.payment_id)
+            if payment is not None:
+                SaleService.get(db, payment.sale_id, silo_ids)  # 404s if out of silo
         return doc

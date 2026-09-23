@@ -12,7 +12,9 @@ from app.schemas.search import SearchResult, SearchVehicle
 
 class SearchService:
     @staticmethod
-    def search(db: Session, q: str, *, limit: int = 20) -> list[SearchResult]:
+    def search(
+        db: Session, q: str, *, limit: int = 20, silo_ids: list[int] | None = None
+    ) -> list[SearchResult]:
         term = (q or "").strip()
         if not term:
             return []
@@ -20,24 +22,24 @@ class SearchService:
         results: list[SearchResult] = []
 
         # customers — by name or phone
-        customers = db.scalars(
-            select(Customer)
-            .where(
-                or_(
-                    Customer.first_name.ilike(like),
-                    Customer.last_name.ilike(like),
-                    Customer.phone.ilike(like),
-                )
+        customer_stmt = select(Customer).where(
+            or_(
+                Customer.first_name.ilike(like),
+                Customer.last_name.ilike(like),
+                Customer.phone.ilike(like),
             )
-            .order_by(Customer.created_at.desc())
-            .limit(limit)
+        )
+        if silo_ids is not None:
+            customer_stmt = customer_stmt.where(Customer.created_by.in_(silo_ids))
+        customers = db.scalars(
+            customer_stmt.order_by(Customer.created_at.desc()).limit(limit)
         ).all()
         for c in customers:
             name = f"{c.first_name} {c.last_name}".strip()
             # Vehicles linked to this customer via SALES or RENTALS (skip cancelled),
             # deduped by vehicle id so sale + rental customers both show their vehicle.
             veh_map: dict = {}
-            sale_rows = db.execute(
+            sale_stmt = (
                 select(
                     Vehicle.id, Vehicle.reg_no, Vehicle.chassis_no,
                     Vehicle.model, Sale.sale_status,
@@ -47,8 +49,10 @@ class SearchService:
                     Sale.customer_id == c.id,
                     Sale.sale_status != SaleLifecycle.cancelled,
                 )
-                .order_by(Sale.created_at.desc())
-            ).all()
+            )
+            if silo_ids is not None:
+                sale_stmt = sale_stmt.where(Sale.created_by.in_(silo_ids))
+            sale_rows = db.execute(sale_stmt.order_by(Sale.created_at.desc())).all()
             for r in sale_rows:
                 veh_map[r.id] = SearchVehicle(
                     id=r.id,
@@ -58,7 +62,7 @@ class SearchService:
                                     r.sale_status.value if r.sale_status else None) if p
                     ),
                 )
-            rent_rows = db.execute(
+            rent_stmt = (
                 select(
                     Vehicle.id, Vehicle.reg_no, Vehicle.chassis_no,
                     Vehicle.model, Rental.rental_status,
@@ -68,8 +72,10 @@ class SearchService:
                     Rental.customer_id == c.id,
                     Rental.rental_status != RentalLifecycle.cancelled,
                 )
-                .order_by(Rental.created_at.desc())
-            ).all()
+            )
+            if silo_ids is not None:
+                rent_stmt = rent_stmt.where(Rental.created_by.in_(silo_ids))
+            rent_rows = db.execute(rent_stmt.order_by(Rental.created_at.desc())).all()
             for r in rent_rows:
                 veh_map.setdefault(r.id, SearchVehicle(
                     id=r.id,
@@ -89,17 +95,17 @@ class SearchService:
             )
 
         # vehicles — by reg no / chassis / model
-        vehicles = db.scalars(
-            select(Vehicle)
-            .where(
-                or_(
-                    Vehicle.reg_no.ilike(like),
-                    Vehicle.chassis_no.ilike(like),
-                    Vehicle.model.ilike(like),
-                )
+        vehicle_stmt = select(Vehicle).where(
+            or_(
+                Vehicle.reg_no.ilike(like),
+                Vehicle.chassis_no.ilike(like),
+                Vehicle.model.ilike(like),
             )
-            .order_by(Vehicle.created_at.desc())
-            .limit(limit)
+        )
+        if silo_ids is not None:
+            vehicle_stmt = vehicle_stmt.where(Vehicle.created_by.in_(silo_ids))
+        vehicles = db.scalars(
+            vehicle_stmt.order_by(Vehicle.created_at.desc()).limit(limit)
         ).all()
         for v in vehicles:
             label = v.chassis_no or v.reg_no or v.model or f"Vehicle #{v.id}"

@@ -44,6 +44,7 @@ class DocExpiryService:
                     NotificationService.create_doc_expiry(
                         db,
                         vehicle_id=v.id,
+                        creator_id=v.created_by,
                         title=f"{label} expiring today",
                         message=(
                             f"{label} for {ident} expires today. "
