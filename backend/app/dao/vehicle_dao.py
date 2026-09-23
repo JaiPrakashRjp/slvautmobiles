@@ -23,8 +23,11 @@ class VehicleDAO:
         q: str | None = None,
         limit: int | None = None,
         offset: int | None = None,
+        created_by_in: list[int] | None = None,
     ) -> list[Vehicle]:
         stmt = select(Vehicle).options(selectinload(Vehicle.documents))
+        if created_by_in is not None:
+            stmt = stmt.where(Vehicle.created_by.in_(created_by_in))
         # Scope to a module (auto_sale / rental) so each keeps its own vehicle
         # pool independent. Unknown module → no rows.
         if module is not None:

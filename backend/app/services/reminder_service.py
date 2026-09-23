@@ -105,6 +105,7 @@ class ReminderService:
                     db,
                     sale_id=sale.id,
                     installment_id=inst.id,
+                    creator_id=sale.created_by,
                     title="Installment due — call the customer",
                     message=(
                         f"{cust_name}: month {inst.month_number} of "

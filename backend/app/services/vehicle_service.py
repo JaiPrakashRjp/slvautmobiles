@@ -4,6 +4,8 @@ Role-gate: a Super Admin's action takes effect immediately (status=active);
 an Admin's action is held pending_confirmation until a Super Admin confirms or
 rejects it. Mirrors the Flutter Gate helper.
 """
+from __future__ import annotations  # a `list` staticmethod below shadows builtin list otherwise
+
 from datetime import datetime, timezone
 
 from fastapi import HTTPException
@@ -36,6 +38,7 @@ class VehicleService:
         q=None,
         limit=None,
         offset=None,
+        silo_ids: list[int] | None = None,
     ) -> list[Vehicle]:
         return VehicleDAO.list(
             db,
@@ -46,12 +49,15 @@ class VehicleService:
             q=q,
             limit=limit,
             offset=offset,
+            created_by_in=silo_ids,
         )
 
     @staticmethod
-    def get(db: Session, vehicle_id: int) -> Vehicle:
+    def get(db: Session, vehicle_id: int, silo_ids: list[int] | None = None) -> Vehicle:
         vehicle = VehicleDAO.get(db, vehicle_id)
         if vehicle is None:
+            raise HTTPException(status_code=404, detail="Vehicle not found")
+        if silo_ids is not None and vehicle.created_by not in silo_ids:
             raise HTTPException(status_code=404, detail="Vehicle not found")
         return vehicle
 
@@ -80,6 +86,7 @@ class VehicleService:
                 db,
                 entity_type=NotificationEntity.vehicle,
                 entity_id=vehicle.id,
+                creator_id=created_by,
                 title="New vehicle needs approval",
                 message="Vehicle created by an admin awaits verification.",
             )
@@ -87,16 +94,20 @@ class VehicleService:
         return VehicleDAO.get(db, vehicle.id)
 
     @staticmethod
-    def update(db: Session, vehicle_id: int, data: VehicleUpdate) -> Vehicle:
-        vehicle = VehicleService.get(db, vehicle_id)
+    def update(
+        db: Session, vehicle_id: int, data: VehicleUpdate, silo_ids: list[int] | None = None
+    ) -> Vehicle:
+        vehicle = VehicleService.get(db, vehicle_id, silo_ids)
         fields = data.model_dump(exclude_unset=True)
         VehicleDAO.update(db, vehicle, fields)
         db.commit()
         return VehicleDAO.get(db, vehicle_id)
 
     @staticmethod
-    def confirm(db: Session, vehicle_id: int, by_user_id: int) -> Vehicle:
-        vehicle = VehicleService.get(db, vehicle_id)
+    def confirm(
+        db: Session, vehicle_id: int, by_user_id: int, silo_ids: list[int] | None = None
+    ) -> Vehicle:
+        vehicle = VehicleService.get(db, vehicle_id, silo_ids)
         vehicle.status = EntityStatus.active
         vehicle.confirmed_by = by_user_id
         vehicle.confirmed_at = datetime.now(timezone.utc)
@@ -106,9 +117,9 @@ class VehicleService:
 
     @staticmethod
     def reject(
-        db: Session, vehicle_id: int, reason: str, by_user_id: int
+        db: Session, vehicle_id: int, reason: str, by_user_id: int, silo_ids: list[int] | None = None
     ) -> Vehicle:
-        vehicle = VehicleService.get(db, vehicle_id)
+        vehicle = VehicleService.get(db, vehicle_id, silo_ids)
         vehicle.status = EntityStatus.rejected
         vehicle.confirmed_by = by_user_id
         vehicle.confirmed_at = datetime.now(timezone.utc)
@@ -117,8 +128,8 @@ class VehicleService:
         return VehicleDAO.get(db, vehicle_id)
 
     @staticmethod
-    def delete(db: Session, vehicle_id: int) -> None:
-        vehicle = VehicleService.get(db, vehicle_id)
+    def delete(db: Session, vehicle_id: int, silo_ids: list[int] | None = None) -> None:
+        vehicle = VehicleService.get(db, vehicle_id, silo_ids)
         VehicleDAO.delete(db, vehicle)
         db.commit()
 
@@ -130,10 +141,11 @@ class VehicleService:
         file_name: str,
         mime_type: str,
         content: bytes,
+        silo_ids: list[int] | None = None,
     ) -> VehicleDocument:
         """Upsert by (vehicle_id, doc_type): replaces the file if one of that
         type already exists, else inserts a new one."""
-        vehicle = VehicleService.get(db, vehicle_id)
+        vehicle = VehicleService.get(db, vehicle_id, silo_ids)
         doc = VehicleDAO.document_by_type(db, vehicle.id, doc_type)
         if doc is None:
             doc = VehicleDocument(
@@ -151,14 +163,16 @@ class VehicleService:
         return doc
 
     @staticmethod
-    def get_document(db: Session, doc_id: int) -> VehicleDocument:
+    def get_document(db: Session, doc_id: int, silo_ids: list[int] | None = None) -> VehicleDocument:
         doc = VehicleDAO.get_document(db, doc_id)
         if doc is None:
             raise HTTPException(status_code=404, detail="Document not found")
+        if silo_ids is not None:
+            VehicleService.get(db, doc.vehicle_id, silo_ids)  # 404s if out of silo
         return doc
 
     @staticmethod
-    def delete_document(db: Session, doc_id: int) -> None:
-        doc = VehicleService.get_document(db, doc_id)
+    def delete_document(db: Session, doc_id: int, silo_ids: list[int] | None = None) -> None:
+        doc = VehicleService.get_document(db, doc_id, silo_ids)
         VehicleDAO.delete_document(db, doc)
         db.commit()

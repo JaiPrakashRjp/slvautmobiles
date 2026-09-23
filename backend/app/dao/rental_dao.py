@@ -26,9 +26,12 @@ class RentalDAO:
 
     @staticmethod
     def list(
-        db: Session, *, status=None, customer_id=None, vehicle_id=None, module=None
+        db: Session, *, status=None, customer_id=None, vehicle_id=None, module=None,
+        created_by_in: list[int] | None = None,
     ) -> list[Rental]:
         stmt = RentalDAO._with_relations(select(Rental))
+        if created_by_in is not None:
+            stmt = stmt.where(Rental.created_by.in_(created_by_in))
         if module is not None:
             stmt = stmt.where(
                 Rental.module_id

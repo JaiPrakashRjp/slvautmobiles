@@ -16,7 +16,7 @@ from app.models.sale_installment import SaleInstallment
 from app.models.user import User
 from app.models.vehicle import Vehicle
 from app.schemas.report import DailyReminderRow
-from app.security import get_current_user
+from app.security import get_current_user, get_silo_user_ids
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
@@ -28,7 +28,9 @@ def daily_reminders(
     current_user: User = Depends(get_current_user),
 ):
     """All installments due on `on`, across every approved (non-cancelled,
-    non-seized) sale, with the customer, vehicle and current status."""
+    non-seized) sale in the caller's own data silo, with the customer,
+    vehicle and current status."""
+    silo_ids = get_silo_user_ids(db, current_user)
     stmt = (
         select(SaleInstallment, Sale, Customer, Vehicle)
         .join(Sale, SaleInstallment.sale_id == Sale.id)
@@ -36,6 +38,7 @@ def daily_reminders(
         .join(Vehicle, Sale.vehicle_id == Vehicle.id)
         .where(SaleInstallment.due_date == on)
         .where(Sale.status == EntityStatus.active)
+        .where(Sale.created_by.in_(silo_ids))
         .where(
             Sale.sale_status.notin_(
                 [SaleLifecycle.cancelled, SaleLifecycle.seized]

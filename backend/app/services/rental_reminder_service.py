@@ -133,6 +133,7 @@ class RentalReminderService:
                 db,
                 rental_id=rental.id,
                 installment_id=inst.id,
+                creator_id=rental.created_by,
                 title="Rent due — call the renter",
                 message=(
                     f"{cust_name}: rent #{inst.number} of "
@@ -211,6 +212,7 @@ class RentalReminderService:
             db,
             rental_id=rental.id,
             installment_id=oldest.id,
+            creator_id=rental.created_by,
             title="Weekly rent overdue — call the renter",
             message=(
                 f"{cust_name}: {len(rows)} week(s) overdue, ₹{_amount(total)} pending "

@@ -107,6 +107,7 @@ class LoanReminderService:
                         db,
                         loan_id=loan.id,
                         emi_id=emi.id,
+                        creator_id=loan.created_by,
                         title="Loan EMI overdue — call the customer",
                         message=(
                             f"{cust_name}: EMI {emi.sequence_number} of "

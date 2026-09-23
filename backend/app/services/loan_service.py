@@ -3,6 +3,8 @@
 Role-gate mirrors the rest of the app: a Super Admin's loan is active at once;
 an Admin's loan waits pending_confirmation until a Super Admin approves it.
 """
+from __future__ import annotations  # a `list` staticmethod below shadows builtin list otherwise
+
 import calendar
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
@@ -42,13 +44,20 @@ def _add_months(d: date, n: int) -> date:
 
 class LoanService:
     @staticmethod
-    def list(db: Session, *, module=None, status=None, customer_id=None) -> list[Loan]:
-        return LoanDAO.list(db, module=module, status=status, customer_id=customer_id)
+    def list(
+        db: Session, *, module=None, status=None, customer_id=None,
+        silo_ids: list[int] | None = None,
+    ) -> list[Loan]:
+        return LoanDAO.list(
+            db, module=module, status=status, customer_id=customer_id, created_by_in=silo_ids,
+        )
 
     @staticmethod
-    def get(db: Session, loan_id: int) -> Loan:
+    def get(db: Session, loan_id: int, silo_ids: list[int] | None = None) -> Loan:
         loan = LoanDAO.get(db, loan_id)
         if loan is None:
+            raise HTTPException(status_code=404, detail="Loan not found")
+        if silo_ids is not None and loan.created_by not in silo_ids:
             raise HTTPException(status_code=404, detail="Loan not found")
         return loan
 
@@ -96,6 +105,7 @@ class LoanService:
                 db,
                 entity_type=NotificationEntity.loan,
                 entity_id=loan.id,
+                creator_id=created_by,
                 title="New loan needs approval",
                 message="A loan created by an admin awaits verification.",
             )
@@ -116,12 +126,13 @@ class LoanService:
 
     @staticmethod
     def edit(
-        db: Session, loan_id: int, data: LoanEdit, *, actor_role: str, actor_id: int
+        db: Session, loan_id: int, data: LoanEdit, *, actor_role: str, actor_id: int,
+        silo_ids: list[int] | None = None,
     ) -> Loan:
         """Replace a loan's details within the 5-hour grace window and REBUILD its
         EMI schedule from scratch. Any EMIs/payments already recorded are wiped —
         the client shows a warning first. Rejected once the window has passed."""
-        loan = LoanService.get(db, loan_id)
+        loan = LoanService.get(db, loan_id, silo_ids)
         if not LoanService.is_editable(loan):
             raise HTTPException(
                 status_code=403,
@@ -167,8 +178,8 @@ class LoanService:
         return LoanDAO.get(db, loan.id)
 
     @staticmethod
-    def confirm(db: Session, loan_id: int, by_user_id: int) -> Loan:
-        loan = LoanService.get(db, loan_id)
+    def confirm(db: Session, loan_id: int, by_user_id: int, silo_ids: list[int] | None = None) -> Loan:
+        loan = LoanService.get(db, loan_id, silo_ids)
         loan.status = EntityStatus.active
         loan.confirmed_by = by_user_id
         loan.confirmed_at = datetime.now(timezone.utc)
@@ -177,8 +188,8 @@ class LoanService:
         return LoanDAO.get(db, loan_id)
 
     @staticmethod
-    def reject(db: Session, loan_id: int, reason: str, by_user_id: int) -> Loan:
-        loan = LoanService.get(db, loan_id)
+    def reject(db: Session, loan_id: int, reason: str, by_user_id: int, silo_ids: list[int] | None = None) -> Loan:
+        loan = LoanService.get(db, loan_id, silo_ids)
         loan.status = EntityStatus.rejected
         loan.loan_status = "rejected"
         loan.confirmed_by = by_user_id
@@ -188,8 +199,8 @@ class LoanService:
         return LoanDAO.get(db, loan_id)
 
     @staticmethod
-    def delete(db: Session, loan_id: int) -> None:
-        loan = LoanService.get(db, loan_id)
+    def delete(db: Session, loan_id: int, silo_ids: list[int] | None = None) -> None:
+        loan = LoanService.get(db, loan_id, silo_ids)
         # Removing a loan must not remove its customer or vehicle. Release the
         # loan-module vehicle back to inventory so it can be assigned again.
         if loan.vehicle_id is not None:
@@ -203,9 +214,10 @@ class LoanService:
     # ── seizure (repossession) ───────────────────────────────────────────────
     @staticmethod
     def request_seize(
-        db: Session, loan_id: int, reason: str, *, actor_role: str, actor_id: int
+        db: Session, loan_id: int, reason: str, *, actor_role: str, actor_id: int,
+        silo_ids: list[int] | None = None,
     ) -> Loan:
-        loan = LoanService.get(db, loan_id)
+        loan = LoanService.get(db, loan_id, silo_ids)
         if loan.loan_status in ("closed", "seized"):
             raise HTTPException(status_code=400, detail="Loan already closed or seized")
         loan.seize_reason = reason
@@ -223,6 +235,7 @@ class LoanService:
                 db,
                 entity_type=NotificationEntity.loan,
                 entity_id=loan.id,
+                creator_id=actor_id,
                 title="Loan seize needs approval",
                 message=f"An admin requested to seize a loan vehicle. Reason: {reason}",
             )
@@ -230,8 +243,8 @@ class LoanService:
         return LoanDAO.get(db, loan_id)
 
     @staticmethod
-    def confirm_seize(db: Session, loan_id: int, by_user_id: int) -> Loan:
-        loan = LoanService.get(db, loan_id)
+    def confirm_seize(db: Session, loan_id: int, by_user_id: int, silo_ids: list[int] | None = None) -> Loan:
+        loan = LoanService.get(db, loan_id, silo_ids)
         loan.seize_stage = "seized"
         loan.seize_confirmed_by = by_user_id
         loan.seize_confirmed_at = datetime.now(timezone.utc)
@@ -241,9 +254,9 @@ class LoanService:
 
     @staticmethod
     def cancel_seize(
-        db: Session, loan_id: int, remarks: str | None, by_user_id: int
+        db: Session, loan_id: int, remarks: str | None, by_user_id: int, silo_ids: list[int] | None = None
     ) -> Loan:
-        loan = LoanService.get(db, loan_id)
+        loan = LoanService.get(db, loan_id, silo_ids)
         loan.seize_stage = None
         loan.seize_cancel_remarks = remarks
         loan.seize_confirmed_by = by_user_id
@@ -265,8 +278,9 @@ class LoanService:
         received_date: date | None,
         remarks: str | None,
         recorded_by: int,
+        silo_ids: list[int] | None = None,
     ) -> LoanPayment:
-        loan = LoanService.get(db, loan_id)
+        loan = LoanService.get(db, loan_id, silo_ids)
         emi = LoanDAO.get_emi(db, emi_id)
         if emi is None or emi.loan_id != loan.id:
             raise HTTPException(status_code=404, detail="EMI not found")
@@ -339,14 +353,18 @@ class LoanService:
         return doc
 
     @staticmethod
-    def get_payment_document(db: Session, doc_id: int) -> LoanPaymentDocument:
+    def get_payment_document(db: Session, doc_id: int, silo_ids: list[int] | None = None) -> LoanPaymentDocument:
         doc = LoanDAO.get_payment_document(db, doc_id)
         if doc is None:
             raise HTTPException(status_code=404, detail="Document not found")
+        if silo_ids is not None:
+            payment = db.get(LoanPayment, doc.payment_id)
+            if payment is not None:
+                LoanService.get(db, payment.loan_id, silo_ids)  # 404s if out of silo
         return doc
 
     @staticmethod
-    def delete_payment_document(db: Session, doc_id: int) -> None:
-        doc = LoanService.get_payment_document(db, doc_id)
+    def delete_payment_document(db: Session, doc_id: int, silo_ids: list[int] | None = None) -> None:
+        doc = LoanService.get_payment_document(db, doc_id, silo_ids)
         db.delete(doc)
         db.commit()

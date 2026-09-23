@@ -2,7 +2,9 @@
 
 The acting user (id + role) comes from the Bearer token via get_current_user,
 never from client-supplied params — so the role-gate can't be spoofed. Approval
-actions (confirm/reject) require the Super Admin.
+actions (confirm/reject) require the Super Admin. Every read/write is also
+scoped to the caller's data silo (get_silo_user_ids) so one super_admin's data
+is never visible to, or editable by, another.
 """
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from fastapi.responses import Response
@@ -12,7 +14,7 @@ from app.db import get_db
 from app.models.enums import Branch, EntityStatus, SaleStatus, VehicleDocType
 from app.models.user import User
 from app.schemas.vehicle import DocumentOut, VehicleCreate, VehicleOut, VehicleUpdate
-from app.security import get_current_user, require_super_admin
+from app.security import get_current_user, get_silo_user_ids, require_super_admin
 from app.services.vehicle_service import VehicleService
 
 router = APIRouter(prefix="/vehicles", tags=["vehicles"])
@@ -21,6 +23,7 @@ router = APIRouter(prefix="/vehicles", tags=["vehicles"])
 @router.get("", response_model=list[VehicleOut])
 def list_vehicles(
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
     status: EntityStatus | None = None,
     branch: Branch | None = None,
     sale_status: SaleStatus | None = None,
@@ -38,12 +41,17 @@ def list_vehicles(
         q=q,
         limit=limit,
         offset=offset,
+        silo_ids=get_silo_user_ids(db, current_user),
     )
 
 
 @router.get("/{vehicle_id}", response_model=VehicleOut)
-def get_vehicle(vehicle_id: int, db: Session = Depends(get_db)):
-    return VehicleService.get(db, vehicle_id)
+def get_vehicle(
+    vehicle_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return VehicleService.get(db, vehicle_id, get_silo_user_ids(db, current_user))
 
 
 @router.post("", response_model=VehicleOut, status_code=201)
@@ -64,7 +72,7 @@ def update_vehicle(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return VehicleService.update(db, vehicle_id, payload)
+    return VehicleService.update(db, vehicle_id, payload, get_silo_user_ids(db, current_user))
 
 
 @router.post("/{vehicle_id}/confirm", response_model=VehicleOut)
@@ -73,7 +81,9 @@ def confirm_vehicle(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_super_admin),
 ):
-    return VehicleService.confirm(db, vehicle_id, current_user.id)
+    return VehicleService.confirm(
+        db, vehicle_id, current_user.id, get_silo_user_ids(db, current_user)
+    )
 
 
 @router.post("/{vehicle_id}/reject", response_model=VehicleOut)
@@ -83,7 +93,9 @@ def reject_vehicle(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_super_admin),
 ):
-    return VehicleService.reject(db, vehicle_id, reason, current_user.id)
+    return VehicleService.reject(
+        db, vehicle_id, reason, current_user.id, get_silo_user_ids(db, current_user)
+    )
 
 
 @router.delete("/{vehicle_id}", status_code=204)
@@ -92,7 +104,7 @@ def delete_vehicle(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    VehicleService.delete(db, vehicle_id)
+    VehicleService.delete(db, vehicle_id, get_silo_user_ids(db, current_user))
     return Response(status_code=204)
 
 
@@ -107,13 +119,18 @@ async def upload_document(
 ):
     content = await file.read()
     return VehicleService.add_document(
-        db, vehicle_id, doc_type, file.filename, file.content_type, content
+        db, vehicle_id, doc_type, file.filename, file.content_type, content,
+        get_silo_user_ids(db, current_user),
     )
 
 
 @router.get("/documents/{doc_id}")
-def download_document(doc_id: int, db: Session = Depends(get_db)):
-    doc = VehicleService.get_document(db, doc_id)
+def download_document(
+    doc_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    doc = VehicleService.get_document(db, doc_id, get_silo_user_ids(db, current_user))
     return Response(
         content=doc.content,
         media_type=doc.mime_type,
@@ -132,5 +149,5 @@ def delete_document(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    VehicleService.delete_document(db, doc_id)
+    VehicleService.delete_document(db, doc_id, get_silo_user_ids(db, current_user))
     return Response(status_code=204)
