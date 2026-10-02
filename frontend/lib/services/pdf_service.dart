@@ -1507,20 +1507,21 @@ class RealPdfService implements PdfService {
               totalLastRow: true,
             ),
           _label('EMIS DUE THIS PERIOD'),
-          if (r.dues.isEmpty)
+          if (r.duesByCustomer.isEmpty)
             _emptyLine('No EMIs due in this period.')
           else
             _table(
-              ['Date', 'Customer', 'Vehicle', 'EMI #', 'Amount', 'Status'],
+              ['Date', 'Vehicle', 'Phone', 'Pending EMIs', 'Total'],
               [
-                for (final d in r.dues)
+                for (final d in r.duesByCustomer)
                   [
                     Formatters.date(d.date),
-                    d.customerName,
                     d.vehicle,
-                    '${d.emiNumber}',
-                    _curr(d.amount),
-                    d.status,
+                    d.customerPhone,
+                    d.perEmiAmount != null
+                        ? '${d.count} × ${_curr(d.perEmiAmount!)}'
+                        : '${d.count} EMIs',
+                    _curr(d.total),
                   ],
               ],
               rightAlign: const {4},

@@ -15,14 +15,14 @@ gate would block every fresh install.
 """
 
 # MUST equal the APK's versionName (the `version:` in frontend/pubspec.yaml).
-LATEST_VERSION = "0.2.43"
+LATEST_VERSION = "0.2.44"
 
 # Where the APK is hosted (nginx serves this). Relative → the app builds the
 # full URL from its API base, so dev and prod each use their own server.
 DOWNLOAD_PATH = "/app/latest.apk"
 
 # Shown as "What's new" on the update card.
-NOTES = "New update available — bug fixes and improvements."
+NOTES = "Loan report: EMIs due now grouped per customer with phone number."
 
 # True → the app blocks login until the user updates (for critical fixes).
 MANDATORY = False

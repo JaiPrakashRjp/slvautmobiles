@@ -76,6 +76,7 @@ class _LoanMonthlyReportScreenState extends State<LoanMonthlyReportScreen> {
       loans: loans.all(),
       customerCreatedAt: customers.all().map((c) => c.createdAt),
       customerName: (id) => customers.byId(id)?.fullName ?? 'Customer',
+      customerPhone: (id) => customers.byId(id)?.phone ?? '',
       vehicleLabel: (id) => vehicles.byId(id ?? '')?.displayLabel ?? '—',
       from: _rangeStart,
       to: _rangeEnd,
