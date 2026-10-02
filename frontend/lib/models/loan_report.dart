@@ -18,6 +18,7 @@ class LoanReport {
     required this.loans,
     required this.collections,
     required this.dues,
+    required this.duesByCustomer,
     required this.outstandingTotal,
     required this.newCustomerCount,
   });
@@ -27,7 +28,8 @@ class LoanReport {
   final String label; // e.g. "July 2026" or "01–15 Jul 2026"
   final List<LoanReportRow> loans; // loans BOOKED in the period
   final List<LoanCollectionRow> collections; // EMI collected in the period
-  final List<LoanDueRow> dues; // EMIs DUE in the period
+  final List<LoanDueRow> dues; // EMIs DUE in the period (one row per EMI)
+  final List<LoanDueGroupRow> duesByCustomer; // same EMIs, grouped per customer+vehicle
   final int outstandingTotal; // current balance across active loans
   final int newCustomerCount; // customers added in the period
 
@@ -47,6 +49,7 @@ class LoanReport {
     required Iterable<Loan> loans,
     required Iterable<DateTime> customerCreatedAt,
     required String Function(String customerId) customerName,
+    required String Function(String customerId) customerPhone,
     required String Function(String? vehicleId) vehicleLabel,
     required DateTime from,
     required DateTime to,
@@ -63,6 +66,7 @@ class LoanReport {
     final loanRows = <LoanReportRow>[];
     final collections = <LoanCollectionRow>[];
     final dues = <LoanDueRow>[];
+    final dueGroups = <String, _DueAcc>{};
     var outstanding = 0;
 
     for (final l in loans) {
@@ -70,6 +74,7 @@ class LoanReport {
       // daily report's filter).
       if (!l.isActive || l.loanStatus == 'rejected' || l.isSeized) continue;
       final custName = customerName(l.customerId);
+      final custPhone = customerPhone(l.customerId);
       final vlabel = vehicleLabel(l.vehicleId);
 
       if (!l.isClosed) outstanding += l.balanceOutstanding;
@@ -97,24 +102,37 @@ class LoanReport {
           ));
         }
         if (inRange(emi.dueDate)) {
+          final status = emi.isPaid
+              ? 'Paid'
+              : emi.isPartial
+                  ? 'Partial'
+                  : 'Pending';
           dues.add(LoanDueRow(
             date: emi.dueDate,
             customerName: custName,
             vehicle: vlabel,
             emiNumber: emi.sequenceNumber,
             amount: emi.totalDue,
-            status: emi.isPaid
-                ? 'Paid'
-                : emi.isPartial
-                    ? 'Partial'
-                    : 'Pending',
+            status: status,
           ));
+
+          // Group the same EMIs per customer+vehicle so the PDF can show
+          // "3 × ₹1,000" instead of one row per EMI.
+          final key = '${l.customerId}|${l.vehicleId ?? ''}';
+          final acc = dueGroups.putIfAbsent(
+            key,
+            () => _DueAcc(date: emi.dueDate, phone: custPhone, vehicle: vlabel),
+          );
+          acc.add(emi.dueDate, emi.totalDue);
         }
       }
     }
     loanRows.sort((a, b) => a.date.compareTo(b.date));
     collections.sort((a, b) => a.date.compareTo(b.date));
     dues.sort((a, b) => a.date.compareTo(b.date));
+    final duesByCustomer = [
+      for (final acc in dueGroups.values) acc.toRow(),
+    ]..sort((a, b) => a.date.compareTo(b.date));
 
     return LoanReport(
       from: start,
@@ -123,6 +141,7 @@ class LoanReport {
       loans: loanRows,
       collections: collections,
       dues: dues,
+      duesByCustomer: duesByCustomer,
       outstandingTotal: outstanding,
       newCustomerCount: customerCreatedAt.where(inRange).length,
     );
@@ -177,6 +196,55 @@ class LoanCollectionRow {
   final String vehicle;
   final int emiNumber; // 1-based EMI sequence
   final int amount; // amount collected for that EMI
+}
+
+/// Accumulator used only while grouping [LoanDueRow]s per customer+vehicle.
+class _DueAcc {
+  _DueAcc({required this.date, required this.phone, required this.vehicle});
+
+  DateTime date; // earliest due date in the group
+  final String phone;
+  final String vehicle;
+  int count = 0;
+  int total = 0;
+  int? amount; // the per-EMI amount, when every EMI in the group matches
+
+  void add(DateTime dueDate, int dueAmount) {
+    if (dueDate.isBefore(date)) date = dueDate;
+    count += 1;
+    total += dueAmount;
+    amount = (count == 1 || amount == dueAmount) ? dueAmount : null;
+  }
+
+  LoanDueGroupRow toRow() => LoanDueGroupRow(
+        date: date,
+        customerPhone: phone,
+        vehicle: vehicle,
+        count: count,
+        perEmiAmount: amount,
+        total: total,
+      );
+}
+
+/// EMIs due in the period, grouped per customer+vehicle — e.g. 3 pending EMIs
+/// of ₹1,000 each renders as "3 × ₹1,000" with a ₹3,000 total, instead of 3
+/// separate rows.
+class LoanDueGroupRow {
+  LoanDueGroupRow({
+    required this.date,
+    required this.customerPhone,
+    required this.vehicle,
+    required this.count,
+    required this.perEmiAmount,
+    required this.total,
+  });
+
+  final DateTime date; // earliest due date in the group
+  final String customerPhone;
+  final String vehicle;
+  final int count; // number of EMIs due
+  final int? perEmiAmount; // null when the EMIs in the group differ in amount
+  final int total; // sum of all EMI amounts in the group
 }
 
 class LoanDueRow {

@@ -91,6 +91,8 @@ void main() {
 
   final names = {'c1': 'Ravi Kumar', 'c2': 'Anita S', 'c3': 'Mahesh P',
     'c4': 'Suresh V', 'c5': 'Devi R'};
+  final phones = {'c1': '9900000001', 'c2': '9900000002', 'c3': '9900000003',
+    'c4': '9900000004', 'c5': '9900000005'};
   final vehicles = {'v1': 'KA01AB1234', 'v2': 'KA02CD5678', 'v3': 'KA03EF9012',
     'v4': 'KA04GH3456', 'v5': 'KA05IJ7890'};
 
@@ -98,6 +100,7 @@ void main() {
         loans: loans,
         customerCreatedAt: [DateTime(2026, 9, 2), DateTime(2026, 8, 20)],
         customerName: (id) => names[id] ?? 'Customer',
+        customerPhone: (id) => phones[id] ?? '',
         vehicleLabel: (id) => vehicles[id] ?? '—',
         from: DateTime(2026, 9, 1),
         to: DateTime(2026, 9, 30),
