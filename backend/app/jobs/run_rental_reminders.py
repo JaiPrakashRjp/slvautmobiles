@@ -11,6 +11,7 @@ Idempotent per day — safe to run more than once.
 """
 from datetime import datetime, timezone
 
+import app.models  # noqa: F401 — registers every table on Base.metadata before any flush
 from app.db import SessionLocal
 from app.services.rental_reminder_service import RentalReminderService
 

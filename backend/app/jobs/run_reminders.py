@@ -9,6 +9,7 @@ per installment due date).
 """
 from datetime import datetime, timezone
 
+import app.models  # noqa: F401 — registers every table on Base.metadata before any flush
 from app.db import SessionLocal
 from app.services.doc_expiry_service import DocExpiryService
 from app.services.reminder_service import ReminderService
