@@ -1523,8 +1523,10 @@ class RealPdfService implements PdfService {
                         : '${d.count} EMIs',
                     _curr(d.total),
                   ],
+                ['Total', '', '', '${r.dueCount} EMIs', _curr(r.dueTotal)],
               ],
               rightAlign: const {4},
+              totalLastRow: true,
             ),
         ],
         footer: (ctx) => pw.Padding(
