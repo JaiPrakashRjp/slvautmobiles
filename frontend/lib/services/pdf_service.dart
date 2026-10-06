@@ -1456,74 +1456,32 @@ class RealPdfService implements PdfService {
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.fromLTRB(28, 22, 28, 28),
-        header: (_) => _reportHeader(logo, r.label, kind: 'Loan report'),
+        header: (_) => _reportHeader(logo, r.label, kind: 'Pending dues'),
         build: (_) => [
-          _label('OVERVIEW'),
-          _statGrid([
-            ('Loans booked', '${r.loanCount}', 'this period'),
-            ('Disbursed', _curr(r.disbursedTotal), 'principal'),
-            ('EMI collected', _curr(r.collectedTotal), 'this period'),
-            ('EMIs due', '${r.dueCount}', _curr(r.dueTotal)),
-            ('Outstanding', _curr(r.outstandingTotal), 'active loans'),
-            ('New customers', '${r.newCustomerCount}', 'added this period'),
-          ]),
-          _label('LOANS BOOKED THIS PERIOD'),
-          if (r.loans.isEmpty)
-            _emptyLine('No loans booked in this period.')
-          else
-            _table(
-              ['Date', 'Customer', 'Vehicle', 'Principal', 'Tenure', 'EMI'],
-              [
-                for (final s in r.loans)
-                  [
-                    Formatters.date(s.date),
-                    s.customerName,
-                    s.vehicle,
-                    _curr(s.principal),
-                    '${s.tenureMonths} mo',
-                    _curr(s.emiAmount),
-                  ],
-              ],
-              rightAlign: const {3, 4, 5},
-            ),
-          _label('EMI COLLECTED THIS PERIOD'),
-          if (r.collections.isEmpty)
-            _emptyLine('No EMI collected in this period.')
-          else
-            _table(
-              ['Date', 'Customer', 'Vehicle', 'EMI #', 'Amount'],
-              [
-                for (final p in r.collections)
-                  [
-                    Formatters.date(p.date),
-                    p.customerName,
-                    p.vehicle,
-                    '${p.emiNumber}',
-                    _curr(p.amount),
-                  ],
-                ['Total collected', '', '', '', _curr(r.collectedTotal)],
-              ],
-              rightAlign: const {4},
-              totalLastRow: true,
-            ),
-          _label('EMIS DUE THIS PERIOD'),
+          _label('PENDING DUES'),
           if (r.duesByCustomer.isEmpty)
-            _emptyLine('No EMIs due in this period.')
+            _emptyLine('No pending dues in this period.')
           else
             _table(
-              ['Date', 'Vehicle', 'Phone', 'Pending EMIs', 'Total'],
+              ['Customer', 'Phone', 'Vehicle', 'Unpaid', 'Total due'],
               [
                 for (final d in r.duesByCustomer)
                   [
-                    Formatters.date(d.date),
-                    d.vehicle,
+                    d.customerName,
                     d.customerPhone,
+                    d.vehicle,
                     d.perEmiAmount != null
                         ? '${d.count} × ${_curr(d.perEmiAmount!)}'
                         : '${d.count} EMIs',
                     _curr(d.total),
                   ],
-                ['Total', '', '', '${r.dueCount} EMIs', _curr(r.dueTotal)],
+                [
+                  'Total',
+                  '',
+                  '',
+                  '${r.dueCount} EMI${r.dueCount == 1 ? '' : 's'}',
+                  _curr(r.dueTotal),
+                ],
               ],
               rightAlign: const {4},
               totalLastRow: true,
@@ -1534,7 +1492,7 @@ class RealPdfService implements PdfService {
           child: pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
-              pw.Text('SLV Auto Consultant · Loan report',
+              pw.Text('SLV Auto Consultant · Loan dues',
                   style: const pw.TextStyle(
                       fontSize: 8, color: PdfColors.grey500)),
               pw.Text('Page ${ctx.pageNumber} of ${ctx.pagesCount}',

@@ -107,7 +107,7 @@ class _LoanMonthlyReportScreenState extends State<LoanMonthlyReportScreen> {
     return Scaffold(
       backgroundColor: c.bgCanvas,
       appBar: AppBar(
-        title: const Text('Loan report'),
+        title: const Text('Pending dues'),
         actions: [
           IconButton(
               icon: const Icon(Icons.refresh),
@@ -248,20 +248,14 @@ class _LoanMonthlyReportScreenState extends State<LoanMonthlyReportScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Overview · ${r.label}',
+          Text('Dues · ${r.label}',
               style: AppTextStyles.bodyStrong.copyWith(color: c.textMain)),
           const SizedBox(height: AppSpacing.md),
           Row(children: [
-            stat('${r.loanCount}', 'Loans booked'),
-            stat(Formatters.currency(r.disbursedTotal), 'Disbursed'),
-            stat('${r.dueCount}', 'EMIs due'),
-          ]),
-          const SizedBox(height: AppSpacing.sm),
-          Row(children: [
-            stat(Formatters.currency(r.collectedTotal), 'EMI collected',
-                color: c.success),
-            stat(Formatters.currency(r.outstandingTotal), 'Outstanding'),
-            stat('${r.newCustomerCount}', 'New customers'),
+            stat('${r.duesByCustomer.length}', 'Customers'),
+            stat('${r.dueCount}', 'Unpaid EMIs'),
+            stat(Formatters.currency(r.dueTotal), 'Total due',
+                color: c.warning),
           ]),
         ],
       ),
