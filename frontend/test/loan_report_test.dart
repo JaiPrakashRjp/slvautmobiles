@@ -121,17 +121,11 @@ void main() {
       expect(r.collectedTotal, 9000);
     });
 
-    test('dues are UNPAID months only, amount = what is still owed', () {
-      // A#1 is fully paid → excluded. C#1 is part-paid (2000 of 5000) → owed
-      // 3000. B due Oct, D/E excluded.
-      expect(r.dueCount, 1);
-      expect(r.dues.single.customerName, 'Mahesh P');
-      expect(r.dues.single.status, 'Partial');
-      expect(r.dues.single.amount, 3000); // 5000 − 2000 already paid
-      expect(r.dueTotal, 3000);
-      // Grouped per customer carries the name for the dues report.
-      expect(r.duesByCustomer.single.customerName, 'Mahesh P');
-      expect(r.duesByCustomer.single.count, 1);
+    test('EMIs due in the period, with status', () {
+      expect(r.dueCount, 2); // A#1 + C#1 (B due Oct, D/E excluded)
+      final byCust = {for (final d in r.dues) d.customerName: d.status};
+      expect(byCust['Ravi Kumar'], 'Paid');
+      expect(byCust['Mahesh P'], 'Partial');
     });
 
     test('outstanding excludes seized + rejected', () {

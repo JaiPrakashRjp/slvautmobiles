@@ -101,31 +101,29 @@ class LoanReport {
             amount: emi.amountPaid,
           ));
         }
-        // DUES = months the customer has NOT fully paid (what is still owed).
-        // Paid months drop off; the amount is the outstanding balance of that
-        // month (full EMI when untouched, the remainder when part-paid).
-        if (!emi.isPaid && inRange(emi.dueDate)) {
-          final owed = emi.remaining;
+        if (inRange(emi.dueDate)) {
+          final status = emi.isPaid
+              ? 'Paid'
+              : emi.isPartial
+                  ? 'Partial'
+                  : 'Pending';
           dues.add(LoanDueRow(
             date: emi.dueDate,
             customerName: custName,
             vehicle: vlabel,
             emiNumber: emi.sequenceNumber,
-            amount: owed,
-            status: emi.isPartial ? 'Partial' : 'Pending',
+            amount: emi.totalDue,
+            status: status,
           ));
 
-          // Group per customer+vehicle so the PDF shows "3 × ₹1,000" + a total.
+          // Group the same EMIs per customer+vehicle so the PDF can show
+          // "3 × ₹1,000" instead of one row per EMI.
           final key = '${l.customerId}|${l.vehicleId ?? ''}';
           final acc = dueGroups.putIfAbsent(
             key,
-            () => _DueAcc(
-                date: emi.dueDate,
-                name: custName,
-                phone: custPhone,
-                vehicle: vlabel),
+            () => _DueAcc(date: emi.dueDate, phone: custPhone, vehicle: vlabel),
           );
-          acc.add(emi.dueDate, owed);
+          acc.add(emi.dueDate, emi.totalDue);
         }
       }
     }
@@ -202,15 +200,9 @@ class LoanCollectionRow {
 
 /// Accumulator used only while grouping [LoanDueRow]s per customer+vehicle.
 class _DueAcc {
-  _DueAcc({
-    required this.date,
-    required this.name,
-    required this.phone,
-    required this.vehicle,
-  });
+  _DueAcc({required this.date, required this.phone, required this.vehicle});
 
   DateTime date; // earliest due date in the group
-  final String name;
   final String phone;
   final String vehicle;
   int count = 0;
@@ -226,7 +218,6 @@ class _DueAcc {
 
   LoanDueGroupRow toRow() => LoanDueGroupRow(
         date: date,
-        customerName: name,
         customerPhone: phone,
         vehicle: vehicle,
         count: count,
@@ -241,7 +232,6 @@ class _DueAcc {
 class LoanDueGroupRow {
   LoanDueGroupRow({
     required this.date,
-    required this.customerName,
     required this.customerPhone,
     required this.vehicle,
     required this.count,
@@ -250,7 +240,6 @@ class LoanDueGroupRow {
   });
 
   final DateTime date; // earliest due date in the group
-  final String customerName;
   final String customerPhone;
   final String vehicle;
   final int count; // number of EMIs due

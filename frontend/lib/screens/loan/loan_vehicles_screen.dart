@@ -153,7 +153,7 @@ class _LoanVehiclesScreenState extends State<LoanVehiclesScreen> {
             )),
           ),
           IconButton(
-            tooltip: 'Pending dues',
+            tooltip: 'Loan report',
             icon: const Icon(Icons.insert_chart_outlined),
             onPressed: () => Navigator.of(context).push(MaterialPageRoute(
               builder: (_) => const LoanMonthlyReportScreen(),
