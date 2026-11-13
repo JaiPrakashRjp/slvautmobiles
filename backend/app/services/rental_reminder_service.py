@@ -40,6 +40,25 @@ def _amount(value) -> str:
     return f"{float(value):,.0f}"
 
 
+_WHATSAPP_OFF = "WhatsApp rental reminders are disabled"
+
+
+def _send_whatsapp(to: str, template: str, **kwargs):
+    """Send the renter's WhatsApp reminder — unless rental reminders are switched
+    off (WHATSAPP_RENTAL_REMINDERS_ENABLED), in which case nothing is sent."""
+    if not settings.WHATSAPP_RENTAL_REMINDERS_ENABLED:
+        return False, None, _WHATSAPP_OFF
+    return WhatsAppService.send_template(to, template, **kwargs)
+
+
+def _status(ok: bool, err: str | None) -> ReminderStatus:
+    if ok:
+        return ReminderStatus.sent
+    # Skipped (not attempted) reminders are logged as pending, not failed. The
+    # log row is still written so the daily / weekly staff-alert cadence is unchanged.
+    return ReminderStatus.pending if err == _WHATSAPP_OFF else ReminderStatus.failed
+
+
 class RentalReminderService:
     @staticmethod
     def run(db: Session, now: datetime | None = None) -> list[ReminderLog]:
@@ -93,7 +112,7 @@ class RentalReminderService:
 
             # 1) WhatsApp the renter via the rental-specific template.
             if cust_phone:
-                ok, msg_id, err = WhatsAppService.send_template(
+                ok, msg_id, err = _send_whatsapp(
                     cust_phone,
                     settings.WHATSAPP_RENTAL_REMINDER_TEMPLATE,
                     lang=settings.WHATSAPP_RENTAL_REMINDER_LANG,
@@ -121,7 +140,7 @@ class RentalReminderService:
                     ),
                     due_date=inst.due_date,
                     sent_at=now if ok else None,
-                    status=ReminderStatus.sent if ok else ReminderStatus.failed,
+                    status=_status(ok, err),
                     provider_message_id=msg_id,
                     error=err,
                 )
@@ -182,7 +201,7 @@ class RentalReminderService:
             template = (
                 f"{settings.WHATSAPP_RENTAL_WEEKLY_REMINDER_TEMPLATE_PREFIX}{len(rows)}"
             )
-            ok, msg_id, err = WhatsAppService.send_template(
+            ok, msg_id, err = _send_whatsapp(
                 cust_phone,
                 template,
                 lang=settings.WHATSAPP_RENTAL_WEEKLY_REMINDER_LANG,
@@ -200,7 +219,7 @@ class RentalReminderService:
                 ),
                 due_date=oldest.due_date,
                 sent_at=now if ok else None,
-                status=ReminderStatus.sent if ok else ReminderStatus.failed,
+                status=_status(ok, err),
                 provider_message_id=msg_id,
                 error=err,
             )

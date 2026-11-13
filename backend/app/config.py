@@ -45,6 +45,17 @@ class Settings:
     # Approved template used for installment reminders (body vars: name, amount, date).
     WHATSAPP_REMINDER_TEMPLATE: str = os.getenv("WHATSAPP_REMINDER_TEMPLATE", "payment_reminder")
     WHATSAPP_REMINDER_LANG: str = os.getenv("WHATSAPP_REMINDER_LANG", "en_US")
+    # Customer WhatsApp reminders for the sale and rental modules are switched
+    # OFF. The reminder jobs still run and staff still get their in-app + FCM
+    # notification; only the customer's WhatsApp message is skipped (logged to
+    # reminder_logs as "pending"). Set to "true" in .env to turn one back on.
+    # Loan / personal-loan reminders are not affected.
+    WHATSAPP_SALE_REMINDERS_ENABLED: bool = (
+        os.getenv("WHATSAPP_SALE_REMINDERS_ENABLED", "false").strip().lower() == "true"
+    )
+    WHATSAPP_RENTAL_REMINDERS_ENABLED: bool = (
+        os.getenv("WHATSAPP_RENTAL_REMINDERS_ENABLED", "false").strip().lower() == "true"
+    )
     # Separate, rental-specific reminder template (rent collections read very
     # differently from an installment/loan reminder). Same 3 body vars so the
     # sender stays generic: {{1}} = customer name, {{2}} = rent amount,
